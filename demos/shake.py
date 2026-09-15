@@ -18,6 +18,12 @@ def step(name, fn):
 with Lite3() as bot:
     print('start:', bot.status())
     try:
+        # No handheld: this process holds the interlock instead. SAFETY - that
+        # makes THIS TERMINAL the only stop. Ctrl-C runs estop() (Lite3 installs
+        # the handler by default) and close() drops the keepalive on the way out.
+        bot.heartbeat_start()
+        if not bot.wait_ready():
+            raise SystemExit('interlock never came up - is transfer_ros2 running?')
         step('stand', lambda: bot.stand())
         print('       status:', bot.status())
 
