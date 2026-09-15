@@ -78,21 +78,9 @@ MIN_GOAL = 0.5         # xy_goal_tolerance is 0.25: a nearer goal "arrives" at o
 
 
 def settled_profile(bot, out_to, tries=10):
-    """cost_ahead() once it stops changing.
-
-    Right after nav_start() the costmap is still empty, and with
-    track_unknown_space False unobserved cells read as FREE (0): the first
-    profile said 0 all the way to 2.7 m, then goto() found that cell LETHAL a
-    moment later. Wait until two readings 1 s apart agree.
-    """
-    prev = None
-    for _ in range(tries):
-        prof = bot.cost_ahead(out_to=out_to, step=0.1)
-        if prof == prev:
-            return prof
-        prev = prof
-        time.sleep(1.0)
-    return prev
+    """cost_ahead() once it stops changing. Same call as before; the waiting
+    now lives in Lite3.cost_ahead(settle=...) so shake.py shares it."""
+    return bot.cost_ahead(out_to=out_to, step=0.1, settle=tries)
 
 
 def parse_step(step):

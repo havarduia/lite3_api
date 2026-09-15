@@ -43,7 +43,7 @@ with Lite3() as bot:
 
         step('nav_start', lambda: bot.nav_start())
         if bot.nav_running:
-            profile = bot.cost_ahead(out_to=3.0)
+            profile = bot.cost_ahead(out_to=3.0, settle=10)
             print('       cost ahead:', [(round(d,2), c) for d, c in profile])
             free = [d for d, c in profile if c is not None and c < 50 and d >= 0.75]
             goal = max(free) - 0.25 if free else 0

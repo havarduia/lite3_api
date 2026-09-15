@@ -1007,11 +1007,33 @@ class Lite3:
             return None
         return g.data[cy * i.width + cx]
 
-    def cost_ahead(self, out_to=3.5, step=0.25):
-        """[(distance, cost), ...] along the robot's heading."""
-        x, y, yaw = self.wait_pose()
-        return [(d, self.cost_at(x + d * math.cos(yaw), y + d * math.sin(yaw)))
-                for d in [i * step for i in range(int(out_to / step) + 1)]]
+    def cost_ahead(self, out_to=3.5, step=0.25, settle=0):
+        """[(distance, cost), ...] along the robot's heading.
+
+        settle: re-read until two profiles a second apart agree, giving up
+        after this many tries (0 = read once, the old behaviour).
+
+        USE IT AFTER nav_start(). The costmap starts empty, and because
+        `track_unknown_space` is False every unobserved cell reads FREE (0) -
+        so an immediate profile says "clear" all the way out, you pick the
+        furthest cell, and goto() then refuses that same cell as LETHAL once
+        real observations land. The giveaway is cost 0 at distance 0, the
+        robot's own cell, which is never really free on a populated map.
+        """
+        def profile():
+            x, y, yaw = self.wait_pose()
+            return [(d, self.cost_at(x + d * math.cos(yaw),
+                                     y + d * math.sin(yaw)))
+                    for d in [i * step for i in range(int(out_to / step) + 1)]]
+
+        prev = None
+        for _ in range(settle):
+            prof = profile()
+            if prof == prev:
+                return prof
+            prev = prof
+            time.sleep(1.0)
+        return prev if prev is not None else profile()
 
     def goto(self, forward, heading_deg=None, timeout=60.0, check=True):
         """Navigate `forward` metres ahead, routing around obstacles.
