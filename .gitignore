@@ -1,0 +1,11 @@
+__pycache__/
+*.py[cod]
+
+# Never commit the Gemini key, wherever it ends up.
+.gemini_key
+*.key
+
+# Stray backups at the top level only - archive/ is tracked on purpose,
+# since those .bak files are the project's only pre-git history.
+/*.bak
+/*.orig

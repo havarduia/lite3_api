@@ -1,0 +1,272 @@
+#!/usr/bin/env python3
+"""Play audio - and eventually speech - out of the Lite3's speaker.
+
+The speaker is NOT on this computer (the Jetson). It hangs off an ES8388
+codec on the MOTION computer, 192.168.1.120 - the same box you send stand/
+walk UDP to. DEEP's own firmware plays its canned lines by literally running
+`aplay .../lite3_voice/NAME.wav` over there, so that is all "playing a sound"
+is: run aplay on 192.168.1.120. This module does exactly that from here.
+
+    from voice import Voice
+    v = Voice()
+    v.play('OKstandup')            # one of the robot's own ~33 clips
+    v.play_file('siren.mp3')       # any local audio, converted and streamed
+    v.say('watch your step')       # text -> speech (needs a TTS engine, see below)
+    v.play_url('https://www.youtube.com/watch?v=...')  # a video's audio
+    print(v.clips())               # list the built-in clip names
+
+Or from the shell:
+
+    python3 voice.py list
+    python3 voice.py play OKstandup
+    python3 voice.py file ~/alarm.wav
+    python3 voice.py say "hello there"
+
+Requirements:
+  - Passwordless SSH from here to ysc@192.168.1.120. Already set up.
+  - ffmpeg on THIS machine, for play_file/say format conversion. Present.
+  - ysc in the `audio` group on the motion computer, since aplay goes to
+    DEVICE directly. Done 2026-09-15.
+  - A TTS engine for say() on THIS machine: espeak-ng, installed 2026-09-15.
+
+Audio is streamed to the robot as raw S16LE 48 kHz stereo - the format its
+clips already use and the codec is known to accept - so there is no wav
+header travelling down the pipe to be misread.
+"""
+import os
+import shutil
+import subprocess
+import sys
+
+HOST = 'ysc@192.168.1.120'          # motion computer, where the speaker is
+CLIP_DIR = '/home/ysc/lite3_voice'  # DEEP's own voice clips live here
+RATE, CHANNELS = 48000, 2           # the codec's known-good playback format
+# Straight to the ES8388. ysc's PulseAudio default is a null sink, so a
+# plain `aplay` "succeeds" silently. Needs ysc in the audio group on .120.
+DEVICE = 'plughw:0,0'
+
+# play_url(): standalone aarch64 binaries copied in from the laptop (no pip
+# or github from here). The robot has no internet, so yt-dlp goes out via
+# the laptop's robot_proxy.py, which the SSH RemoteForward puts on :3128.
+YTDLP = os.path.expanduser('~/.local/bin/yt-dlp')
+DENO = os.path.expanduser('~/.local/bin/deno')    # yt-dlp's JS runtime for YouTube
+PROXY = 'http://localhost:3128'
+
+# ssh with no interactive prompt: rely on the installed key, fail fast if it
+# ever stops working rather than hanging on a password ask.
+_SSH = ['ssh', '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=8', HOST]
+
+
+class VoiceError(RuntimeError):
+    pass
+
+
+class Voice:
+    """Sound out of the robot. One SSH hop per sound; nothing stays running."""
+
+    def __init__(self, host=HOST, clip_dir=CLIP_DIR):
+        self.host = host
+        self.clip_dir = clip_dir
+        self._ssh = ['ssh', '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=8', host]
+
+    # --- the built-in clips ------------------------------------------------
+    def clips(self):
+        """Names (without .wav) of the clips already on the robot."""
+        out = subprocess.run(self._ssh + ['ls', '-1', self.clip_dir],
+                             capture_output=True, text=True)
+        if out.returncode != 0:
+            raise VoiceError('could not list %s on %s: %s'
+                             % (self.clip_dir, self.host, out.stderr.strip()))
+        return sorted(f[:-4] for f in out.stdout.split() if f.endswith('.wav'))
+
+    def play(self, name, wait=True):
+        """Play one of the robot's own clips by name, e.g. play('okstop').
+
+        Case-insensitive, and the .wav is optional. Plays entirely on the
+        robot - no audio crosses the network - so it is the cheapest sound.
+        """
+        clips = self.clips()
+        key = name[:-4] if name.lower().endswith('.wav') else name
+        match = next((c for c in clips if c.lower() == key.lower()), None)
+        if match is None:
+            raise VoiceError('no clip %r. Available: %s'
+                             % (name, ', '.join(clips)))
+        path = '%s/%s.wav' % (self.clip_dir, match)
+        # -q so aplay does not print the format banner on every call.
+        return self._run_remote(self._ssh + ['aplay', '-q', '-D', DEVICE, path], wait,
+                                'play %s' % match)
+
+    # --- arbitrary local audio ---------------------------------------------
+    def play_file(self, path, wait=True):
+        """Play any local audio file (wav/mp3/ogg/...) out of the robot.
+
+        ffmpeg here transcodes it to the codec's exact format and streams the
+        raw samples over ssh into aplay - no temp file on either machine, no
+        wav header to be misread on a pipe. Needs ffmpeg on THIS machine.
+        """
+        return self._stream(self._ffmpeg_cmd(path), wait, 'play_file %s' % path)
+
+    # --- speech ------------------------------------------------------------
+    def say(self, text, wait=True, engine=None):
+        """Speak `text` out of the robot, using a TTS engine on THIS machine.
+
+        There is deliberately no fallback voice baked in: a wrong-but-silent
+        beep would be worse than a clear error. The lookup order is Piper
+        (good neural voice) then espeak-ng (robotic but real). espeak-ng is
+        installed and is what runs today. Piper is still blocked:
+
+          - Piper: its `piper-phonemize` dependency has no wheel for this
+            aarch64 / Python 3.8, and the standalone binary plus voice models
+            live on github, which is unreachable from here (the pip mirror
+            works; github does not). So `pip install piper-tts` cannot complete.
+
+        To get the better voice, with no change to this file, once github
+        and the models are reachable:
+
+            #   drop a piper binary on PATH and a *.onnx voice beside it.
+
+        `engine` forces one ('piper' or 'espeak-ng') instead of autodetecting.
+        """
+        gen = self._tts_cmd(text, engine)
+        # TTS engine -> wav on stdout -> ffmpeg reformats -> ssh -> aplay.
+        return self._stream(self._ffmpeg_cmd('-', pre=gen), wait,
+                            'say %r' % (text[:40]))
+
+    # --- internet audio ----------------------------------------------------
+    def play_url(self, url, wait=True):
+        """Play the audio of a YouTube (or any yt-dlp-supported) URL.
+
+        Streams bestaudio straight through ffmpeg to the speaker, no temp
+        file. Needs the laptop: robot_proxy.py running there AND an SSH
+        session from it to this box open (that is what forwards :3128).
+        With either missing, yt-dlp fails with a connection error.
+        """
+        if not os.path.exists(YTDLP):
+            raise VoiceError('yt-dlp not found at %s' % YTDLP)
+        ytdlp = [YTDLP, '--proxy', PROXY, '--js-runtimes', 'deno:' + DENO,
+                 '--no-playlist', '-f', 'bestaudio', '-q', '--no-warnings',
+                 '-o', '-', url]
+        return self._stream(self._ffmpeg_cmd('-', pre=ytdlp), wait,
+                            'play_url %s' % url)
+
+    # --- plumbing ----------------------------------------------------------
+    def _ffmpeg_cmd(self, src, pre=None):
+        """(producer_cmd_or_None, ffmpeg_cmd) that emits raw S16LE 48k stereo.
+
+        src '-' means read stdin (from `pre`); otherwise it is a file path.
+        """
+        if not shutil.which('ffmpeg'):
+            raise VoiceError('ffmpeg not found on this machine - needed to '
+                             'convert audio to the robot codec format')
+        ff = ['ffmpeg', '-loglevel', 'error', '-i', src,
+              '-f', 's16le', '-ar', str(RATE), '-ac', str(CHANNELS), '-']
+        return (pre, ff)
+
+    def _tts_cmd(self, text, engine):
+        """A command that writes a wav of `text` to stdout, or raise."""
+        piper = shutil.which('piper')
+        espeak = shutil.which('espeak-ng') or shutil.which('espeak')
+        if engine == 'piper' or (engine is None and piper):
+            if not piper:
+                raise VoiceError('piper requested but not on PATH')
+            # piper needs a model; expect one alongside the binary or in CWD.
+            model = _find_piper_model()
+            if not model:
+                raise VoiceError('piper is installed but no *.onnx voice model '
+                                 'was found next to it - drop one in place')
+            return ['bash', '-c',
+                    'echo %s | piper --model %s --output_file -'
+                    % (_shq(text), _shq(model))]
+        if engine in (None, 'espeak-ng', 'espeak') and espeak:
+            return [espeak, '--stdout', text]
+        raise VoiceError(
+            'no TTS engine available. Install one, then say() works:\n'
+            '    sudo apt-get install -y espeak-ng      # robotic, instant\n'
+            'Piper (good neural voice) is blocked on this box - see '
+            'say()\'s docstring.')
+
+    def _stream(self, plan, wait, label):
+        """Run (producer | ffmpeg | ssh aplay -). Producer may be None."""
+        pre, ff = plan
+        sink = self._ssh + ['aplay', '-q', '-D', DEVICE, '-f', 'S16_LE',
+                            '-r', str(RATE), '-c', str(CHANNELS), '-']
+        p_pre = subprocess.Popen(pre, stdout=subprocess.PIPE) if pre else None
+        p_ff = subprocess.Popen(
+            ff, stdin=(p_pre.stdout if p_pre else None),
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        if p_pre:
+            p_pre.stdout.close()      # let ffmpeg own the read end
+        p_ap = subprocess.Popen(sink, stdin=p_ff.stdout,
+                               stderr=subprocess.PIPE)
+        p_ff.stdout.close()
+        if not wait:
+            return None
+        ap_err = p_ap.communicate()[1]
+        ff_err = p_ff.communicate()[1]
+        # Check the producer first: when yt-dlp or the TTS engine dies, ffmpeg
+        # only sees empty input and its error would hide the real cause.
+        if p_pre and p_pre.wait() != 0:
+            raise VoiceError('%s: %s failed (exit %d), see its message above'
+                             % (label, os.path.basename(pre[0]), p_pre.returncode))
+        if p_ap.returncode != 0:
+            raise VoiceError('%s: aplay on robot failed: %s'
+                             % (label, ap_err.decode(errors='replace').strip()))
+        if p_ff.returncode not in (0, None):
+            raise VoiceError('%s: ffmpeg failed: %s'
+                             % (label, ff_err.decode(errors='replace').strip()))
+        return True
+
+    def _run_remote(self, cmd, wait, label):
+        if not wait:
+            subprocess.Popen(cmd, stdout=subprocess.DEVNULL,
+                             stderr=subprocess.DEVNULL)
+            return None
+        out = subprocess.run(cmd, capture_output=True, text=True)
+        if out.returncode != 0:
+            raise VoiceError('%s failed: %s' % (label, out.stderr.strip()))
+        return True
+
+
+# --- helpers ---------------------------------------------------------------
+def _shq(s):
+    """Single-quote a string for a bash -c payload."""
+    return "'" + s.replace("'", "'\\''") + "'"
+
+
+def _find_piper_model():
+    import glob
+    import os
+    here = os.path.dirname(shutil.which('piper') or '')
+    for d in (os.getcwd(), here, os.path.expanduser('~/piper')):
+        hits = glob.glob(os.path.join(d, '*.onnx'))
+        if hits:
+            return hits[0]
+    return None
+
+
+def _cli(argv):
+    v = Voice()
+    if not argv or argv[0] in ('-h', '--help', 'help'):
+        print(__doc__)
+        return 0
+    cmd, rest = argv[0], argv[1:]
+    try:
+        if cmd == 'list':
+            print('\n'.join(v.clips()))
+        elif cmd == 'play':
+            v.play(rest[0]); print('played %s' % rest[0])
+        elif cmd == 'file':
+            v.play_file(rest[0]); print('played %s' % rest[0])
+        elif cmd == 'say':
+            v.say(' '.join(rest)); print('said it')
+        else:
+            print('commands: list | play <name> | file <path> | say <text>')
+            return 2
+    except VoiceError as e:
+        print('error: %s' % e, file=sys.stderr)
+        return 1
+    return 0
+
+
+if __name__ == '__main__':
+    sys.exit(_cli(sys.argv[1:]))

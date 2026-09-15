@@ -1,0 +1,158 @@
+#!/usr/bin/env python3
+"""Find a person with the robot's own YOLO tracker and walk up to them.
+
+The detector is DeepRobotics' people-tracking demo (~/lite_cog_ros2/track):
+YOLOv8n as a TensorRT engine plus ByteTrack, on the front camera's RTSP
+stream. Only its detection is reused. Its controller drove /cmd_vel at up to
+1.0 m/s with no obstacle check and never commanded zero while it saw you;
+driving here goes through lite3.steer() instead, with the depth-camera stop.
+
+    python3 person.py            # detector only: print where the person is
+    from person import PersonDetector, approach
+
+The engine takes ~1.5 min to load and warm up (TensorRT), then ~0.1 s a frame,
+so start PersonDetector early (e.g. while the robot stands up).
+"""
+import math
+import os
+import sys
+import threading
+import time
+
+TRACK_SRC = os.path.expanduser('~/lite_cog_ros2/track/src')
+ENGINE = os.path.expanduser('~/lite_cog_ros2/track/model/yolov8n_arm.engine')
+PERSON = 0                  # COCO class id
+FRESH = 0.7                 # s: a detection older than this is not trusted
+GIVE_UP = 5.0               # s without the person before approach() stops
+CENTRED = 0.12              # |x - 0.5| under which he may walk forward
+K_TURN = 2.4                # rad/s per unit of x offset (vendor: 2 * 1.2)
+MAX_TURN = 0.6              # rad/s
+
+
+class PersonDetector(threading.Thread):
+    """Background YOLO tracking; .latest is the target person or None.
+
+    Locks onto the largest (usually nearest) person's track id and follows
+    that id; if it vanishes for over a second, re-locks on the largest.
+    """
+
+    def __init__(self):
+        super().__init__(daemon=True)
+        self.latest = None      # dict(t, x, top, bottom, id) - x, top, bottom in 0..1
+        self.ready = threading.Event()
+        self.error = None
+        self._stop = threading.Event()
+        self._target = None
+        self._target_seen = 0.0
+
+    def run(self):
+        try:
+            sys.path.insert(0, TRACK_SRC)
+            from ultralytics import YOLO
+            from GStreamerWrapper.GStreamerWrapper import GStreamerWrapper
+            model = YOLO(ENGINE, task='detect')
+            video = GStreamerWrapper()
+            try:
+                # The vendor wrapper's GetFrame() raises until its thread has
+                # decoded a first frame (the H.264 stream drops frames until
+                # a keyframe arrives), so wait for that.
+                deadline = time.time() + 20
+                while not hasattr(video, 'frame'):
+                    if time.time() > deadline:
+                        raise RuntimeError('no video frame from the camera stream in 20 s')
+                    time.sleep(0.1)
+                while not self._stop.is_set():
+                    frame = video.GetFrame()
+                    r = model.track(frame, persist=True, classes=[PERSON],
+                                    conf=0.5, verbose=False)
+                    self._update(r[0].boxes, frame.shape)
+                    self.ready.set()
+            finally:
+                video.StopThread()
+        except Exception as e:
+            self.error = e
+            self.ready.set()
+
+    def _update(self, boxes, shape):
+        h, w = shape[:2]
+        people = []
+        for b in boxes:
+            x1, y1, x2, y2 = (float(v) for v in b.xyxy[0])
+            tid = int(b.id.item()) if b.id is not None else None
+            people.append(dict(t=time.time(), x=(x1 + x2) / 2 / w, top=y1 / h,
+                               bottom=y2 / h, area=(x2 - x1) * (y2 - y1), id=tid))
+        now = time.time()
+        pick = next((p for p in people if p['id'] is not None
+                     and p['id'] == self._target), None)
+        if pick is None and people and now - self._target_seen > 1.0:
+            pick = max(people, key=lambda p: p['area'])
+            self._target = pick['id']
+        if pick is not None:
+            self._target_seen = now
+            self.latest = pick
+
+    def person(self):
+        """The target if seen within FRESH seconds, else None."""
+        p = self.latest
+        return p if p and time.time() - p['t'] < FRESH else None
+
+    def stop(self):
+        self._stop.set()
+
+
+def approach(bot, det, stop_distance=0.6, speed=0.2, limit=30.0):
+    """Turn to and walk up to the detected person; stop at the depth guard.
+
+    stop_distance is from the BODY CENTRE like walk()'s (nose ~0.33 m ahead).
+    Walks forward only while the person is roughly centred, else turns on the
+    spot. Returns lite3.steer()'s result dict.
+    """
+    from lite3 import Lite3Error
+    state = {'lost_since': None, 'last_clear': 0.0, 'clear': float('inf')}
+
+    def control():
+        now = time.time()
+        if det.error:
+            return 'detector failed: %s' % det.error
+        p = det.person()
+        if p is None:
+            state['lost_since'] = state['lost_since'] or now
+            if now - state['lost_since'] > GIVE_UP:
+                return 'lost the person for %.0f s' % GIVE_UP
+            return 0.0, 0.0
+        state['lost_since'] = None
+        if now - state['last_clear'] > 0.25:     # clearance() walks the cloud
+            state['last_clear'] = now
+            try:
+                state['clear'] = bot.clearance()
+            except Lite3Error:
+                return 'lost the depth stream - stopped rather than walking blind'
+        if state['clear'] <= stop_distance:
+            return 'reached: %.2f m from body centre' % state['clear']
+        off = p['x'] - 0.5                        # +ve = person to the right
+        wz = max(-MAX_TURN, min(MAX_TURN, -K_TURN * off))
+        vx = speed if abs(off) < CENTRED else 0.0
+        return vx, wz
+
+    return bot.steer(control, limit=limit)
+
+
+if __name__ == '__main__':
+    det = PersonDetector()
+    det.start()
+    print('loading the engine (~1.5 min)...', flush=True)
+    det.ready.wait()
+    if det.error:
+        raise SystemExit('detector failed: %s' % det.error)
+    try:
+        while True:
+            p = det.person()
+            if p:
+                print('person id %s: x %.2f (%s), top %.2f, bottom %.2f'
+                      % (p['id'], p['x'], 'right' if p['x'] > 0.5 else 'left',
+                         p['top'], p['bottom']), flush=True)
+            else:
+                print('no person', flush=True)
+            time.sleep(0.5)
+    except KeyboardInterrupt:
+        det.stop()

@@ -1,0 +1,437 @@
+[INFO] [launch]: All log files can be found below /home/ysc/.ros/log/2026-08-24-19-51-52-253162-lite-14493
+[INFO] [launch]: Default logging verbosity is set to INFO
+[INFO] [realsense2_camera_node-3]: process started with pid [14499]
+[INFO] [static_transform_publisher-1]: process started with pid [14495]
+[INFO] [odom_to_tf.py-2]: process started with pid [14497]
+[INFO] [controller_server-4]: process started with pid [14501]
+[INFO] [planner_server-5]: process started with pid [14503]
+[INFO] [recoveries_server-6]: process started with pid [14505]
+[INFO] [bt_navigator-7]: process started with pid [14508]
+[INFO] [waypoint_follower-8]: process started with pid [14519]
+[INFO] [lifecycle_manager-9]: process started with pid [14521]
+[static_transform_publisher-1] 1787572313.610634 [0] static_tra: using network interface eth0 (udp/192.168.1.103) selected arbitrarily from: eth0, docker0
+[static_transform_publisher-1] [INFO] [1787572313.689356472] [base2camera_tf_broadcaster]: Spinning until killed publishing transform from 'base_link' to 'camera_link'
+[controller_server-4] 1787572313.676920 [0] controller: using network interface eth0 (udp/192.168.1.103) selected arbitrarily from: eth0, docker0
+[recoveries_server-6] 1787572313.677240 [0] recoveries: using network interface eth0 (udp/192.168.1.103) selected arbitrarily from: eth0, docker0
+[planner_server-5] 1787572313.717480 [0] planner_se: using network interface eth0 (udp/192.168.1.103) selected arbitrarily from: eth0, docker0
+[waypoint_follower-8] 1787572313.721849 [0] waypoint_f: using network interface eth0 (udp/192.168.1.103) selected arbitrarily from: eth0, docker0
+[bt_navigator-7] 1787572313.765114 [0] bt_navigat: using network interface eth0 (udp/192.168.1.103) selected arbitrarily from: eth0, docker0
+[controller_server-4] [INFO] [1787572313.875124184] [controller_server]: 
+[controller_server-4] 	controller_server lifecycle node launched. 
+[controller_server-4] 	Waiting on external lifecycle transitions to activate
+[controller_server-4] 	See https://design.ros2.org/articles/node_lifecycle.html for more information.
+[waypoint_follower-8] [INFO] [1787572313.925386520] [waypoint_follower]: 
+[waypoint_follower-8] 	waypoint_follower lifecycle node launched. 
+[waypoint_follower-8] 	Waiting on external lifecycle transitions to activate
+[waypoint_follower-8] 	See https://design.ros2.org/articles/node_lifecycle.html for more information.
+[waypoint_follower-8] [INFO] [1787572313.930303640] [waypoint_follower]: Creating
+[planner_server-5] [INFO] [1787572313.958620056] [planner_server]: 
+[planner_server-5] 	planner_server lifecycle node launched. 
+[planner_server-5] 	Waiting on external lifecycle transitions to activate
+[planner_server-5] 	See https://design.ros2.org/articles/node_lifecycle.html for more information.
+[recoveries_server-6] [INFO] [1787572314.010310616] [recoveries_server]: 
+[recoveries_server-6] 	recoveries_server lifecycle node launched. 
+[recoveries_server-6] 	Waiting on external lifecycle transitions to activate
+[recoveries_server-6] 	See https://design.ros2.org/articles/node_lifecycle.html for more information.
+[planner_server-5] [INFO] [1787572314.027682200] [planner_server]: Creating
+[lifecycle_manager-9] 1787572314.047552 [0] lifecycle_: using network interface eth0 (udp/192.168.1.103) selected arbitrarily from: eth0, docker0
+[bt_navigator-7] [INFO] [1787572314.054594040] [bt_navigator]: 
+[bt_navigator-7] 	bt_navigator lifecycle node launched. 
+[bt_navigator-7] 	Waiting on external lifecycle transitions to activate
+[bt_navigator-7] 	See https://design.ros2.org/articles/node_lifecycle.html for more information.
+[bt_navigator-7] [INFO] [1787572314.054964536] [bt_navigator]: Creating
+[controller_server-4] [INFO] [1787572314.063713496] [controller_server]: Creating controller server
+[lifecycle_manager-9] [INFO] [1787572314.160602648] [lifecycle_manager_navigation]: Creating
+[planner_server-5] [INFO] [1787572314.179461560] [global_costmap.global_costmap]: 
+[planner_server-5] 	global_costmap lifecycle node launched. 
+[planner_server-5] 	Waiting on external lifecycle transitions to activate
+[planner_server-5] 	See https://design.ros2.org/articles/node_lifecycle.html for more information.
+[planner_server-5] [INFO] [1787572314.192272856] [global_costmap.global_costmap]: Creating Costmap
+[controller_server-4] [INFO] [1787572314.295301304] [local_costmap.local_costmap]: 
+[controller_server-4] 	local_costmap lifecycle node launched. 
+[controller_server-4] 	Waiting on external lifecycle transitions to activate
+[controller_server-4] 	See https://design.ros2.org/articles/node_lifecycle.html for more information.
+[lifecycle_manager-9] [INFO] [1787572314.321668696] [lifecycle_manager_navigation]: [34m[1mCreating and initializing lifecycle service clients[0m[0m
+[controller_server-4] [INFO] [1787572314.326558168] [local_costmap.local_costmap]: Creating Costmap
+[realsense2_camera_node-3] 1787572314.351343 [0] realsense2: using network interface eth0 (udp/192.168.1.103) selected arbitrarily from: eth0, docker0
+[lifecycle_manager-9] [INFO] [1787572314.464330168] [lifecycle_manager_navigation]: [34m[1mStarting managed nodes bringup...[0m[0m
+[lifecycle_manager-9] [INFO] [1787572314.464668664] [lifecycle_manager_navigation]: [34m[1mConfiguring controller_server[0m[0m
+[controller_server-4] [INFO] [1787572314.469445912] [controller_server]: Configuring controller interface
+[controller_server-4] [INFO] [1787572314.476176440] [controller_server]: Controller frequency set to 5.0000Hz
+[controller_server-4] [INFO] [1787572314.480196280] [local_costmap.local_costmap]: Configuring
+[controller_server-4] [INFO] [1787572314.508590968] [local_costmap.local_costmap]: Using plugin "stvl_obstacle_layer"
+[realsense2_camera_node-3] [0m[INFO] [1787572314.539461336] [camera.camera]: RealSense ROS v3.2.3[0m
+[realsense2_camera_node-3] [0m[INFO] [1787572314.541219160] [camera.camera]: Built with LibRealSense v2.50.0[0m
+[realsense2_camera_node-3] [0m[INFO] [1787572314.541449432] [camera.camera]: Running with LibRealSense v2.50.0[0m
+[controller_server-4] [INFO] [1787572314.626166232] [local_costmap.local_costmap]: stvl_obstacle_layer being initialized as SpatioTemporalVoxelLayer!
+[controller_server-4] [INFO] [1787572314.626357720] [local_costmap.local_costmap]: stvl_obstacle_layer's global frame is odom.
+[controller_server-4] [INFO] [1787572314.656978456] [local_costmap.local_costmap]: stvl_obstacle_layer loaded parameters from parameter server.
+[controller_server-4] [INFO] [1787572314.668517528] [local_costmap.local_costmap]: stvl_obstacle_layer created underlying voxel grid.
+[controller_server-4] [INFO] [1787572314.713237080] [local_costmap.local_costmap]: Voxel filter activated.
+[controller_server-4] [INFO] [1787572314.722098840] [local_costmap.local_costmap]: stvl_obstacle_layer initialization complete!
+[controller_server-4] [INFO] [1787572314.722263608] [local_costmap.local_costmap]: Initialized plugin "stvl_obstacle_layer"
+[controller_server-4] [INFO] [1787572314.722383352] [local_costmap.local_costmap]: Using plugin "inflation_layer"
+[controller_server-4] [INFO] [1787572314.733603416] [local_costmap.local_costmap]: Initialized plugin "inflation_layer"
+[controller_server-4] [INFO] [1787572314.771021656] [controller_server]: Created progress_checker : progress_checker of type nav2_controller::SimpleProgressChecker
+[controller_server-4] [INFO] [1787572314.776498040] [controller_server]: Created goal_checker : goal_checker of type nav2_controller::SimpleGoalChecker
+[controller_server-4] [INFO] [1787572314.795175096] [controller_server]: Created controller : FollowPath of type dwb_core::DWBLocalPlanner
+[controller_server-4] [INFO] [1787572314.806962840] [controller_server]: Setting transform_tolerance to 0.200000
+[controller_server-4] [INFO] [1787572314.947051064] [controller_server]: Using critic "PreferForward" (dwb_critics::PreferForwardCritic)
+[controller_server-4] [INFO] [1787572314.960212152] [controller_server]: Critic plugin initialized
+[controller_server-4] [INFO] [1787572314.963978744] [controller_server]: Using critic "GoalDist" (dwb_critics::GoalDistCritic)
+[controller_server-4] [INFO] [1787572314.979716408] [controller_server]: Critic plugin initialized
+[controller_server-4] [INFO] [1787572314.983539704] [controller_server]: Using critic "PathDist" (dwb_critics::PathDistCritic)
+[controller_server-4] [INFO] [1787572314.989246328] [controller_server]: Critic plugin initialized
+[controller_server-4] [INFO] [1787572314.993183800] [controller_server]: Using critic "RotateToGoal" (dwb_critics::RotateToGoalCritic)
+[controller_server-4] [INFO] [1787572315.006781560] [controller_server]: Critic plugin initialized
+[controller_server-4] [INFO] [1787572315.013583832] [controller_server]: Using critic "BaseObstacle" (dwb_critics::BaseObstacleCritic)
+[controller_server-4] [INFO] [1787572315.018262776] [controller_server]: Critic plugin initialized
+[controller_server-4] [INFO] [1787572315.020623704] [controller_server]: Controller Server has FollowPath  controllers available.
+[lifecycle_manager-9] [INFO] [1787572315.063532440] [lifecycle_manager_navigation]: [34m[1mConfiguring planner_server[0m[0m
+[planner_server-5] [INFO] [1787572315.065048952] [planner_server]: Configuring
+[planner_server-5] [INFO] [1787572315.065199832] [global_costmap.global_costmap]: Configuring
+[planner_server-5] [INFO] [1787572315.100731576] [global_costmap.global_costmap]: Using plugin "stvl_obstacle_layer"
+[planner_server-5] [INFO] [1787572315.230425400] [global_costmap.global_costmap]: stvl_obstacle_layer being initialized as SpatioTemporalVoxelLayer!
+[planner_server-5] [INFO] [1787572315.230614136] [global_costmap.global_costmap]: stvl_obstacle_layer's global frame is odom.
+[planner_server-5] [INFO] [1787572315.274290296] [global_costmap.global_costmap]: stvl_obstacle_layer loaded parameters from parameter server.
+[planner_server-5] [INFO] [1787572315.286669112] [global_costmap.global_costmap]: stvl_obstacle_layer created underlying voxel grid.
+[realsense2_camera_node-3] [0m[INFO] [1787572315.293478488] [camera.camera]: Device with serial number 344322074523 was found.
+[realsense2_camera_node-3] [0m
+[realsense2_camera_node-3] [0m[INFO] [1787572315.293721848] [camera.camera]: Device with physical ID 4-3.1-5 was found.[0m
+[realsense2_camera_node-3] [0m[INFO] [1787572315.293826008] [camera.camera]: Device with name Intel RealSense D435I was found.[0m
+[realsense2_camera_node-3] [0m[INFO] [1787572315.295350712] [camera.camera]: Device with port number 4-3.1 was found.[0m
+[realsense2_camera_node-3] [0m[INFO] [1787572315.295513496] [camera.camera]: Device USB type: 3.2[0m
+[realsense2_camera_node-3] [0m[INFO] [1787572315.326826392] [camera.camera]: getParameters...[0m
+[planner_server-5] [INFO] [1787572315.393598328] [global_costmap.global_costmap]: Voxel filter activated.
+[planner_server-5] [INFO] [1787572315.408135256] [global_costmap.global_costmap]: stvl_obstacle_layer initialization complete!
+[planner_server-5] [INFO] [1787572315.408453752] [global_costmap.global_costmap]: Initialized plugin "stvl_obstacle_layer"
+[planner_server-5] [INFO] [1787572315.408697304] [global_costmap.global_costmap]: Using plugin "inflation_layer"
+[planner_server-5] [INFO] [1787572315.425192344] [global_costmap.global_costmap]: Initialized plugin "inflation_layer"
+[planner_server-5] [INFO] [1787572315.468845304] [planner_server]: Created global planner plugin GridBased of type nav2_navfn_planner/NavfnPlanner
+[planner_server-5] [INFO] [1787572315.469025976] [planner_server]: Configuring plugin GridBased of type NavfnPlanner
+[planner_server-5] [INFO] [1787572315.527926904] [planner_server]: Planner Server has GridBased  planners available.
+[lifecycle_manager-9] [INFO] [1787572315.568864664] [lifecycle_manager_navigation]: [34m[1mConfiguring recoveries_server[0m[0m
+[recoveries_server-6] [INFO] [1787572315.570324632] [recoveries_server]: Configuring
+[recoveries_server-6] [INFO] [1787572315.625450904] [recoveries_server]: Creating recovery plugin spin of type nav2_recoveries/Spin
+[recoveries_server-6] [INFO] [1787572315.630338872] [recoveries_server]: Configuring spin
+[recoveries_server-6] [INFO] [1787572315.655265496] [recoveries_server]: Creating recovery plugin backup of type nav2_recoveries/BackUp
+[recoveries_server-6] [INFO] [1787572315.665333016] [recoveries_server]: Configuring backup
+[recoveries_server-6] [INFO] [1787572315.682838456] [recoveries_server]: Creating recovery plugin wait of type nav2_recoveries/Wait
+[recoveries_server-6] [INFO] [1787572315.687148536] [recoveries_server]: Configuring wait
+[lifecycle_manager-9] [INFO] [1787572315.712554328] [lifecycle_manager_navigation]: [34m[1mConfiguring bt_navigator[0m[0m
+[realsense2_camera_node-3] filter_voxel: 1 filter_leaf_size_m: 0.05
+[realsense2_camera_node-3] [0m[INFO] [1787572315.760054392] [camera.camera]: setupDevice...[0m
+[realsense2_camera_node-3] [0m[INFO] [1787572315.760245784] [camera.camera]: JSON file is not provided[0m
+[realsense2_camera_node-3] [0m[INFO] [1787572315.761298136] [camera.camera]: Device Name: Intel RealSense D435I[0m
+[realsense2_camera_node-3] [0m[INFO] [1787572315.761450488] [camera.camera]: Device physical port: 4-3.1-5[0m
+[realsense2_camera_node-3] [0m[INFO] [1787572315.761565048] [camera.camera]: Device FW version: 05.13.00.50[0m
+[realsense2_camera_node-3] [0m[INFO] [1787572315.761708952] [camera.camera]: Device Product ID: 0x0B3A[0m
+[realsense2_camera_node-3] [0m[INFO] [1787572315.761793272] [camera.camera]: Enable PointCloud: On[0m
+[realsense2_camera_node-3] [0m[INFO] [1787572315.761873976] [camera.camera]: Align Depth: Off[0m
+[realsense2_camera_node-3] [0m[INFO] [1787572315.761966040] [camera.camera]: Sync Mode: On[0m
+[realsense2_camera_node-3] [0m[INFO] [1787572315.768849464] [camera.camera]: Device Sensors: [0m
+[bt_navigator-7] [INFO] [1787572315.715100440] [bt_navigator]: Configuring
+[bt_navigator-7] [INFO] [1787572316.012893080] [bt_navigator_rclcpp_node]: Waiting for "compute_path_to_pose" action server
+[bt_navigator-7] [INFO] [1787572316.013707512] [bt_navigator_rclcpp_node]: "ComputePathToPose" BtActionNode initialized
+[bt_navigator-7] [INFO] [1787572316.021950040] [bt_navigator_rclcpp_node]: Waiting for "global_costmap/clear_entirely_global_costmap" service
+[bt_navigator-7] [INFO] [1787572316.022721624] [bt_navigator_rclcpp_node]: "ClearGlobalCostmap-Context" BtServiceNode initialized
+[realsense2_camera_node-3] [0m[INFO] [1787572316.023782936] [camera.camera]: Stereo Module was found.[0m
+[bt_navigator-7] [INFO] [1787572316.058678200] [bt_navigator_rclcpp_node]: Waiting for "follow_path" action server
+[bt_navigator-7] [INFO] [1787572316.059555480] [bt_navigator_rclcpp_node]: "FollowPath" BtActionNode initialized
+[bt_navigator-7] [INFO] [1787572316.065057240] [bt_navigator_rclcpp_node]: Waiting for "local_costmap/clear_entirely_local_costmap" service
+[bt_navigator-7] [INFO] [1787572316.065510776] [bt_navigator_rclcpp_node]: "ClearLocalCostmap-Context" BtServiceNode initialized
+[bt_navigator-7] [INFO] [1787572316.073377688] [bt_navigator_rclcpp_node]: Waiting for "local_costmap/clear_entirely_local_costmap" service
+[bt_navigator-7] [INFO] [1787572316.074563512] [bt_navigator_rclcpp_node]: "ClearLocalCostmap-Subtree" BtServiceNode initialized
+[bt_navigator-7] [INFO] [1787572316.082342904] [bt_navigator_rclcpp_node]: Waiting for "global_costmap/clear_entirely_global_costmap" service
+[bt_navigator-7] [INFO] [1787572316.082800088] [bt_navigator_rclcpp_node]: "ClearGlobalCostmap-Subtree" BtServiceNode initialized
+[bt_navigator-7] [INFO] [1787572316.109332056] [bt_navigator_rclcpp_node]: Waiting for "spin" action server
+[bt_navigator-7] [INFO] [1787572316.109957144] [bt_navigator_rclcpp_node]: "Spin" BtActionNode initialized
+[bt_navigator-7] [INFO] [1787572316.141930008] [bt_navigator_rclcpp_node]: Waiting for "wait" action server
+[bt_navigator-7] [INFO] [1787572316.142638104] [bt_navigator_rclcpp_node]: "Wait" BtActionNode initialized
+[lifecycle_manager-9] [INFO] [1787572316.161767896] [lifecycle_manager_navigation]: [34m[1mConfiguring waypoint_follower[0m[0m
+[odom_to_tf.py-2] 1787572316.164322 [0]    python3: using network interface eth0 (udp/192.168.1.103) selected arbitrarily from: eth0, docker0
+[waypoint_follower-8] [INFO] [1787572316.164995960] [waypoint_follower]: Configuring
+[realsense2_camera_node-3] [0m[INFO] [1787572316.211539576] [camera.camera]: RGB Camera was found.[0m
+[realsense2_camera_node-3] [0m[INFO] [1787572316.212926616] [camera.camera]: Motion Module was found.[0m
+[realsense2_camera_node-3] [0m[INFO] [1787572316.213223512] [camera.camera]: (Infrared, 0) sensor isn't supported by current device! -- Skipping...[0m
+[realsense2_camera_node-3] [0m[INFO] [1787572316.213352728] [camera.camera]: (Fisheye, 0) sensor isn't supported by current device! -- Skipping...[0m
+[realsense2_camera_node-3] [0m[INFO] [1787572316.213449368] [camera.camera]: (Pose, 0) sensor isn't supported by current device! -- Skipping...[0m
+[realsense2_camera_node-3] [0m[INFO] [1787572316.213560856] [camera.camera]: Add Filter: pointcloud[0m
+[realsense2_camera_node-3] [0m[INFO] [1787572316.247280344] [camera.camera]: num_filters: 1[0m
+[realsense2_camera_node-3] [0m[INFO] [1787572316.247473432] [camera.camera]: Setting Dynamic reconfig parameters.[0m
+[lifecycle_manager-9] [INFO] [1787572316.318346584] [lifecycle_manager_navigation]: [34m[1mActivating controller_server[0m[0m
+[controller_server-4] [INFO] [1787572316.322506648] [controller_server]: Activating
+[controller_server-4] [INFO] [1787572316.322696536] [local_costmap.local_costmap]: Activating
+[controller_server-4] [INFO] [1787572316.322774552] [local_costmap.local_costmap]: Checking transform
+[controller_server-4] [INFO] [1787572316.322898520] [local_costmap.local_costmap]: Timed out waiting for transform from base_link to odom to become available, tf error: Invalid frame ID "odom" passed to canTransform argument target_frame - frame does not exist
+[controller_server-4] [INFO] [1787572316.823298328] [local_costmap.local_costmap]: start
+[controller_server-4] [INFO] [1787572316.823498904] [local_costmap.local_costmap]: stvl_obstacle_layer was activated.
+[lifecycle_manager-9] [INFO] [1787572316.878114680] [lifecycle_manager_navigation]: [34m[1mActivating planner_server[0m[0m
+[planner_server-5] [INFO] [1787572316.880111896] [planner_server]: Activating
+[planner_server-5] [INFO] [1787572316.880268824] [global_costmap.global_costmap]: Activating
+[planner_server-5] [INFO] [1787572316.880346488] [global_costmap.global_costmap]: Checking transform
+[planner_server-5] [INFO] [1787572316.880769336] [global_costmap.global_costmap]: start
+[planner_server-5] [INFO] [1787572316.880860984] [global_costmap.global_costmap]: stvl_obstacle_layer was activated.
+[planner_server-5] [INFO] [1787572316.932964088] [planner_server]: Activating plugin GridBased of type NavfnPlanner
+[lifecycle_manager-9] [INFO] [1787572316.936182200] [lifecycle_manager_navigation]: [34m[1mActivating recoveries_server[0m[0m
+[recoveries_server-6] [INFO] [1787572316.937855992] [recoveries_server]: Activating
+[recoveries_server-6] [INFO] [1787572316.938053272] [recoveries_server]: Activating spin
+[recoveries_server-6] [INFO] [1787572316.938135320] [recoveries_server]: Activating backup
+[recoveries_server-6] [INFO] [1787572316.938203768] [recoveries_server]: Activating wait
+[lifecycle_manager-9] [INFO] [1787572316.948556408] [lifecycle_manager_navigation]: [34m[1mActivating bt_navigator[0m[0m
+[bt_navigator-7] [INFO] [1787572316.949486904] [bt_navigator]: Activating
+[lifecycle_manager-9] [INFO] [1787572316.958991384] [lifecycle_manager_navigation]: [34m[1mActivating waypoint_follower[0m[0m
+[waypoint_follower-8] [INFO] [1787572316.963058968] [waypoint_follower]: Activating
+[lifecycle_manager-9] [INFO] [1787572316.968281176] [lifecycle_manager_navigation]: [34m[1mManaged nodes are active[0m[0m
+[realsense2_camera_node-3] [0m[INFO] [1787572321.986606808] [camera.camera]: Done Setting Dynamic reconfig parameters.[0m
+[realsense2_camera_node-3] [0m[INFO] [1787572321.997707224] [camera.camera]: depth stream is enabled - width: 424, height: 240, fps: 30, Format: Z16[0m
+[realsense2_camera_node-3] [0m[INFO] [1787572321.997904856] [camera.camera]: setupPublishers...[0m
+[realsense2_camera_node-3] [0m[INFO] [1787572322.037348856] [camera.camera]: setupStreams...[0m
+[realsense2_camera_node-3] [0m[INFO] [1787572322.317893592] [camera.camera]: SELECTED BASE:Depth, 0[0m
+[realsense2_camera_node-3] [0m[INFO] [1787572322.329418840] [camera.camera]: Device Serial No: 344322074523[0m
+[realsense2_camera_node-3] [0m[INFO] [1787572322.329728056] [camera.camera]: RealSense Node Is Up![0m
+[realsense2_camera_node-3] [33m[WARN] [1787572322.466675320] [camera.camera]: [0m
+[realsense2_camera_node-3]  24/08 19:52:02,480 WARNING [281472476891552] (messenger-libusb.cpp:42) control_transfer returned error, index: 768, error: Resource temporarily unavailable, number: 11
+[realsense2_camera_node-3]  24/08 19:52:02,534 WARNING [281472476891552] (messenger-libusb.cpp:42) control_transfer returned error, index: 768, error: Resource temporarily unavailable, number: 11
+[realsense2_camera_node-3]  24/08 19:52:02,709 WARNING [281472476891552] (messenger-libusb.cpp:42) control_transfer returned error, index: 768, error: Resource temporarily unavailable, number: 11
+[realsense2_camera_node-3] [0m[INFO] [1787572322.777678680] [camera.camera]: publishing unordered pointcloud.[0m
+[realsense2_camera_node-3]  24/08 19:52:02,871 WARNING [281472476891552] (messenger-libusb.cpp:42) control_transfer returned error, index: 768, error: Resource temporarily unavailable, number: 11
+[realsense2_camera_node-3] [1;33m[pcl::VoxelGrid::applyFilter] Leaf size is too small for the input dataset. Integer indices would overflow.[0;m[1;33m[pcl::VoxelGrid::applyFilter] Leaf size is too small for the input dataset. Integer indices would overflow.[0;m[1;33m[pcl::VoxelGrid::applyFilter] Leaf size is too small for the input dataset. Integer indices would overflow.[0;m[33m[WARN] [1787572322.998317272] [camera.camera]: Hardware Notification:Depth stream start failure,1.78757e+12,Error,Hardware Error[0m
+[realsense2_camera_node-3]  24/08 19:52:19,983 WARNING [281472476891552] (messenger-libusb.cpp:42) control_transfer returned error, index: 768, error: Resource temporarily unavailable, number: 11
+[realsense2_camera_node-3]  24/08 19:52:33,063 WARNING [281472476891552] (messenger-libusb.cpp:42) control_transfer returned error, index: 768, error: Resource temporarily unavailable, number: 11
+[bt_navigator-7] [INFO] [1787572358.234469784] [bt_navigator]: Begin navigating from current location to (1.03, 0.07)
+[controller_server-4] [INFO] [1787572358.295467288] [controller_server]: Received a goal, begin computing control effort.
+[controller_server-4] [INFO] [1787572359.500496024] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1787572360.500466328] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1787572361.500494040] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1787572362.502218328] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1787572363.501217592] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1787572364.700508504] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1787572365.616250008] [controller_server]: Reached the goal!
+[controller_server-4] [INFO] [1787572365.618169272] [controller_server]: Received a goal, begin computing control effort.
+[controller_server-4] [INFO] [1787572365.726619320] [controller_server]: Reached the goal!
+[bt_navigator-7] [INFO] [1787572365.761889880] [bt_navigator]: Navigation succeeded
+[realsense2_camera_node-3]  24/08 19:53:07,175 WARNING [281472476891552] (messenger-libusb.cpp:42) control_transfer returned error, index: 768, error: Resource temporarily unavailable, number: 11
+[realsense2_camera_node-3]  24/08 19:53:13,234 WARNING [281472476891552] (messenger-libusb.cpp:42) control_transfer returned error, index: 768, error: Resource temporarily unavailable, number: 11
+[realsense2_camera_node-3]  24/08 19:53:25,298 WARNING [281472476891552] (messenger-libusb.cpp:42) control_transfer returned error, index: 768, error: Resource temporarily unavailable, number: 11
+[realsense2_camera_node-3]  24/08 19:53:47,376 WARNING [281472476891552] (messenger-libusb.cpp:42) control_transfer returned error, index: 768, error: Resource temporarily unavailable, number: 11
+[realsense2_camera_node-3]  24/08 19:53:47,427 WARNING [281472476891552] (messenger-libusb.cpp:42) control_transfer returned error, index: 768, error: Resource temporarily unavailable, number: 11
+[realsense2_camera_node-3]  24/08 19:54:43,554 WARNING [281472476891552] (messenger-libusb.cpp:42) control_transfer returned error, index: 768, error: Resource temporarily unavailable, number: 11
+[bt_navigator-7] [INFO] [1787572501.467740216] [bt_navigator]: Begin navigating from current location to (3.23, 0.17)
+[planner_server-5] [WARN] [1787572501.498594488] [planner_server]: GridBased: failed to create plan with tolerance 0.15.
+[planner_server-5] [WARN] [1787572501.498972504] [planner_server]: Planning algorithm GridBased failed to generate a valid path to (3.23, 0.17)
+[planner_server-5] [WARN] [1787572501.499101880] [planner_server_rclcpp_node]: [compute_path_to_pose] [ActionServer] Aborting handle.
+[planner_server-5] [INFO] [1787572501.514590840] [global_costmap.global_costmap]: Received request to clear entirely the global_costmap
+[controller_server-4] [INFO] [1787572501.535872472] [controller_server]: Received a goal, begin computing control effort.
+[controller_server-4] [INFO] [1787572501.537688536] [controller_server]: Passing new path to controller.
+[planner_server-5] [WARN] [1787572502.560655096] [planner_server]: GridBased: failed to create plan with tolerance 0.15.
+[planner_server-5] [WARN] [1787572502.564836504] [planner_server]: Planning algorithm GridBased failed to generate a valid path to (3.23, 0.17)
+[planner_server-5] [WARN] [1787572502.564978840] [planner_server_rclcpp_node]: [compute_path_to_pose] [ActionServer] Aborting handle.
+[planner_server-5] [INFO] [1787572502.583134680] [global_costmap.global_costmap]: Received request to clear entirely the global_costmap
+[controller_server-4] [INFO] [1787572502.737849816] [controller_server]: Passing new path to controller.
+[planner_server-5] [WARN] [1787572503.664064600] [planner_server]: GridBased: failed to create plan with tolerance 0.15.
+[planner_server-5] [WARN] [1787572503.665087864] [planner_server]: Planning algorithm GridBased failed to generate a valid path to (3.23, 0.17)
+[planner_server-5] [WARN] [1787572503.665258968] [planner_server_rclcpp_node]: [compute_path_to_pose] [ActionServer] Aborting handle.
+[planner_server-5] [INFO] [1787572503.685851768] [global_costmap.global_costmap]: Received request to clear entirely the global_costmap
+[controller_server-4] [INFO] [1787572503.737827512] [controller_server]: Passing new path to controller.
+[planner_server-5] [WARN] [1787572504.742369432] [planner_server]: GridBased: failed to create plan with tolerance 0.15.
+[planner_server-5] [WARN] [1787572504.744837656] [planner_server]: Planning algorithm GridBased failed to generate a valid path to (3.23, 0.17)
+[planner_server-5] [WARN] [1787572504.748387128] [planner_server_rclcpp_node]: [compute_path_to_pose] [ActionServer] Aborting handle.
+[planner_server-5] [INFO] [1787572504.763272248] [global_costmap.global_costmap]: Received request to clear entirely the global_costmap
+[controller_server-4] [INFO] [1787572504.937835960] [controller_server]: Passing new path to controller.
+[planner_server-5] [WARN] [1787572505.828326008] [planner_server]: GridBased: failed to create plan with tolerance 0.15.
+[planner_server-5] [WARN] [1787572505.829423160] [planner_server]: Planning algorithm GridBased failed to generate a valid path to (3.23, 0.17)
+[planner_server-5] [WARN] [1787572505.829570520] [planner_server_rclcpp_node]: [compute_path_to_pose] [ActionServer] Aborting handle.
+[planner_server-5] [INFO] [1787572505.833910360] [global_costmap.global_costmap]: Received request to clear entirely the global_costmap
+[controller_server-4] [INFO] [1787572505.937827128] [controller_server]: Passing new path to controller.
+[planner_server-5] [WARN] [1787572506.892665048] [planner_server]: GridBased: failed to create plan with tolerance 0.15.
+[planner_server-5] [WARN] [1787572506.893002168] [planner_server]: Planning algorithm GridBased failed to generate a valid path to (3.23, 0.17)
+[planner_server-5] [WARN] [1787572506.893151704] [planner_server_rclcpp_node]: [compute_path_to_pose] [ActionServer] Aborting handle.
+[planner_server-5] [INFO] [1787572506.913231320] [global_costmap.global_costmap]: Received request to clear entirely the global_costmap
+[controller_server-4] [INFO] [1787572507.137862072] [controller_server]: Passing new path to controller.
+[planner_server-5] [WARN] [1787572507.978502392] [planner_server]: GridBased: failed to create plan with tolerance 0.15.
+[planner_server-5] [WARN] [1787572507.982576472] [planner_server]: Planning algorithm GridBased failed to generate a valid path to (3.23, 0.17)
+[planner_server-5] [WARN] [1787572507.985019032] [planner_server_rclcpp_node]: [compute_path_to_pose] [ActionServer] Aborting handle.
+[planner_server-5] [INFO] [1787572508.009429176] [global_costmap.global_costmap]: Received request to clear entirely the global_costmap
+[controller_server-4] [INFO] [1787572508.137837592] [controller_server]: Passing new path to controller.
+[planner_server-5] [WARN] [1787572509.062580600] [planner_server]: GridBased: failed to create plan with tolerance 0.15.
+[planner_server-5] [WARN] [1787572509.065702808] [planner_server]: Planning algorithm GridBased failed to generate a valid path to (3.23, 0.17)
+[planner_server-5] [WARN] [1787572509.066860632] [planner_server_rclcpp_node]: [compute_path_to_pose] [ActionServer] Aborting handle.
+[planner_server-5] [INFO] [1787572509.085071896] [global_costmap.global_costmap]: Received request to clear entirely the global_costmap
+[controller_server-4] [INFO] [1787572509.137833720] [controller_server]: Passing new path to controller.
+[planner_server-5] [WARN] [1787572510.147827032] [planner_server]: GridBased: failed to create plan with tolerance 0.15.
+[planner_server-5] [WARN] [1787572510.148140216] [planner_server]: Planning algorithm GridBased failed to generate a valid path to (3.23, 0.17)
+[planner_server-5] [WARN] [1787572510.148278776] [planner_server_rclcpp_node]: [compute_path_to_pose] [ActionServer] Aborting handle.
+[planner_server-5] [INFO] [1787572510.163306584] [global_costmap.global_costmap]: Received request to clear entirely the global_costmap
+[controller_server-4] [INFO] [1787572510.337819448] [controller_server]: Passing new path to controller.
+[planner_server-5] [WARN] [1787572511.213380472] [planner_server]: GridBased: failed to create plan with tolerance 0.15.
+[planner_server-5] [WARN] [1787572511.213652280] [planner_server]: Planning algorithm GridBased failed to generate a valid path to (3.23, 0.17)
+[planner_server-5] [WARN] [1787572511.213786616] [planner_server_rclcpp_node]: [compute_path_to_pose] [ActionServer] Aborting handle.
+[planner_server-5] [INFO] [1787572511.233146968] [global_costmap.global_costmap]: Received request to clear entirely the global_costmap
+[controller_server-4] [INFO] [1787572511.337821240] [controller_server]: Passing new path to controller.
+[controller_server-4] [ERROR] [1787572511.738184888] [controller_server]: Failed to make progress
+[controller_server-4] [WARN] [1787572511.739057304] [controller_server_rclcpp_node]: [follow_path] [ActionServer] Aborting handle.
+[controller_server-4] [INFO] [1787572511.754400152] [local_costmap.local_costmap]: Received request to clear entirely the local_costmap
+[controller_server-4] [INFO] [1787572511.762549656] [controller_server]: Received a goal, begin computing control effort.
+[planner_server-5] [WARN] [1787572512.294427320] [planner_server]: GridBased: failed to create plan with tolerance 0.15.
+[planner_server-5] [WARN] [1787572512.295997752] [planner_server]: Planning algorithm GridBased failed to generate a valid path to (3.23, 0.17)
+[planner_server-5] [WARN] [1787572512.296163800] [planner_server_rclcpp_node]: [compute_path_to_pose] [ActionServer] Aborting handle.
+[planner_server-5] [INFO] [1787572512.313526680] [global_costmap.global_costmap]: Received request to clear entirely the global_costmap
+[controller_server-4] [INFO] [1787572512.365138808] [controller_server]: Passing new path to controller.
+[planner_server-5] [WARN] [1787572513.368991384] [planner_server]: GridBased: failed to create plan with tolerance 0.15.
+[planner_server-5] [WARN] [1787572513.371916632] [planner_server]: Planning algorithm GridBased failed to generate a valid path to (3.23, 0.17)
+[planner_server-5] [WARN] [1787572513.374181816] [planner_server_rclcpp_node]: [compute_path_to_pose] [ActionServer] Aborting handle.
+[planner_server-5] [INFO] [1787572513.393190200] [global_costmap.global_costmap]: Received request to clear entirely the global_costmap
+[controller_server-4] [INFO] [1787572513.565117112] [controller_server]: Passing new path to controller.
+[planner_server-5] [WARN] [1787572514.461613208] [planner_server]: GridBased: failed to create plan with tolerance 0.15.
+[planner_server-5] [WARN] [1787572514.462930328] [planner_server]: Planning algorithm GridBased failed to generate a valid path to (3.23, 0.17)
+[planner_server-5] [WARN] [1787572514.463150072] [planner_server_rclcpp_node]: [compute_path_to_pose] [ActionServer] Aborting handle.
+[planner_server-5] [INFO] [1787572514.473214552] [global_costmap.global_costmap]: Received request to clear entirely the global_costmap
+[controller_server-4] [INFO] [1787572514.565164984] [controller_server]: Passing new path to controller.
+[planner_server-5] [WARN] [1787572515.512424088] [planner_server]: GridBased: failed to create plan with tolerance 0.15.
+[planner_server-5] [WARN] [1787572515.512963288] [planner_server]: Planning algorithm GridBased failed to generate a valid path to (3.23, 0.17)
+[planner_server-5] [WARN] [1787572515.513088664] [planner_server_rclcpp_node]: [compute_path_to_pose] [ActionServer] Aborting handle.
+[planner_server-5] [INFO] [1787572515.523333144] [global_costmap.global_costmap]: Received request to clear entirely the global_costmap
+[controller_server-4] [INFO] [1787572515.565191608] [controller_server]: Passing new path to controller.
+[planner_server-5] [WARN] [1787572516.580727896] [planner_server]: GridBased: failed to create plan with tolerance 0.15.
+[planner_server-5] [WARN] [1787572516.581099160] [planner_server]: Planning algorithm GridBased failed to generate a valid path to (3.23, 0.17)
+[planner_server-5] [WARN] [1787572516.581264184] [planner_server_rclcpp_node]: [compute_path_to_pose] [ActionServer] Aborting handle.
+[planner_server-5] [INFO] [1787572516.583698488] [global_costmap.global_costmap]: Received request to clear entirely the global_costmap
+[controller_server-4] [INFO] [1787572516.765324184] [controller_server]: Passing new path to controller.
+[planner_server-5] [WARN] [1787572517.635182200] [planner_server]: GridBased: failed to create plan with tolerance 0.15.
+[planner_server-5] [WARN] [1787572517.635502104] [planner_server]: Planning algorithm GridBased failed to generate a valid path to (3.23, 0.17)
+[planner_server-5] [WARN] [1787572517.635630104] [planner_server_rclcpp_node]: [compute_path_to_pose] [ActionServer] Aborting handle.
+[planner_server-5] [INFO] [1787572517.655868952] [global_costmap.global_costmap]: Received request to clear entirely the global_costmap
+[controller_server-4] [INFO] [1787572517.765156376] [controller_server]: Passing new path to controller.
+[planner_server-5] [WARN] [1787572518.698511192] [planner_server]: GridBased: failed to create plan with tolerance 0.15.
+[planner_server-5] [WARN] [1787572518.698818808] [planner_server]: Planning algorithm GridBased failed to generate a valid path to (3.23, 0.17)
+[planner_server-5] [WARN] [1787572518.698981240] [planner_server_rclcpp_node]: [compute_path_to_pose] [ActionServer] Aborting handle.
+[planner_server-5] [INFO] [1787572518.713263672] [global_costmap.global_costmap]: Received request to clear entirely the global_costmap
+[controller_server-4] [INFO] [1787572518.765135576] [controller_server]: Passing new path to controller.
+[planner_server-5] [WARN] [1787572519.762049400] [planner_server]: GridBased: failed to create plan with tolerance 0.15.
+[planner_server-5] [WARN] [1787572519.762375576] [planner_server]: Planning algorithm GridBased failed to generate a valid path to (3.23, 0.17)
+[planner_server-5] [WARN] [1787572519.762478584] [planner_server_rclcpp_node]: [compute_path_to_pose] [ActionServer] Aborting handle.
+[planner_server-5] [INFO] [1787572519.773635832] [global_costmap.global_costmap]: Received request to clear entirely the global_costmap
+[controller_server-4] [INFO] [1787572519.965166648] [controller_server]: Passing new path to controller.
+[planner_server-5] [WARN] [1787572520.837728440] [planner_server]: GridBased: failed to create plan with tolerance 0.15.
+[planner_server-5] [WARN] [1787572520.838747704] [planner_server]: Planning algorithm GridBased failed to generate a valid path to (3.23, 0.17)
+[planner_server-5] [WARN] [1787572520.838863480] [planner_server_rclcpp_node]: [compute_path_to_pose] [ActionServer] Aborting handle.
+[planner_server-5] [INFO] [1787572520.853284024] [global_costmap.global_costmap]: Received request to clear entirely the global_costmap
+[controller_server-4] [INFO] [1787572520.965168728] [controller_server]: Passing new path to controller.
+[controller_server-4] [ERROR] [1787572521.765828952] [controller_server]: Failed to make progress
+[controller_server-4] [WARN] [1787572521.767185880] [controller_server_rclcpp_node]: [follow_path] [ActionServer] Aborting handle.
+[controller_server-4] [INFO] [1787572521.788948120] [local_costmap.local_costmap]: Received request to clear entirely the local_costmap
+[planner_server-5] [INFO] [1787572521.798123320] [global_costmap.global_costmap]: Received request to clear entirely the global_costmap
+[recoveries_server-6] [INFO] [1787572521.807359704] [recoveries_server]: Attempting spin
+[recoveries_server-6] [INFO] [1787572521.807992984] [recoveries_server]: Turning 1.57 for spin recovery.
+[recoveries_server-6] [INFO] [1787572522.808790936] [recoveries_server]: spin running...
+[recoveries_server-6] [INFO] [1787572523.808742840] [recoveries_server]: spin running...
+[recoveries_server-6] [INFO] [1787572524.808732728] [recoveries_server]: spin running...
+[recoveries_server-6] [INFO] [1787572525.808749400] [recoveries_server]: spin running...
+[recoveries_server-6] [INFO] [1787572526.808745880] [recoveries_server]: spin running...
+[recoveries_server-6] [INFO] [1787572527.808778360] [recoveries_server]: spin running...
+[recoveries_server-6] [INFO] [1787572528.808803480] [recoveries_server]: spin running...
+[recoveries_server-6] [INFO] [1787572529.808714840] [recoveries_server]: spin running...
+[recoveries_server-6] [INFO] [1787572530.808791608] [recoveries_server]: spin running...
+[recoveries_server-6] [INFO] [1787572531.808771864] [recoveries_server]: spin running...
+[recoveries_server-6] [INFO] [1787572532.808790904] [recoveries_server]: spin running...
+[recoveries_server-6] [INFO] [1787572533.808768856] [recoveries_server]: spin running...
+[recoveries_server-6] [INFO] [1787572534.808757912] [recoveries_server]: spin running...
+[recoveries_server-6] [INFO] [1787572535.808739192] [recoveries_server]: spin running...
+[recoveries_server-6] [INFO] [1787572536.808761400] [recoveries_server]: spin running...
+[recoveries_server-6] [INFO] [1787572537.808745048] [recoveries_server]: spin running...
+[recoveries_server-6] [INFO] [1787572538.808760216] [recoveries_server]: spin running...
+[recoveries_server-6] [INFO] [1787572539.808757208] [recoveries_server]: spin running...
+[recoveries_server-6] [INFO] [1787572540.808763064] [recoveries_server]: spin running...
+[recoveries_server-6] [INFO] [1787572541.808755384] [recoveries_server]: spin running...
+[recoveries_server-6] [INFO] [1787572542.808804888] [recoveries_server]: spin running...
+[recoveries_server-6] [INFO] [1787572542.810322904] [recoveries_server]: spin completed successfully
+[recoveries_server-6] [INFO] [1787572542.839453304] [recoveries_server]: Attempting wait
+[recoveries_server-6] [INFO] [1787572543.839987992] [recoveries_server]: wait running...
+[recoveries_server-6] [INFO] [1787572544.839942552] [recoveries_server]: wait running...
+[recoveries_server-6] [INFO] [1787572545.840687512] [recoveries_server]: wait running...
+[recoveries_server-6] [INFO] [1787572546.841283704] [recoveries_server]: wait running...
+[recoveries_server-6] [INFO] [1787572547.839943320] [recoveries_server]: wait running...
+[recoveries_server-6] [INFO] [1787572547.840177752] [recoveries_server]: wait completed successfully
+[controller_server-4] [INFO] [1787572547.892292632] [controller_server]: Received a goal, begin computing control effort.
+[controller_server-4] [INFO] [1787572548.093072280] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1787572549.093066712] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1787572550.093083576] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1787572551.093085912] [controller_server]: Passing new path to controller.
+[planner_server-5] [WARN] [1787572552.003317368] [planner_server]: GridBased: failed to create plan with tolerance 0.15.
+[planner_server-5] [WARN] [1787572552.003628184] [planner_server]: Planning algorithm GridBased failed to generate a valid path to (3.23, 0.17)
+[planner_server-5] [WARN] [1787572552.003913144] [planner_server_rclcpp_node]: [compute_path_to_pose] [ActionServer] Aborting handle.
+[planner_server-5] [INFO] [1787572552.019492376] [global_costmap.global_costmap]: Received request to clear entirely the global_costmap
+[controller_server-4] [INFO] [1787572552.093089336] [controller_server]: Passing new path to controller.
+[planner_server-5] [WARN] [1787572553.064454392] [planner_server]: GridBased: failed to create plan with tolerance 0.15.
+[planner_server-5] [WARN] [1787572553.064741400] [planner_server]: Planning algorithm GridBased failed to generate a valid path to (3.23, 0.17)
+[planner_server-5] [WARN] [1787572553.064887000] [planner_server_rclcpp_node]: [compute_path_to_pose] [ActionServer] Aborting handle.
+[planner_server-5] [INFO] [1787572553.080018360] [global_costmap.global_costmap]: Received request to clear entirely the global_costmap
+[planner_server-5] [WARN] [1787572553.101092856] [planner_server]: GridBased: failed to create plan with tolerance 0.15.
+[planner_server-5] [WARN] [1787572553.101406168] [planner_server]: Planning algorithm GridBased failed to generate a valid path to (3.23, 0.17)
+[planner_server-5] [WARN] [1787572553.101556504] [planner_server_rclcpp_node]: [compute_path_to_pose] [ActionServer] Aborting handle.
+[controller_server-4] [INFO] [1787572553.122998072] [local_costmap.local_costmap]: Received request to clear entirely the local_costmap
+[bt_navigator-7] [WARN] [1787572553.133227800] [bt_navigator_rclcpp_node]: Node timed out while executing service call to local_costmap/clear_entirely_local_costmap.
+[bt_navigator-7] [ERROR] [1787572553.134456632] [bt_navigator]: Navigation failed
+[bt_navigator-7] [WARN] [1787572553.134613432] [bt_navigator]: [navigate_to_pose] [ActionServer] Aborting handle.
+[controller_server-4] [INFO] [1787572553.293114072] [controller_server]: Goal was canceled. Stopping the robot.
+[controller_server-4] [WARN] [1787572553.293345464] [controller_server_rclcpp_node]: [follow_path] [ActionServer] Client requested to cancel the goal. Cancelling.
+[realsense2_camera_node-3]  24/08 19:56:26,770 WARNING [281472476891552] (messenger-libusb.cpp:42) control_transfer returned error, index: 768, error: Resource temporarily unavailable, number: 11
+[bt_navigator-7] [INFO] [1787572635.839169656] [bt_navigator]: Begin navigating from current location to (3.36, 0.21)
+[planner_server-5] [WARN] [1787572635.871077496] [planner_server]: GridBased: failed to create plan with tolerance 0.15.
+[planner_server-5] [WARN] [1787572635.871375832] [planner_server]: Planning algorithm GridBased failed to generate a valid path to (3.36, 0.21)
+[planner_server-5] [WARN] [1787572635.871509240] [planner_server_rclcpp_node]: [compute_path_to_pose] [ActionServer] Aborting handle.
+[controller_server-4] [INFO] [1787572635.885116984] [local_costmap.local_costmap]: Received request to clear entirely the local_costmap
+[planner_server-5] [INFO] [1787572635.887359352] [global_costmap.global_costmap]: Received request to clear entirely the global_costmap
+[recoveries_server-6] [INFO] [1787572635.896849368] [recoveries_server]: Attempting spin
+[recoveries_server-6] [INFO] [1787572635.902315672] [recoveries_server]: Turning 1.57 for spin recovery.
+[recoveries_server-6] [INFO] [1787572636.903925080] [recoveries_server]: spin running...
+[recoveries_server-6] [INFO] [1787572637.903918232] [recoveries_server]: spin running...
+[realsense2_camera_node-3]  24/08 19:57:18,894 WARNING [281472476891552] (messenger-libusb.cpp:42) control_transfer returned error, index: 768, error: Resource temporarily unavailable, number: 11
+[recoveries_server-6] [INFO] [1787572638.903838680] [recoveries_server]: spin running...
+[recoveries_server-6] [INFO] [1787572639.903807704] [recoveries_server]: spin running...
+[recoveries_server-6] [INFO] [1787572639.904737400] [recoveries_server]: spin completed successfully
+[recoveries_server-6] [INFO] [1787572639.936346200] [recoveries_server]: Attempting wait
+[recoveries_server-6] [INFO] [1787572640.939314424] [recoveries_server]: wait running...
+[recoveries_server-6] [INFO] [1787572641.939360280] [recoveries_server]: wait running...
+[recoveries_server-6] [INFO] [1787572642.939403736] [recoveries_server]: wait running...
+[recoveries_server-6] [INFO] [1787572643.939343512] [recoveries_server]: wait running...
+[recoveries_server-6] [INFO] [1787572644.939368376] [recoveries_server]: wait running...
+[recoveries_server-6] [INFO] [1787572644.940316280] [recoveries_server]: wait completed successfully
+[controller_server-4] [INFO] [1787572644.996301080] [controller_server]: Received a goal, begin computing control effort.
+[controller_server-4] [INFO] [1787572644.999315928] [controller_server]: Passing new path to controller.
+[realsense2_camera_node-3]  24/08 19:57:25,958 WARNING [281472476891552] (messenger-libusb.cpp:42) control_transfer returned error, index: 768, error: Resource temporarily unavailable, number: 11
+[controller_server-4] [INFO] [1787572646.199462616] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1787572647.199695768] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1787572648.199466680] [controller_server]: Passing new path to controller.
+[planner_server-5] [WARN] [1787572649.148435128] [planner_server]: GridBased: failed to create plan with tolerance 0.15.
+[planner_server-5] [WARN] [1787572649.148738136] [planner_server]: Planning algorithm GridBased failed to generate a valid path to (3.36, 0.21)
+[planner_server-5] [WARN] [1787572649.148841400] [planner_server_rclcpp_node]: [compute_path_to_pose] [ActionServer] Aborting handle.
+[planner_server-5] [INFO] [1787572649.164375544] [global_costmap.global_costmap]: Received request to clear entirely the global_costmap
+[controller_server-4] [INFO] [1787572649.199474264] [controller_server]: Passing new path to controller.
+[planner_server-5] [WARN] [1787572650.225822808] [planner_server]: GridBased: failed to create plan with tolerance 0.15.
+[planner_server-5] [WARN] [1787572650.226234552] [planner_server]: Planning algorithm GridBased failed to generate a valid path to (3.36, 0.21)
+[planner_server-5] [WARN] [1787572650.226382296] [planner_server_rclcpp_node]: [compute_path_to_pose] [ActionServer] Aborting handle.
+[planner_server-5] [INFO] [1787572650.244435960] [global_costmap.global_costmap]: Received request to clear entirely the global_costmap
+[controller_server-4] [INFO] [1787572650.399482680] [controller_server]: Passing new path to controller.
+[planner_server-5] [WARN] [1787572651.289151064] [planner_server]: GridBased: failed to create plan with tolerance 0.15.
+[planner_server-5] [WARN] [1787572651.289459576] [planner_server]: Planning algorithm GridBased failed to generate a valid path to (3.36, 0.21)
+[planner_server-5] [WARN] [1787572651.289601560] [planner_server_rclcpp_node]: [compute_path_to_pose] [ActionServer] Aborting handle.
+[planner_server-5] [INFO] [1787572651.305658392] [global_costmap.global_costmap]: Received request to clear entirely the global_costmap
+[controller_server-4] [INFO] [1787572651.399467384] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1787572652.399566616] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1787572653.599437688] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1787572654.599621688] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1787572655.458742744] [controller_server]: Reached the goal!
+[bt_navigator-7] [INFO] [1787572655.475815384] [bt_navigator]: Navigation succeeded
+[realsense2_camera_node-3]  24/08 19:57:52,044 WARNING [281472476891552] (messenger-libusb.cpp:42) control_transfer returned error, index: 768, error: Resource temporarily unavailable, number: 11
+[realsense2_camera_node-3]  24/08 19:58:30,142 WARNING [281472476891552] (messenger-libusb.cpp:42) control_transfer returned error, index: 768, error: Resource temporarily unavailable, number: 11
+[ERROR] [lifecycle_manager-9]: process has died [pid 14521, exit code -9, cmd '/opt/ros/foxy/lib/nav2_lifecycle_manager/lifecycle_manager --ros-args -r __node:=lifecycle_manager_navigation --params-file /tmp/launch_params_j6ocxp27 --params-file /tmp/launch_params_1upvx_u3 --params-file /tmp/launch_params_5aqxvuth'].
+[ERROR] [static_transform_publisher-1]: process has died [pid 14495, exit code -9, cmd '/opt/ros/foxy/lib/tf2_ros/static_transform_publisher 0.25 0.0 0.12 0 0 0 base_link camera_link --ros-args -r __node:=base2camera_tf_broadcaster'].
+[ERROR] [odom_to_tf.py-2]: process has died [pid 14497, exit code -9, cmd '/home/ysc/lite_cog_ros2/nav/install/dr_nav2_mapless/lib/dr_nav2_mapless/odom_to_tf.py --ros-args -r __node:=odom_to_tf'].
+[ERROR] [bt_navigator-7]: process has died [pid 14508, exit code -9, cmd '/opt/ros/foxy/lib/nav2_bt_navigator/bt_navigator --ros-args -r __node:=bt_navigator --params-file /tmp/tmpraedkmrf -r /tf:=tf -r /tf_static:=tf_static'].
+[ERROR] [waypoint_follower-8]: process has died [pid 14519, exit code -9, cmd '/opt/ros/foxy/lib/nav2_waypoint_follower/waypoint_follower --ros-args -r __node:=waypoint_follower --params-file /tmp/tmp0now2ne4 -r /tf:=tf -r /tf_static:=tf_static'].
+[ERROR] [recoveries_server-6]: process has died [pid 14505, exit code -9, cmd '/opt/ros/foxy/lib/nav2_recoveries/recoveries_server --ros-args -r __node:=recoveries_server --params-file /tmp/tmp1j43n7y0 -r /tf:=tf -r /tf_static:=tf_static'].
+[ERROR] [planner_server-5]: process has died [pid 14503, exit code -9, cmd '/opt/ros/foxy/lib/nav2_planner/planner_server --ros-args -r __node:=planner_server --params-file /tmp/tmp_8td5s87 -r /tf:=tf -r /tf_static:=tf_static'].
+[ERROR] [controller_server-4]: process has died [pid 14501, exit code -9, cmd '/opt/ros/foxy/lib/nav2_controller/controller_server --ros-args --params-file /tmp/tmpddile7uy -r /tf:=tf -r /tf_static:=tf_static'].
+[ERROR] [realsense2_camera_node-3]: process has died [pid 14499, exit code -9, cmd '/home/ysc/lite_cog_ros2/driver/realsense_ws/install/realsense2_camera/lib/realsense2_camera/realsense2_camera_node --ros-args --log-level info --ros-args -r __node:=camera -r __ns:=/camera --params-file /tmp/launch_params_0pxf8vq8'].

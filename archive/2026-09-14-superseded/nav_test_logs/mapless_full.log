@@ -1,0 +1,586 @@
+[INFO] [launch]: All log files can be found below /home/ysc/.ros/log/2026-08-24-18-59-14-283374-lite-7526
+[INFO] [launch]: Default logging verbosity is set to INFO
+[INFO] [realsense2_camera_node-3]: process started with pid [7532]
+[INFO] [static_transform_publisher-1]: process started with pid [7528]
+[INFO] [odom_to_tf.py-2]: process started with pid [7530]
+[INFO] [controller_server-4]: process started with pid [7534]
+[INFO] [planner_server-5]: process started with pid [7536]
+[INFO] [recoveries_server-6]: process started with pid [7540]
+[INFO] [bt_navigator-7]: process started with pid [7550]
+[INFO] [waypoint_follower-8]: process started with pid [7553]
+[INFO] [lifecycle_manager-9]: process started with pid [7555]
+[static_transform_publisher-1] 1787569157.012451 [0] static_tra: using network interface eth0 (udp/192.168.1.103) selected arbitrarily from: eth0, docker0
+[static_transform_publisher-1] [INFO] [1787569157.094510456] [base2camera_tf_broadcaster]: Spinning until killed publishing transform from 'base_link' to 'camera_link'
+[lifecycle_manager-9] 1787569157.146480 [0] lifecycle_: using network interface eth0 (udp/192.168.1.103) selected arbitrarily from: eth0, docker0
+[waypoint_follower-8] 1787569157.148745 [0] waypoint_f: using network interface eth0 (udp/192.168.1.103) selected arbitrarily from: eth0, docker0
+[lifecycle_manager-9] [INFO] [1787569157.168171608] [lifecycle_manager_navigation]: Creating
+[planner_server-5] 1787569157.168736 [0] planner_se: using network interface eth0 (udp/192.168.1.103) selected arbitrarily from: eth0, docker0
+[bt_navigator-7] 1787569157.224917 [0] bt_navigat: using network interface eth0 (udp/192.168.1.103) selected arbitrarily from: eth0, docker0
+[controller_server-4] 1787569157.341037 [0] controller: using network interface eth0 (udp/192.168.1.103) selected arbitrarily from: eth0, docker0
+[bt_navigator-7] [INFO] [1787569157.351435128] [bt_navigator]: 
+[bt_navigator-7] 	bt_navigator lifecycle node launched. 
+[bt_navigator-7] 	Waiting on external lifecycle transitions to activate
+[bt_navigator-7] 	See https://design.ros2.org/articles/node_lifecycle.html for more information.
+[bt_navigator-7] [INFO] [1787569157.351813400] [bt_navigator]: Creating
+[waypoint_follower-8] [INFO] [1787569157.369491896] [waypoint_follower]: 
+[waypoint_follower-8] 	waypoint_follower lifecycle node launched. 
+[waypoint_follower-8] 	Waiting on external lifecycle transitions to activate
+[waypoint_follower-8] 	See https://design.ros2.org/articles/node_lifecycle.html for more information.
+[waypoint_follower-8] [INFO] [1787569157.379417176] [waypoint_follower]: Creating
+[planner_server-5] [INFO] [1787569157.413577240] [planner_server]: 
+[planner_server-5] 	planner_server lifecycle node launched. 
+[planner_server-5] 	Waiting on external lifecycle transitions to activate
+[planner_server-5] 	See https://design.ros2.org/articles/node_lifecycle.html for more information.
+[lifecycle_manager-9] [INFO] [1787569157.469225944] [lifecycle_manager_navigation]: [34m[1mCreating and initializing lifecycle service clients[0m[0m
+[lifecycle_manager-9] [INFO] [1787569157.509593240] [lifecycle_manager_navigation]: [34m[1mStarting managed nodes bringup...[0m[0m
+[lifecycle_manager-9] [INFO] [1787569157.510541688] [lifecycle_manager_navigation]: [34m[1mConfiguring controller_server[0m[0m
+[controller_server-4] [INFO] [1787569157.522261464] [controller_server]: 
+[controller_server-4] 	controller_server lifecycle node launched. 
+[controller_server-4] 	Waiting on external lifecycle transitions to activate
+[controller_server-4] 	See https://design.ros2.org/articles/node_lifecycle.html for more information.
+[realsense2_camera_node-3] 1787569157.532258 [0] realsense2: using network interface eth0 (udp/192.168.1.103) selected arbitrarily from: eth0, docker0
+[recoveries_server-6] 1787569157.576709 [0] recoveries: using network interface eth0 (udp/192.168.1.103) selected arbitrarily from: eth0, docker0
+[planner_server-5] [INFO] [1787569157.585505880] [planner_server]: Creating
+[planner_server-5] [INFO] [1787569157.642275352] [global_costmap.global_costmap]: 
+[planner_server-5] 	global_costmap lifecycle node launched. 
+[planner_server-5] 	Waiting on external lifecycle transitions to activate
+[planner_server-5] 	See https://design.ros2.org/articles/node_lifecycle.html for more information.
+[controller_server-4] [INFO] [1787569157.675572344] [controller_server]: Creating controller server
+[realsense2_camera_node-3] [0m[INFO] [1787569157.691008888] [camera.camera]: RealSense ROS v3.2.3[0m
+[realsense2_camera_node-3] [0m[INFO] [1787569157.691341496] [camera.camera]: Built with LibRealSense v2.50.0[0m
+[realsense2_camera_node-3] [0m[INFO] [1787569157.691454648] [camera.camera]: Running with LibRealSense v2.50.0[0m
+[planner_server-5] [INFO] [1787569157.804711288] [global_costmap.global_costmap]: Creating Costmap
+[controller_server-4] [INFO] [1787569157.947804888] [local_costmap.local_costmap]: 
+[controller_server-4] 	local_costmap lifecycle node launched. 
+[controller_server-4] 	Waiting on external lifecycle transitions to activate
+[controller_server-4] 	See https://design.ros2.org/articles/node_lifecycle.html for more information.
+[controller_server-4] [INFO] [1787569157.966077272] [local_costmap.local_costmap]: Creating Costmap
+[realsense2_camera_node-3]  24/08 18:59:18,000 WARNING [281472887937440] (messenger-libusb.cpp:42) control_transfer returned error, index: 300, error: Resource temporarily unavailable, number: b
+[controller_server-4] [INFO] [1787569158.021006040] [controller_server]: Configuring controller interface
+[controller_server-4] [INFO] [1787569158.022743928] [controller_server]: Controller frequency set to 5.0000Hz
+[controller_server-4] [INFO] [1787569158.022881816] [local_costmap.local_costmap]: Configuring
+[controller_server-4] [INFO] [1787569158.037447960] [local_costmap.local_costmap]: Using plugin "stvl_obstacle_layer"
+[recoveries_server-6] [INFO] [1787569158.183290488] [recoveries_server]: 
+[recoveries_server-6] 	recoveries_server lifecycle node launched. 
+[recoveries_server-6] 	Waiting on external lifecycle transitions to activate
+[recoveries_server-6] 	See https://design.ros2.org/articles/node_lifecycle.html for more information.
+[realsense2_camera_node-3] [0m[INFO] [1787569158.368343320] [camera.camera]: Device with serial number 344322074523 was found.
+[realsense2_camera_node-3] [0m
+[realsense2_camera_node-3] [0m[INFO] [1787569158.368781688] [camera.camera]: Device with physical ID 4-3.1-5 was found.[0m
+[realsense2_camera_node-3] [0m[INFO] [1787569158.368926456] [camera.camera]: Device with name Intel RealSense D435I was found.[0m
+[realsense2_camera_node-3] [0m[INFO] [1787569158.371256376] [camera.camera]: Device with port number 4-3.1 was found.[0m
+[realsense2_camera_node-3] [0m[INFO] [1787569158.371439352] [camera.camera]: Device USB type: 3.2[0m
+[realsense2_camera_node-3] [0m[INFO] [1787569158.383510648] [camera.camera]: getParameters...[0m
+[realsense2_camera_node-3] filter_voxel: 1 filter_leaf_size_m: 0.05
+[realsense2_camera_node-3] [0m[INFO] [1787569158.550049784] [camera.camera]: setupDevice...[0m
+[realsense2_camera_node-3] [0m[INFO] [1787569158.550267224] [camera.camera]: JSON file is not provided[0m
+[realsense2_camera_node-3] [0m[INFO] [1787569158.550387352] [camera.camera]: Device Name: Intel RealSense D435I[0m
+[realsense2_camera_node-3] [0m[INFO] [1787569158.550476664] [camera.camera]: Device physical port: 4-3.1-5[0m
+[realsense2_camera_node-3] [0m[INFO] [1787569158.550556664] [camera.camera]: Device FW version: 05.13.00.50[0m
+[realsense2_camera_node-3] [0m[INFO] [1787569158.550691160] [camera.camera]: Device Product ID: 0x0B3A[0m
+[realsense2_camera_node-3] [0m[INFO] [1787569158.550776120] [camera.camera]: Enable PointCloud: On[0m
+[realsense2_camera_node-3] [0m[INFO] [1787569158.550858104] [camera.camera]: Align Depth: Off[0m
+[realsense2_camera_node-3] [0m[INFO] [1787569158.550933240] [camera.camera]: Sync Mode: On[0m
+[realsense2_camera_node-3] [0m[INFO] [1787569158.551160376] [camera.camera]: Device Sensors: [0m
+[controller_server-4] [INFO] [1787569158.591231192] [local_costmap.local_costmap]: stvl_obstacle_layer being initialized as SpatioTemporalVoxelLayer!
+[controller_server-4] [INFO] [1787569158.591411608] [local_costmap.local_costmap]: stvl_obstacle_layer's global frame is odom.
+[controller_server-4] [INFO] [1787569158.600073656] [local_costmap.local_costmap]: stvl_obstacle_layer loaded parameters from parameter server.
+[realsense2_camera_node-3] [0m[INFO] [1787569158.696856280] [camera.camera]: Stereo Module was found.[0m
+[controller_server-4] [INFO] [1787569158.757361304] [local_costmap.local_costmap]: stvl_obstacle_layer created underlying voxel grid.
+[controller_server-4] [INFO] [1787569158.773651192] [local_costmap.local_costmap]: Voxel filter activated.
+[controller_server-4] [INFO] [1787569158.777643896] [local_costmap.local_costmap]: stvl_obstacle_layer initialization complete!
+[controller_server-4] [INFO] [1787569158.777849368] [local_costmap.local_costmap]: Initialized plugin "stvl_obstacle_layer"
+[controller_server-4] [INFO] [1787569158.778181080] [local_costmap.local_costmap]: Using plugin "inflation_layer"
+[controller_server-4] [INFO] [1787569158.780695576] [local_costmap.local_costmap]: Initialized plugin "inflation_layer"
+[realsense2_camera_node-3] [0m[INFO] [1787569158.825685368] [camera.camera]: RGB Camera was found.[0m
+[realsense2_camera_node-3] [0m[INFO] [1787569158.826576600] [camera.camera]: Motion Module was found.[0m
+[realsense2_camera_node-3] [0m[INFO] [1787569158.826869080] [camera.camera]: (Infrared, 0) sensor isn't supported by current device! -- Skipping...[0m
+[realsense2_camera_node-3] [0m[INFO] [1787569158.827014328] [camera.camera]: (Fisheye, 0) sensor isn't supported by current device! -- Skipping...[0m
+[realsense2_camera_node-3] [0m[INFO] [1787569158.827124600] [camera.camera]: (Pose, 0) sensor isn't supported by current device! -- Skipping...[0m
+[realsense2_camera_node-3] [0m[INFO] [1787569158.827219736] [camera.camera]: Add Filter: pointcloud[0m
+[realsense2_camera_node-3] [0m[INFO] [1787569158.829725336] [camera.camera]: num_filters: 1[0m
+[realsense2_camera_node-3] [0m[INFO] [1787569158.829896280] [camera.camera]: Setting Dynamic reconfig parameters.[0m
+[controller_server-4] [INFO] [1787569159.106628696] [controller_server]: Created progress_checker : progress_checker of type nav2_controller::SimpleProgressChecker
+[controller_server-4] [INFO] [1787569159.115062552] [controller_server]: Created goal_checker : goal_checker of type nav2_controller::SimpleGoalChecker
+[controller_server-4] [INFO] [1787569159.161468376] [controller_server]: Created controller : FollowPath of type dwb_core::DWBLocalPlanner
+[controller_server-4] [INFO] [1787569159.168062904] [controller_server]: Setting transform_tolerance to 0.200000
+[controller_server-4] [INFO] [1787569159.587232504] [controller_server]: Using critic "PreferForward" (dwb_critics::PreferForwardCritic)
+[controller_server-4] [INFO] [1787569159.607658776] [controller_server]: Critic plugin initialized
+[controller_server-4] [INFO] [1787569159.614255320] [controller_server]: Using critic "GoalDist" (dwb_critics::GoalDistCritic)
+[controller_server-4] [INFO] [1787569159.615840696] [controller_server]: Critic plugin initialized
+[controller_server-4] [INFO] [1787569159.616499000] [controller_server]: Using critic "PathDist" (dwb_critics::PathDistCritic)
+[controller_server-4] [INFO] [1787569159.617667800] [controller_server]: Critic plugin initialized
+[controller_server-4] [INFO] [1787569159.620879224] [controller_server]: Using critic "RotateToGoal" (dwb_critics::RotateToGoalCritic)
+[controller_server-4] [INFO] [1787569159.624855768] [controller_server]: Critic plugin initialized
+[controller_server-4] [INFO] [1787569159.625469976] [controller_server]: Using critic "BaseObstacle" (dwb_critics::BaseObstacleCritic)
+[controller_server-4] [INFO] [1787569159.628056408] [controller_server]: Critic plugin initialized
+[controller_server-4] [INFO] [1787569159.628233400] [controller_server]: Controller Server has FollowPath  controllers available.
+[lifecycle_manager-9] [INFO] [1787569159.785962200] [lifecycle_manager_navigation]: [34m[1mConfiguring planner_server[0m[0m
+[planner_server-5] [INFO] [1787569159.787315672] [planner_server]: Configuring
+[planner_server-5] [INFO] [1787569159.787476920] [global_costmap.global_costmap]: Configuring
+[odom_to_tf.py-2] 1787569159.799636 [0]    python3: using network interface eth0 (udp/192.168.1.103) selected arbitrarily from: eth0, docker0
+[planner_server-5] [INFO] [1787569159.857127288] [global_costmap.global_costmap]: Using plugin "stvl_obstacle_layer"
+[planner_server-5] [INFO] [1787569160.069916952] [global_costmap.global_costmap]: stvl_obstacle_layer being initialized as SpatioTemporalVoxelLayer!
+[planner_server-5] [INFO] [1787569160.070178328] [global_costmap.global_costmap]: stvl_obstacle_layer's global frame is odom.
+[planner_server-5] [INFO] [1787569160.081387544] [global_costmap.global_costmap]: stvl_obstacle_layer loaded parameters from parameter server.
+[planner_server-5] [INFO] [1787569160.090990072] [global_costmap.global_costmap]: stvl_obstacle_layer created underlying voxel grid.
+[planner_server-5] [INFO] [1787569160.106220408] [global_costmap.global_costmap]: Voxel filter activated.
+[planner_server-5] [INFO] [1787569160.114357752] [global_costmap.global_costmap]: stvl_obstacle_layer initialization complete!
+[planner_server-5] [INFO] [1787569160.114568856] [global_costmap.global_costmap]: Initialized plugin "stvl_obstacle_layer"
+[planner_server-5] [INFO] [1787569160.114647256] [global_costmap.global_costmap]: Using plugin "inflation_layer"
+[planner_server-5] [INFO] [1787569160.118172120] [global_costmap.global_costmap]: Initialized plugin "inflation_layer"
+[planner_server-5] [INFO] [1787569160.210406424] [planner_server]: Created global planner plugin GridBased of type nav2_navfn_planner/NavfnPlanner
+[planner_server-5] [INFO] [1787569160.214328632] [planner_server]: Configuring plugin GridBased of type NavfnPlanner
+[planner_server-5] [INFO] [1787569160.251858968] [planner_server]: Planner Server has GridBased  planners available.
+[lifecycle_manager-9] [INFO] [1787569160.289573336] [lifecycle_manager_navigation]: [34m[1mConfiguring recoveries_server[0m[0m
+[recoveries_server-6] [INFO] [1787569160.298773976] [recoveries_server]: Configuring
+[recoveries_server-6] [INFO] [1787569160.333101496] [recoveries_server]: Creating recovery plugin spin of type nav2_recoveries/Spin
+[recoveries_server-6] [INFO] [1787569160.498126136] [recoveries_server]: Configuring spin
+[recoveries_server-6] [INFO] [1787569160.554820056] [recoveries_server]: Creating recovery plugin backup of type nav2_recoveries/BackUp
+[recoveries_server-6] [INFO] [1787569160.712834648] [recoveries_server]: Configuring backup
+[recoveries_server-6] [INFO] [1787569160.732142232] [recoveries_server]: Creating recovery plugin wait of type nav2_recoveries/Wait
+[recoveries_server-6] [INFO] [1787569160.888973592] [recoveries_server]: Configuring wait
+[lifecycle_manager-9] [INFO] [1787569160.905342744] [lifecycle_manager_navigation]: [34m[1mConfiguring bt_navigator[0m[0m
+[bt_navigator-7] [INFO] [1787569160.907286616] [bt_navigator]: Configuring
+[bt_navigator-7] [INFO] [1787569161.413885816] [bt_navigator_rclcpp_node]: Waiting for "compute_path_to_pose" action server
+[bt_navigator-7] [INFO] [1787569161.417602520] [bt_navigator_rclcpp_node]: "ComputePathToPose" BtActionNode initialized
+[bt_navigator-7] [INFO] [1787569161.425524472] [bt_navigator_rclcpp_node]: Waiting for "global_costmap/clear_entirely_global_costmap" service
+[bt_navigator-7] [INFO] [1787569161.427377752] [bt_navigator_rclcpp_node]: "ClearGlobalCostmap-Context" BtServiceNode initialized
+[bt_navigator-7] [INFO] [1787569161.459651064] [bt_navigator_rclcpp_node]: Waiting for "follow_path" action server
+[bt_navigator-7] [INFO] [1787569161.462607480] [bt_navigator_rclcpp_node]: "FollowPath" BtActionNode initialized
+[bt_navigator-7] [INFO] [1787569161.470805112] [bt_navigator_rclcpp_node]: Waiting for "local_costmap/clear_entirely_local_costmap" service
+[bt_navigator-7] [INFO] [1787569161.471872088] [bt_navigator_rclcpp_node]: "ClearLocalCostmap-Context" BtServiceNode initialized
+[bt_navigator-7] [INFO] [1787569161.490775256] [bt_navigator_rclcpp_node]: Waiting for "local_costmap/clear_entirely_local_costmap" service
+[bt_navigator-7] [INFO] [1787569161.491247288] [bt_navigator_rclcpp_node]: "ClearLocalCostmap-Subtree" BtServiceNode initialized
+[bt_navigator-7] [INFO] [1787569161.492750840] [bt_navigator_rclcpp_node]: Waiting for "global_costmap/clear_entirely_global_costmap" service
+[bt_navigator-7] [INFO] [1787569161.493141624] [bt_navigator_rclcpp_node]: "ClearGlobalCostmap-Subtree" BtServiceNode initialized
+[bt_navigator-7] [INFO] [1787569161.514780024] [bt_navigator_rclcpp_node]: Waiting for "spin" action server
+[bt_navigator-7] [INFO] [1787569161.515532568] [bt_navigator_rclcpp_node]: "Spin" BtActionNode initialized
+[bt_navigator-7] [INFO] [1787569161.545857048] [bt_navigator_rclcpp_node]: Waiting for "wait" action server
+[bt_navigator-7] [INFO] [1787569161.549828632] [bt_navigator_rclcpp_node]: "Wait" BtActionNode initialized
+[lifecycle_manager-9] [INFO] [1787569161.708779064] [lifecycle_manager_navigation]: [34m[1mConfiguring waypoint_follower[0m[0m
+[waypoint_follower-8] [INFO] [1787569161.711723736] [waypoint_follower]: Configuring
+[lifecycle_manager-9] [INFO] [1787569161.914402488] [lifecycle_manager_navigation]: [34m[1mActivating controller_server[0m[0m
+[controller_server-4] [INFO] [1787569161.918992952] [controller_server]: Activating
+[controller_server-4] [INFO] [1787569161.919164280] [local_costmap.local_costmap]: Activating
+[controller_server-4] [INFO] [1787569161.919251608] [local_costmap.local_costmap]: Checking transform
+[controller_server-4] [INFO] [1787569161.921626424] [local_costmap.local_costmap]: start
+[controller_server-4] [INFO] [1787569161.921806680] [local_costmap.local_costmap]: stvl_obstacle_layer was activated.
+[lifecycle_manager-9] [INFO] [1787569161.930142552] [lifecycle_manager_navigation]: [34m[1mActivating planner_server[0m[0m
+[planner_server-5] [INFO] [1787569161.931285816] [planner_server]: Activating
+[planner_server-5] [INFO] [1787569161.931440632] [global_costmap.global_costmap]: Activating
+[planner_server-5] [INFO] [1787569161.931517528] [global_costmap.global_costmap]: Checking transform
+[planner_server-5] [INFO] [1787569161.931951800] [global_costmap.global_costmap]: start
+[planner_server-5] [INFO] [1787569161.932078264] [global_costmap.global_costmap]: stvl_obstacle_layer was activated.
+[planner_server-5] [INFO] [1787569161.984902968] [planner_server]: Activating plugin GridBased of type NavfnPlanner
+[lifecycle_manager-9] [INFO] [1787569161.997510040] [lifecycle_manager_navigation]: [34m[1mActivating recoveries_server[0m[0m
+[recoveries_server-6] [INFO] [1787569161.998704568] [recoveries_server]: Activating
+[recoveries_server-6] [INFO] [1787569161.998903512] [recoveries_server]: Activating spin
+[recoveries_server-6] [INFO] [1787569161.998986200] [recoveries_server]: Activating backup
+[recoveries_server-6] [INFO] [1787569161.999097880] [recoveries_server]: Activating wait
+[lifecycle_manager-9] [INFO] [1787569162.003943576] [lifecycle_manager_navigation]: [34m[1mActivating bt_navigator[0m[0m
+[bt_navigator-7] [INFO] [1787569162.006563352] [bt_navigator]: Activating
+[lifecycle_manager-9] [INFO] [1787569162.012701464] [lifecycle_manager_navigation]: [34m[1mActivating waypoint_follower[0m[0m
+[waypoint_follower-8] [INFO] [1787569162.017417912] [waypoint_follower]: Activating
+[lifecycle_manager-9] [INFO] [1787569162.021705336] [lifecycle_manager_navigation]: [34m[1mManaged nodes are active[0m[0m
+[realsense2_camera_node-3] [0m[INFO] [1787569165.263215352] [camera.camera]: Done Setting Dynamic reconfig parameters.[0m
+[realsense2_camera_node-3] [0m[INFO] [1787569165.265337016] [camera.camera]: depth stream is enabled - width: 424, height: 240, fps: 30, Format: Z16[0m
+[realsense2_camera_node-3] [0m[INFO] [1787569165.265513688] [camera.camera]: setupPublishers...[0m
+[realsense2_camera_node-3] [0m[INFO] [1787569165.282540152] [camera.camera]: setupStreams...[0m
+[realsense2_camera_node-3] [0m[INFO] [1787569165.590278872] [camera.camera]: SELECTED BASE:Depth, 0[0m
+[realsense2_camera_node-3] [0m[INFO] [1787569165.597762520] [camera.camera]: Device Serial No: 344322074523[0m
+[realsense2_camera_node-3] [0m[INFO] [1787569165.597957496] [camera.camera]: RealSense Node Is Up![0m
+[realsense2_camera_node-3] [33m[WARN] [1787569165.729220696] [camera.camera]: [0m
+[realsense2_camera_node-3]  24/08 18:59:25,732 WARNING [281472887937440] (messenger-libusb.cpp:42) control_transfer returned error, index: 768, error: Resource temporarily unavailable, number: 11
+[realsense2_camera_node-3]  24/08 18:59:25,788 WARNING [281472887937440] (messenger-libusb.cpp:42) control_transfer returned error, index: 768, error: Resource temporarily unavailable, number: 11
+[realsense2_camera_node-3]  24/08 18:59:25,948 WARNING [281472887937440] (messenger-libusb.cpp:42) control_transfer returned error, index: 768, error: Resource temporarily unavailable, number: 11
+[realsense2_camera_node-3] [0m[INFO] [1787569166.062548536] [camera.camera]: publishing unordered pointcloud.[0m
+[realsense2_camera_node-3] [33m[WARN] [1787569166.268010936] [camera.camera]: Hardware Notification:Depth stream start failure,1.78757e+12,Error,Hardware Error[0m
+[realsense2_camera_node-3]  24/08 18:59:40,184 WARNING [281472887937440] (messenger-libusb.cpp:42) control_transfer returned error, index: 768, error: Resource temporarily unavailable, number: 11
+[realsense2_camera_node-3]  24/08 19:00:01,268 WARNING [281472887937440] (messenger-libusb.cpp:42) control_transfer returned error, index: 768, error: Resource temporarily unavailable, number: 11
+[realsense2_camera_node-3]  24/08 19:00:23,360 WARNING [281472887937440] (messenger-libusb.cpp:42) control_transfer returned error, index: 768, error: Resource temporarily unavailable, number: 11
+[realsense2_camera_node-3]  24/08 19:00:24,412 WARNING [281472887937440] (messenger-libusb.cpp:42) control_transfer returned error, index: 768, error: Resource temporarily unavailable, number: 11
+[realsense2_camera_node-3]  24/08 19:00:31,472 WARNING [281472887937440] (messenger-libusb.cpp:42) control_transfer returned error, index: 768, error: Resource temporarily unavailable, number: 11
+[realsense2_camera_node-3]  24/08 19:00:38,533 WARNING [281472887937440] (messenger-libusb.cpp:42) control_transfer returned error, index: 768, error: Resource temporarily unavailable, number: 11
+[realsense2_camera_node-3]  24/08 19:01:03,626 WARNING [281472887937440] (messenger-libusb.cpp:42) control_transfer returned error, index: 768, error: Resource temporarily unavailable, number: 11
+[realsense2_camera_node-3]  24/08 19:01:33,723 WARNING [281472887937440] (messenger-libusb.cpp:42) control_transfer returned error, index: 768, error: Resource temporarily unavailable, number: 11
+[realsense2_camera_node-3]  24/08 19:01:58,808 WARNING [281472887937440] (messenger-libusb.cpp:42) control_transfer returned error, index: 768, error: Resource temporarily unavailable, number: 11
+[realsense2_camera_node-3]  24/08 19:02:05,867 WARNING [281472887937440] (messenger-libusb.cpp:42) control_transfer returned error, index: 768, error: Resource temporarily unavailable, number: 11
+[realsense2_camera_node-3]  24/08 19:02:14,933 WARNING [281472887937440] (messenger-libusb.cpp:42) control_transfer returned error, index: 768, error: Resource temporarily unavailable, number: 11
+[bt_navigator-7] [INFO] [1787569358.773037912] [bt_navigator]: Begin navigating from current location to (1.28, 0.10)
+[controller_server-4] [INFO] [1787569358.854087672] [controller_server]: Received a goal, begin computing control effort.
+[controller_server-4] [INFO] [1787569360.055471704] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1787569361.055502200] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1787569362.055486264] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1787569363.055524312] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1787569364.255492792] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1787569365.255511480] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1787569366.255537016] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1787569367.255667960] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1787569368.256541720] [controller_server]: Passing new path to controller.
+[controller_server-4] [ERROR] [1787569369.055850168] [controller_server]: Failed to make progress
+[controller_server-4] [WARN] [1787569369.056348344] [controller_server_rclcpp_node]: [follow_path] [ActionServer] Aborting handle.
+[controller_server-4] [INFO] [1787569369.079837624] [local_costmap.local_costmap]: Received request to clear entirely the local_costmap
+[controller_server-4] [INFO] [1787569369.098148952] [controller_server]: Received a goal, begin computing control effort.
+[controller_server-4] [INFO] [1787569369.498916312] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1787569370.499699256] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1787569371.498933816] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1787569372.498904120] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1787569373.698899448] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1787569374.699067576] [controller_server]: Passing new path to controller.
+[controller_server-4] [WARN] [1787569375.504559608] [controller_server]: Control loop missed its desired rate of 5.0000Hz
+[controller_server-4] [INFO] [1787569375.698887480] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1787569376.699029912] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1787569377.898960568] [controller_server]: Passing new path to controller.
+[controller_server-4] [INFO] [1787569378.898889528] [controller_server]: Passing new path to controller.
+[controller_server-4] [ERROR] [1787569379.299032440] [controller_server]: Failed to make progress
+[controller_server-4] [WARN] [1787569379.299980088] [controller_server_rclcpp_node]: [follow_path] [ActionServer] Aborting handle.
+[controller_server-4] [INFO] [1787569379.312928024] [local_costmap.local_costmap]: Received request to clear entirely the local_costmap
+[planner_server-5] [INFO] [1787569379.316063832] [global_costmap.global_costmap]: Received request to clear entirely the global_costmap
+[recoveries_server-6] [INFO] [1787569379.324926296] [recoveries_server]: Attempting spin
+[recoveries_server-6] [INFO] [1787569379.325807864] [recoveries_server]: Turning 1.57 for spin recovery.
+[recoveries_server-6] [INFO] [1787569380.326416184] [recoveries_server]: spin running...
+[recoveries_server-6] [INFO] [1787569381.326199832] [recoveries_server]: spin running...
+[recoveries_server-6] [INFO] [1787569382.327242456] [recoveries_server]: spin running...
+[recoveries_server-6] [INFO] [1787569383.326329432] [recoveries_server]: spin running...
+[recoveries_server-6] [INFO] [1787569384.326242872] [recoveries_server]: spin running...
+[recoveries_server-6] [INFO] [1787569385.326545048] [recoveries_server]: spin running...
+[recoveries_server-6] [INFO] [1787569386.326250872] [recoveries_server]: spin running...
+[recoveries_server-6] [INFO] [1787569387.326233016] [recoveries_server]: spin running...
+[recoveries_server-6] [INFO] [1787569388.328485336] [recoveries_server]: spin running...
+[recoveries_server-6] [INFO] [1787569389.326220216] [recoveries_server]: spin running...
+[recoveries_server-6] [INFO] [1787569390.326357144] [recoveries_server]: spin running...
+[recoveries_server-6] [INFO] [1787569391.326318456] [recoveries_server]: spin running...
+[recoveries_server-6] [INFO] [1787569392.326278104] [recoveries_server]: spin running...
+[recoveries_server-6] [INFO] [1787569393.326324472] [recoveries_server]: spin running...
+[recoveries_server-6] [INFO] [1787569394.326303160] [recoveries_server]: spin running...
+[recoveries_server-6] [INFO] [1787569395.326330712] [recoveries_server]: spin running...
+[recoveries_server-6] [INFO] [1787569396.326142936] [recoveries_server]: spin running...
+[recoveries_server-6] [INFO] [1787569397.326305592] [recoveries_server]: spin running...
+[recoveries_server-6] [INFO] [1787569398.326402488] [recoveries_server]: spin running...
+[recoveries_server-6] [INFO] [1787569399.326234296] [recoveries_server]: spin running...
+[recoveries_server-6] [INFO] [1787569400.326226168] [recoveries_server]: spin running...
+[recoveries_server-6] [INFO] [1787569401.326225592] [recoveries_server]: spin running...
+[recoveries_server-6] [INFO] [1787569402.326256760] [recoveries_server]: spin running...
+[recoveries_server-6] [INFO] [1787569403.326229080] [recoveries_server]: spin running...
+[recoveries_server-6] [INFO] [1787569404.326247448] [recoveries_server]: spin running...
+[recoveries_server-6] [INFO] [1787569405.327877656] [recoveries_server]: spin running...
+[recoveries_server-6] [INFO] [1787569406.326263256] [recoveries_server]: spin running...
+[recoveries_server-6] [INFO] [1787569407.326152152] [recoveries_server]: spin running...
+[recoveries_server-6] [INFO] [1787569408.326247256] [recoveries_server]: spin running...
+[recoveries_server-6] [INFO] [1787569409.326244184] [recoveries_server]: spin running...
+[recoveries_server-6] [INFO] [1787569410.326352856] [recoveries_server]: spin running...
+[recoveries_server-6] [INFO] [1787569411.326268280] [recoveries_server]: spin running...
+[recoveries_server-6] [INFO] [1787569412.326216728] [recoveries_server]: spin running...
+[recoveries_server-6] [INFO] [1787569413.326280568] [recoveries_server]: spin running...
+[recoveries_server-6] [INFO] [1787569414.326234904] [recoveries_server]: spin running...
+[recoveries_server-6] [INFO] [1787569415.326759768] [recoveries_server]: spin running...
+[recoveries_server-6] [INFO] [1787569416.326460696] [recoveries_server]: spin running...
+[recoveries_server-6] [INFO] [1787569417.326308248] [recoveries_server]: spin running...
+[recoveries_server-6] [INFO] [1787569418.326284312] [recoveries_server]: spin running...
+[recoveries_server-6] [INFO] [1787569419.326261176] [recoveries_server]: spin running...
+[recoveries_server-6] [INFO] [1787569420.326243960] [recoveries_server]: spin running...
+[recoveries_server-6] [INFO] [1787569421.326150712] [recoveries_server]: spin running...
+[recoveries_server-6] [INFO] [1787569422.326218616] [recoveries_server]: spin running...
+[recoveries_server-6] [INFO] [1787569423.326225240] [recoveries_server]: spin running...
+[recoveries_server-6] [INFO] [1787569424.326402648] [recoveries_server]: spin running...
+[recoveries_server-6] [INFO] [1787569425.326308312] [recoveries_server]: spin running...
+[recoveries_server-6] [INFO] [1787569426.326283320] [recoveries_server]: spin running...
+[recoveries_server-6] [INFO] [1787569427.326639640] [recoveries_server]: spin running...
+[recoveries_server-6] [INFO] [1787569428.326302680] [recoveries_server]: spin running...
+[recoveries_server-6] [INFO] [1787569429.326211416] [recoveries_server]: spin running...
+[recoveries_server-6] [INFO] [1787569430.326372792] [recoveries_server]: spin running...
+[recoveries_server-6] [INFO] [1787569431.329186904] [recoveries_server]: spin running...
+[recoveries_server-6] [INFO] [1787569432.326325304] [recoveries_server]: spin running...
+[recoveries_server-6] [INFO] [1787569433.330372824] [recoveries_server]: spin running...
+[recoveries_server-6] [INFO] [1787569434.326287256] [recoveries_server]: spin running...
+[recoveries_server-6] [INFO] [1787569435.326232536] [recoveries_server]: spin running...
+[recoveries_server-6] [INFO] [1787569436.326272728] [recoveries_server]: spin running...
+[recoveries_server-6] [INFO] [1787569437.326435768] [recoveries_server]: spin running...
+[recoveries_server-6] [INFO] [1787569438.326192664] [recoveries_server]: spin running...
+[recoveries_server-6] [INFO] [1787569439.326290552] [recoveries_server]: spin running...
+[recoveries_server-6] [INFO] [1787569440.326254232] [recoveries_server]: spin running...
+[recoveries_server-6] [INFO] [1787569441.326214744] [recoveries_server]: spin running...
+[recoveries_server-6] [INFO] [1787569442.326306008] [recoveries_server]: spin running...
+[recoveries_server-6] [INFO] [1787569443.326217624] [recoveries_server]: spin running...
+[recoveries_server-6] [INFO] [1787569444.326236696] [recoveries_server]: spin running...
+[recoveries_server-6] [INFO] [1787569445.327140824] [recoveries_server]: spin running...
+[recoveries_server-6] [INFO] [1787569446.326771864] [recoveries_server]: spin running...
+[recoveries_server-6] [INFO] [1787569447.326281336] [recoveries_server]: spin running...
+[recoveries_server-6] [INFO] [1787569448.326160280] [recoveries_server]: spin running...
+[recoveries_server-6] [INFO] [1787569449.326123640] [recoveries_server]: spin running...
+[recoveries_server-6] [INFO] [1787569450.326280440] [recoveries_server]: spin running...
+[recoveries_server-6] [INFO] [1787569451.326248824] [recoveries_server]: spin running...
+[recoveries_server-6] [INFO] [1787569452.328336536] [recoveries_server]: spin running...
+[ERROR] [bt_navigator-7]: process has died [pid 7550, exit code -9, cmd '/opt/ros/foxy/lib/nav2_bt_navigator/bt_navigator --ros-args -r __node:=bt_navigator --params-file /tmp/tmpin7h3f99 -r /tf:=tf -r /tf_static:=tf_static'].
+[recoveries_server-6] [INFO] [1787569453.326248824] [recoveries_server]: spin running...
+[recoveries_server-6] [INFO] [1787569454.326238552] [recoveries_server]: spin running...
+[recoveries_server-6] [INFO] [1787569455.327002136] [recoveries_server]: spin running...
+[recoveries_server-6] [INFO] [1787569456.326257048] [recoveries_server]: spin running...
+[recoveries_server-6] [INFO] [1787569457.326314136] [recoveries_server]: spin running...
+[recoveries_server-6] [INFO] [1787569458.326214200] [recoveries_server]: spin running...
+[recoveries_server-6] [INFO] [1787569459.326688216] [recoveries_server]: spin running...
+[recoveries_server-6] [INFO] [1787569460.326423320] [recoveries_server]: spin running...
+[ERROR] [recoveries_server-6]: process has died [pid 7540, exit code -9, cmd '/opt/ros/foxy/lib/nav2_recoveries/recoveries_server --ros-args -r __node:=recoveries_server --params-file /tmp/tmpo74_nv92 -r /tf:=tf -r /tf_static:=tf_static'].
+[realsense2_camera_node-3]  24/08 19:04:41,284 WARNING [281472887937440] (messenger-libusb.cpp:42) control_transfer returned error, index: 768, error: Resource temporarily unavailable, number: 11
+[realsense2_camera_node-3]  24/08 19:04:58,356 WARNING [281472887937440] (messenger-libusb.cpp:42) control_transfer returned error, index: 768, error: Resource temporarily unavailable, number: 11
+[realsense2_camera_node-3]  24/08 19:05:04,414 WARNING [281472887937440] (messenger-libusb.cpp:42) control_transfer returned error, index: 768, error: Resource temporarily unavailable, number: 11
+[realsense2_camera_node-3]  24/08 19:05:06,467 WARNING [281472887937440] (messenger-libusb.cpp:42) control_transfer returned error, index: 768, error: Resource temporarily unavailable, number: 11
+[realsense2_camera_node-3]  24/08 19:06:00,584 WARNING [281472887937440] (messenger-libusb.cpp:42) control_transfer returned error, index: 768, error: Resource temporarily unavailable, number: 11
+[realsense2_camera_node-3]  24/08 19:06:01,636 WARNING [281472887937440] (messenger-libusb.cpp:42) control_transfer returned error, index: 768, error: Resource temporarily unavailable, number: 11
+[realsense2_camera_node-3]  24/08 19:06:43,747 WARNING [281472887937440] (messenger-libusb.cpp:42) control_transfer returned error, index: 768, error: Resource temporarily unavailable, number: 11
+[realsense2_camera_node-3]  24/08 19:07:17,842 WARNING [281472887937440] (messenger-libusb.cpp:42) control_transfer returned error, index: 768, error: Resource temporarily unavailable, number: 11
+[realsense2_camera_node-3]  24/08 19:07:35,915 WARNING [281472887937440] (messenger-libusb.cpp:42) control_transfer returned error, index: 768, error: Resource temporarily unavailable, number: 11
+[realsense2_camera_node-3]  24/08 19:07:50,982 WARNING [281472887937440] (messenger-libusb.cpp:42) control_transfer returned error, index: 768, error: Resource temporarily unavailable, number: 11
+[realsense2_camera_node-3]  24/08 19:07:55,037 WARNING [281472887937440] (messenger-libusb.cpp:42) control_transfer returned error, index: 768, error: Resource temporarily unavailable, number: 11
+[realsense2_camera_node-3]  24/08 19:08:05,101 WARNING [281472887937440] (messenger-libusb.cpp:42) control_transfer returned error, index: 768, error: Resource temporarily unavailable, number: 11
+[realsense2_camera_node-3]  24/08 19:08:08,154 WARNING [281472887937440] (messenger-libusb.cpp:42) control_transfer returned error, index: 768, error: Resource temporarily unavailable, number: 11
+[realsense2_camera_node-3]  24/08 19:08:09,206 WARNING [281472887937440] (messenger-libusb.cpp:42) control_transfer returned error, index: 768, error: Resource temporarily unavailable, number: 11
+[realsense2_camera_node-3]  24/08 19:10:11,423 WARNING [281472887937440] (messenger-libusb.cpp:42) control_transfer returned error, index: 768, error: Resource temporarily unavailable, number: 11
+[realsense2_camera_node-3]  24/08 19:10:15,480 WARNING [281472887937440] (messenger-libusb.cpp:42) control_transfer returned error, index: 768, error: Resource temporarily unavailable, number: 11
+[realsense2_camera_node-3]  24/08 19:10:15,531 WARNING [281472887937440] (messenger-libusb.cpp:42) control_transfer returned error, index: 768, error: Resource temporarily unavailable, number: 11
+[realsense2_camera_node-3]  24/08 19:10:50,627 WARNING [281472887937440] (messenger-libusb.cpp:42) control_transfer returned error, index: 768, error: Resource temporarily unavailable, number: 11
+[realsense2_camera_node-3]  24/08 19:11:29,729 WARNING [281472887937440] (messenger-libusb.cpp:42) control_transfer returned error, index: 768, error: Resource temporarily unavailable, number: 11
+[realsense2_camera_node-3]  24/08 19:11:34,785 WARNING [281472887937440] (messenger-libusb.cpp:42) control_transfer returned error, index: 768, error: Resource temporarily unavailable, number: 11
+[realsense2_camera_node-3]  24/08 19:12:13,883 WARNING [281472887937440] (messenger-libusb.cpp:42) control_transfer returned error, index: 768, error: Resource temporarily unavailable, number: 11
+[realsense2_camera_node-3]  24/08 19:12:43,971 WARNING [281472887937440] (messenger-libusb.cpp:42) control_transfer returned error, index: 768, error: Resource temporarily unavailable, number: 11
+[realsense2_camera_node-3]  24/08 19:13:26,074 WARNING [281472887937440] (messenger-libusb.cpp:42) control_transfer returned error, index: 768, error: Resource temporarily unavailable, number: 11
+[realsense2_camera_node-3]  24/08 19:15:28,271 WARNING [281472887937440] (messenger-libusb.cpp:42) control_transfer returned error, index: 768, error: Resource temporarily unavailable, number: 11
+[realsense2_camera_node-3]  24/08 19:15:54,353 WARNING [281472887937440] (messenger-libusb.cpp:42) control_transfer returned error, index: 768, error: Resource temporarily unavailable, number: 11
+[realsense2_camera_node-3]  24/08 19:16:09,422 WARNING [281472887937440] (messenger-libusb.cpp:42) control_transfer returned error, index: 768, error: Resource temporarily unavailable, number: 11
+[realsense2_camera_node-3]  24/08 19:16:12,476 WARNING [281472887937440] (messenger-libusb.cpp:42) control_transfer returned error, index: 768, error: Resource temporarily unavailable, number: 11
+[realsense2_camera_node-3]  24/08 19:16:32,555 WARNING [281472887937440] (messenger-libusb.cpp:42) control_transfer returned error, index: 768, error: Resource temporarily unavailable, number: 11
+[realsense2_camera_node-3]  24/08 19:16:42,617 WARNING [281472887937440] (messenger-libusb.cpp:42) control_transfer returned error, index: 768, error: Resource temporarily unavailable, number: 11
+[realsense2_camera_node-3]  24/08 19:16:51,678 WARNING [281472887937440] (messenger-libusb.cpp:42) control_transfer returned error, index: 768, error: Resource temporarily unavailable, number: 11
+[realsense2_camera_node-3]  24/08 19:17:00,740 WARNING [281472887937440] (messenger-libusb.cpp:42) control_transfer returned error, index: 768, error: Resource temporarily unavailable, number: 11
+[realsense2_camera_node-3]  24/08 19:17:05,796 WARNING [281472887937440] (messenger-libusb.cpp:42) control_transfer returned error, index: 768, error: Resource temporarily unavailable, number: 11
+[realsense2_camera_node-3]  24/08 19:17:25,871 WARNING [281472887937440] (messenger-libusb.cpp:42) control_transfer returned error, index: 768, error: Resource temporarily unavailable, number: 11
+[realsense2_camera_node-3]  24/08 19:18:31,003 WARNING [281472887937440] (messenger-libusb.cpp:42) control_transfer returned error, index: 768, error: Resource temporarily unavailable, number: 11
+[realsense2_camera_node-3]  24/08 19:19:23,117 WARNING [281472887937440] (messenger-libusb.cpp:42) control_transfer returned error, index: 768, error: Resource temporarily unavailable, number: 11
+[realsense2_camera_node-3]  24/08 19:19:23,168 WARNING [281472887937440] (messenger-libusb.cpp:42) control_transfer returned error, index: 768, error: Resource temporarily unavailable, number: 11
+[realsense2_camera_node-3]  24/08 19:19:24,220 WARNING [281472887937440] (messenger-libusb.cpp:42) control_transfer returned error, index: 768, error: Resource temporarily unavailable, number: 11
+[realsense2_camera_node-3]  24/08 19:19:24,271 WARNING [281472887937440] (messenger-libusb.cpp:42) control_transfer returned error, index: 768, error: Resource temporarily unavailable, number: 11
+[realsense2_camera_node-3]  24/08 19:19:25,323 WARNING [281472887937440] (messenger-libusb.cpp:42) control_transfer returned error, index: 768, error: Resource temporarily unavailable, number: 11
+[realsense2_camera_node-3]  24/08 19:19:25,374 WARNING [281472887937440] (messenger-libusb.cpp:42) control_transfer returned error, index: 768, error: Resource temporarily unavailable, number: 11
+[realsense2_camera_node-3]  24/08 19:19:26,426 WARNING [281472887937440] (messenger-libusb.cpp:42) control_transfer returned error, index: 768, error: Resource temporarily unavailable, number: 11
+[realsense2_camera_node-3]  24/08 19:19:52,509 WARNING [281472887937440] (messenger-libusb.cpp:42) control_transfer returned error, index: 768, error: Resource temporarily unavailable, number: 11
+[realsense2_camera_node-3]  24/08 19:19:52,564 WARNING [281472887937440] (messenger-libusb.cpp:42) control_transfer returned error, index: 768, error: Resource temporarily unavailable, number: 11
+[realsense2_camera_node-3]  24/08 19:20:07,630 WARNING [281472887937440] (messenger-libusb.cpp:42) control_transfer returned error, index: 768, error: Resource temporarily unavailable, number: 11
+[realsense2_camera_node-3]  24/08 19:20:07,681 WARNING [281472887937440] (messenger-libusb.cpp:42) control_transfer returned error, index: 768, error: Resource temporarily unavailable, number: 11
+[realsense2_camera_node-3]  24/08 19:20:08,735 WARNING [281472887937440] (messenger-libusb.cpp:42) control_transfer returned error, index: 768, error: Resource temporarily unavailable, number: 11
+[realsense2_camera_node-3]  24/08 19:20:08,786 WARNING [281472887937440] (messenger-libusb.cpp:42) control_transfer returned error, index: 768, error: Resource temporarily unavailable, number: 11
+[realsense2_camera_node-3]  24/08 19:20:10,840 WARNING [281472887937440] (messenger-libusb.cpp:42) control_transfer returned error, index: 768, error: Resource temporarily unavailable, number: 11
+[realsense2_camera_node-3]  24/08 19:20:15,897 WARNING [281472887937440] (messenger-libusb.cpp:42) control_transfer returned error, index: 768, error: Resource temporarily unavailable, number: 11
+[realsense2_camera_node-3]  24/08 19:20:17,949 WARNING [281472887937440] (messenger-libusb.cpp:42) control_transfer returned error, index: 768, error: Resource temporarily unavailable, number: 11
+[realsense2_camera_node-3]  24/08 19:21:24,082 WARNING [281472887937440] (messenger-libusb.cpp:42) control_transfer returned error, index: 768, error: Resource temporarily unavailable, number: 11
+[realsense2_camera_node-3]  24/08 19:21:32,145 WARNING [281472887937440] (messenger-libusb.cpp:42) control_transfer returned error, index: 768, error: Resource temporarily unavailable, number: 11
+[realsense2_camera_node-3]  24/08 19:21:56,226 WARNING [281472887937440] (messenger-libusb.cpp:42) control_transfer returned error, index: 768, error: Resource temporarily unavailable, number: 11
+[realsense2_camera_node-3]  24/08 19:22:32,318 WARNING [281472887937440] (messenger-libusb.cpp:42) control_transfer returned error, index: 768, error: Resource temporarily unavailable, number: 11
+[realsense2_camera_node-3]  24/08 19:23:42,456 WARNING [281472887937440] (messenger-libusb.cpp:42) control_transfer returned error, index: 768, error: Resource temporarily unavailable, number: 11
+[realsense2_camera_node-3]  24/08 19:24:00,536 WARNING [281472887937440] (messenger-libusb.cpp:42) control_transfer returned error, index: 768, error: Resource temporarily unavailable, number: 11
+[realsense2_camera_node-3]  24/08 19:25:08,682 WARNING [281472887937440] (messenger-libusb.cpp:42) control_transfer returned error, index: 768, error: Resource temporarily unavailable, number: 11
+[realsense2_camera_node-3]  24/08 19:25:55,795 WARNING [281472887937440] (messenger-libusb.cpp:42) control_transfer returned error, index: 768, error: Resource temporarily unavailable, number: 11
+[realsense2_camera_node-3]  24/08 19:27:49,985 WARNING [281472887937440] (messenger-libusb.cpp:42) control_transfer returned error, index: 768, error: Resource temporarily unavailable, number: 11
+[realsense2_camera_node-3]  24/08 19:28:10,062 WARNING [281472887937440] (messenger-libusb.cpp:42) control_transfer returned error, index: 768, error: Resource temporarily unavailable, number: 11
+[realsense2_camera_node-3]  24/08 19:28:59,174 WARNING [281472887937440] (messenger-libusb.cpp:42) control_transfer returned error, index: 768, error: Resource temporarily unavailable, number: 11
+[realsense2_camera_node-3]  24/08 19:29:56,301 WARNING [281472887937440] (messenger-libusb.cpp:42) control_transfer returned error, index: 768, error: Resource temporarily unavailable, number: 11
+[realsense2_camera_node-3]  24/08 19:30:25,386 WARNING [281472887937440] (messenger-libusb.cpp:42) control_transfer returned error, index: 768, error: Resource temporarily unavailable, number: 11
+[realsense2_camera_node-3]  24/08 19:32:07,573 WARNING [281472887937440] (messenger-libusb.cpp:42) control_transfer returned error, index: 768, error: Resource temporarily unavailable, number: 11
+[realsense2_camera_node-3]  24/08 19:32:45,676 WARNING [281472887937440] (messenger-libusb.cpp:42) control_transfer returned error, index: 768, error: Resource temporarily unavailable, number: 11
+[realsense2_camera_node-3]  24/08 19:32:54,739 WARNING [281472887937440] (messenger-libusb.cpp:42) control_transfer returned error, index: 768, error: Resource temporarily unavailable, number: 11
+[realsense2_camera_node-3]  24/08 19:34:01,872 WARNING [281472887937440] (messenger-libusb.cpp:42) control_transfer returned error, index: 768, error: Resource temporarily unavailable, number: 11
+[realsense2_camera_node-3]  24/08 19:34:04,925 WARNING [281472887937440] (messenger-libusb.cpp:42) control_transfer returned error, index: 768, error: Resource temporarily unavailable, number: 11
+[realsense2_camera_node-3]  24/08 19:34:41,022 WARNING [281472887937440] (messenger-libusb.cpp:42) control_transfer returned error, index: 768, error: Resource temporarily unavailable, number: 11
+[realsense2_camera_node-3]  24/08 19:35:26,133 WARNING [281472887937440] (messenger-libusb.cpp:42) control_transfer returned error, index: 768, error: Resource temporarily unavailable, number: 11
+[realsense2_camera_node-3]  24/08 19:35:36,195 WARNING [281472887937440] (messenger-libusb.cpp:42) control_transfer returned error, index: 768, error: Resource temporarily unavailable, number: 11
+[realsense2_camera_node-3]  24/08 19:36:25,307 WARNING [281472887937440] (messenger-libusb.cpp:42) control_transfer returned error, index: 768, error: Resource temporarily unavailable, number: 11
+[realsense2_camera_node-3]  24/08 19:38:03,487 WARNING [281472887937440] (messenger-libusb.cpp:42) control_transfer returned error, index: 768, error: Resource temporarily unavailable, number: 11
+[realsense2_camera_node-3]  24/08 19:38:03,538 WARNING [281472887937440] (messenger-libusb.cpp:42) control_transfer returned error, index: 768, error: Resource temporarily unavailable, number: 11
+[realsense2_camera_node-3]  24/08 19:38:33,633 WARNING [281472887937440] (messenger-libusb.cpp:42) control_transfer returned error, index: 768, error: Resource temporarily unavailable, number: 11
+[realsense2_camera_node-3]  24/08 19:38:41,695 WARNING [281472887937440] (messenger-libusb.cpp:42) control_transfer returned error, index: 768, error: Resource temporarily unavailable, number: 11
+[realsense2_camera_node-3]  24/08 19:38:57,772 WARNING [281472887937440] (messenger-libusb.cpp:42) control_transfer returned error, index: 768, error: Resource temporarily unavailable, number: 11
+[planner_server-5] [INFO] [1787571653.565617336] [global_costmap.global_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3180.436 for reason 'Unknown'
+[controller_server-4] [INFO] [1787571653.565644376] [local_costmap.local_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3180.436 for reason 'Unknown'
+[controller_server-4] [INFO] [1787571653.602335640] [local_costmap.local_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3180.478 for reason 'Unknown'
+[planner_server-5] [INFO] [1787571653.602335640] [global_costmap.global_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3180.478 for reason 'Unknown'
+[planner_server-5] [INFO] [1787571653.636584760] [global_costmap.global_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3180.514 for reason 'Unknown'
+[controller_server-4] [INFO] [1787571653.636817336] [local_costmap.local_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3180.514 for reason 'Unknown'
+[controller_server-4] [INFO] [1787571653.666594264] [local_costmap.local_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3180.549 for reason 'Unknown'
+[planner_server-5] [INFO] [1787571653.666887096] [global_costmap.global_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3180.549 for reason 'Unknown'
+[planner_server-5] [INFO] [1787571653.687083192] [global_costmap.global_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3180.580 for reason 'Unknown'
+[controller_server-4] [INFO] [1787571653.687221272] [local_costmap.local_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3180.580 for reason 'Unknown'
+[controller_server-4] [INFO] [1787571653.720177048] [local_costmap.local_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3180.605 for reason 'Unknown'
+[planner_server-5] [INFO] [1787571653.720981944] [global_costmap.global_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3180.605 for reason 'Unknown'
+[planner_server-5] [INFO] [1787571653.751110264] [global_costmap.global_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3180.628 for reason 'Unknown'
+[controller_server-4] [INFO] [1787571653.751140568] [local_costmap.local_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3180.628 for reason 'Unknown'
+[controller_server-4] [INFO] [1787571653.769498936] [local_costmap.local_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3180.658 for reason 'Unknown'
+[planner_server-5] [INFO] [1787571653.769598040] [global_costmap.global_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3180.658 for reason 'Unknown'
+[planner_server-5] [INFO] [1787571653.801163192] [global_costmap.global_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3180.683 for reason 'Unknown'
+[controller_server-4] [INFO] [1787571653.801277624] [local_costmap.local_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3180.683 for reason 'Unknown'
+[planner_server-5] [INFO] [1787571653.832747128] [global_costmap.global_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3180.706 for reason 'Unknown'
+[controller_server-4] [INFO] [1787571653.832775928] [local_costmap.local_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3180.706 for reason 'Unknown'
+[controller_server-4] [INFO] [1787571653.862759576] [local_costmap.local_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3180.736 for reason 'Unknown'
+[planner_server-5] [INFO] [1787571653.862798744] [global_costmap.global_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3180.736 for reason 'Unknown'
+[planner_server-5] [INFO] [1787571653.896445880] [global_costmap.global_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3180.760 for reason 'Unknown'
+[controller_server-4] [INFO] [1787571653.896607256] [local_costmap.local_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3180.760 for reason 'Unknown'
+[controller_server-4] [INFO] [1787571653.935434872] [local_costmap.local_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3180.783 for reason 'Unknown'
+[planner_server-5] [INFO] [1787571653.936036024] [global_costmap.global_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3180.783 for reason 'Unknown'
+[controller_server-4] [INFO] [1787571653.968563352] [local_costmap.local_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3180.816 for reason 'Unknown'
+[planner_server-5] [INFO] [1787571653.968545624] [global_costmap.global_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3180.816 for reason 'Unknown'
+[controller_server-4] [INFO] [1787571653.991142584] [local_costmap.local_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3180.846 for reason 'Unknown'
+[planner_server-5] [INFO] [1787571653.991148120] [global_costmap.global_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3180.846 for reason 'Unknown'
+[controller_server-4] [INFO] [1787571654.028055800] [local_costmap.local_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3180.877 for reason 'Unknown'
+[planner_server-5] [INFO] [1787571654.028055800] [global_costmap.global_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3180.877 for reason 'Unknown'
+[controller_server-4] [INFO] [1787571654.063185208] [local_costmap.local_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3180.908 for reason 'Unknown'
+[planner_server-5] [INFO] [1787571654.064546776] [global_costmap.global_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3180.908 for reason 'Unknown'
+[controller_server-4] [INFO] [1787571654.097772408] [local_costmap.local_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3180.938 for reason 'Unknown'
+[planner_server-5] [INFO] [1787571654.098344632] [global_costmap.global_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3180.938 for reason 'Unknown'
+[controller_server-4] [INFO] [1787571654.137353016] [local_costmap.local_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3180.969 for reason 'Unknown'
+[planner_server-5] [INFO] [1787571654.137348984] [global_costmap.global_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3180.969 for reason 'Unknown'
+[controller_server-4] [INFO] [1787571654.174974072] [local_costmap.local_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3180.999 for reason 'Unknown'
+[planner_server-5] [INFO] [1787571654.176298680] [global_costmap.global_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3180.999 for reason 'Unknown'
+[controller_server-4] [INFO] [1787571654.207789016] [local_costmap.local_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3181.030 for reason 'Unknown'
+[planner_server-5] [INFO] [1787571654.209218936] [global_costmap.global_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3181.030 for reason 'Unknown'
+[controller_server-4] [INFO] [1787571654.227706584] [local_costmap.local_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3181.060 for reason 'Unknown'
+[planner_server-5] [INFO] [1787571654.229100696] [global_costmap.global_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3181.060 for reason 'Unknown'
+[controller_server-4] [INFO] [1787571654.260983192] [local_costmap.local_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3181.084 for reason 'Unknown'
+[planner_server-5] [INFO] [1787571654.262502168] [global_costmap.global_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3181.084 for reason 'Unknown'
+[controller_server-4] [INFO] [1787571654.292766680] [local_costmap.local_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3181.109 for reason 'Unknown'
+[planner_server-5] [INFO] [1787571654.292894584] [global_costmap.global_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3181.109 for reason 'Unknown'
+[planner_server-5] [INFO] [1787571654.325685656] [global_costmap.global_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3181.139 for reason 'Unknown'
+[controller_server-4] [INFO] [1787571654.326278584] [local_costmap.local_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3181.139 for reason 'Unknown'
+[planner_server-5] [INFO] [1787571654.358886136] [global_costmap.global_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3181.170 for reason 'Unknown'
+[controller_server-4] [INFO] [1787571654.359041144] [local_costmap.local_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3181.170 for reason 'Unknown'
+[controller_server-4] [INFO] [1787571654.396701400] [local_costmap.local_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3181.201 for reason 'Unknown'
+[planner_server-5] [INFO] [1787571654.396726296] [global_costmap.global_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3181.201 for reason 'Unknown'
+[controller_server-4] [INFO] [1787571654.428463640] [local_costmap.local_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3181.233 for reason 'Unknown'
+[planner_server-5] [INFO] [1787571654.428463512] [global_costmap.global_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3181.233 for reason 'Unknown'
+[planner_server-5] [INFO] [1787571654.448367640] [global_costmap.global_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3181.264 for reason 'Unknown'
+[controller_server-4] [INFO] [1787571654.448367320] [local_costmap.local_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3181.264 for reason 'Unknown'
+[controller_server-4] [INFO] [1787571654.481618328] [local_costmap.local_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3181.294 for reason 'Unknown'
+[planner_server-5] [INFO] [1787571654.481706712] [global_costmap.global_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3181.294 for reason 'Unknown'
+[controller_server-4] [INFO] [1787571654.511064568] [local_costmap.local_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3181.325 for reason 'Unknown'
+[planner_server-5] [INFO] [1787571654.511134840] [global_costmap.global_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3181.325 for reason 'Unknown'
+[controller_server-4] [INFO] [1787571654.530631384] [local_costmap.local_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3181.356 for reason 'Unknown'
+[controller_server-4] [INFO] [1787571654.564961400] [local_costmap.local_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3181.389 for reason 'Unknown'
+[controller_server-4] [INFO] [1787571654.595093912] [local_costmap.local_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3181.416 for reason 'Unknown'
+[controller_server-4] [INFO] [1787571654.615392632] [local_costmap.local_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3181.439 for reason 'Unknown'
+[controller_server-4] [INFO] [1787571654.649361144] [local_costmap.local_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3181.470 for reason 'Unknown'
+[planner_server-5] [INFO] [1787571654.530694968] [global_costmap.global_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3181.356 for reason 'Unknown'
+[planner_server-5] [INFO] [1787571654.565067416] [global_costmap.global_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3181.389 for reason 'Unknown'
+[planner_server-5] [INFO] [1787571654.595197400] [global_costmap.global_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3181.416 for reason 'Unknown'
+[planner_server-5] [INFO] [1787571654.615468536] [global_costmap.global_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3181.439 for reason 'Unknown'
+[planner_server-5] [INFO] [1787571654.649247256] [global_costmap.global_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3181.470 for reason 'Unknown'
+[controller_server-4] [INFO] [1787571654.678964312] [local_costmap.local_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3181.495 for reason 'Unknown'
+[planner_server-5] [INFO] [1787571654.679148664] [global_costmap.global_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3181.495 for reason 'Unknown'
+[controller_server-4] [INFO] [1787571654.698104760] [local_costmap.local_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3181.518 for reason 'Unknown'
+[planner_server-5] [INFO] [1787571654.698143352] [global_costmap.global_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3181.518 for reason 'Unknown'
+[planner_server-5] [INFO] [1787571654.731215608] [global_costmap.global_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3181.548 for reason 'Unknown'
+[controller_server-4] [INFO] [1787571654.731230040] [local_costmap.local_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3181.548 for reason 'Unknown'
+[planner_server-5] [INFO] [1787571654.760854616] [global_costmap.global_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3181.580 for reason 'Unknown'
+[controller_server-4] [INFO] [1787571654.762469368] [local_costmap.local_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3181.580 for reason 'Unknown'
+[planner_server-5] [INFO] [1787571654.780050584] [global_costmap.global_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3181.616 for reason 'Unknown'
+[controller_server-4] [INFO] [1787571654.780050776] [local_costmap.local_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3181.616 for reason 'Unknown'
+[planner_server-5] [INFO] [1787571654.812380824] [global_costmap.global_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3181.653 for reason 'Unknown'
+[controller_server-4] [INFO] [1787571654.812781432] [local_costmap.local_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3181.653 for reason 'Unknown'
+[planner_server-5] [INFO] [1787571654.846661336] [global_costmap.global_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3181.688 for reason 'Unknown'
+[controller_server-4] [INFO] [1787571654.847146872] [local_costmap.local_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3181.688 for reason 'Unknown'
+[planner_server-5] [INFO] [1787571654.881238808] [global_costmap.global_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3181.724 for reason 'Unknown'
+[controller_server-4] [INFO] [1787571654.881293944] [local_costmap.local_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3181.724 for reason 'Unknown'
+[planner_server-5] [INFO] [1787571654.915351128] [global_costmap.global_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3181.759 for reason 'Unknown'
+[controller_server-4] [INFO] [1787571654.915550104] [local_costmap.local_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3181.759 for reason 'Unknown'
+[planner_server-5] [INFO] [1787571654.947431160] [global_costmap.global_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3181.795 for reason 'Unknown'
+[controller_server-4] [INFO] [1787571654.947674680] [local_costmap.local_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3181.795 for reason 'Unknown'
+[planner_server-5] [INFO] [1787571654.977883384] [global_costmap.global_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3181.831 for reason 'Unknown'
+[controller_server-4] [INFO] [1787571654.978064312] [local_costmap.local_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3181.831 for reason 'Unknown'
+[planner_server-5] [INFO] [1787571655.009476312] [global_costmap.global_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3181.859 for reason 'Unknown'
+[controller_server-4] [INFO] [1787571655.009472440] [local_costmap.local_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3181.859 for reason 'Unknown'
+[controller_server-4] [INFO] [1787571655.051137976] [local_costmap.local_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3181.885 for reason 'Unknown'
+[planner_server-5] [INFO] [1787571655.051145816] [global_costmap.global_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3181.885 for reason 'Unknown'
+[planner_server-5] [INFO] [1787571655.085924664] [global_costmap.global_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3181.920 for reason 'Unknown'
+[controller_server-4] [INFO] [1787571655.085924856] [local_costmap.local_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3181.920 for reason 'Unknown'
+[controller_server-4] [INFO] [1787571655.117265080] [local_costmap.local_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3181.954 for reason 'Unknown'
+[planner_server-5] [INFO] [1787571655.117333784] [global_costmap.global_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3181.954 for reason 'Unknown'
+[planner_server-5] [INFO] [1787571655.138103448] [global_costmap.global_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3181.988 for reason 'Unknown'
+[controller_server-4] [INFO] [1787571655.138136472] [local_costmap.local_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3181.988 for reason 'Unknown'
+[controller_server-4] [INFO] [1787571655.181629944] [local_costmap.local_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3182.023 for reason 'Unknown'
+[planner_server-5] [INFO] [1787571655.181657496] [global_costmap.global_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3182.023 for reason 'Unknown'
+[controller_server-4] [INFO] [1787571655.213594328] [local_costmap.local_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3182.056 for reason 'Unknown'
+[planner_server-5] [INFO] [1787571655.214418072] [global_costmap.global_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3182.056 for reason 'Unknown'
+[planner_server-5] [INFO] [1787571655.234324216] [global_costmap.global_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3182.083 for reason 'Unknown'
+[controller_server-4] [INFO] [1787571655.234329240] [local_costmap.local_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3182.083 for reason 'Unknown'
+[controller_server-4] [INFO] [1787571655.279821048] [local_costmap.local_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3182.107 for reason 'Unknown'
+[planner_server-5] [INFO] [1787571655.279990648] [global_costmap.global_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3182.107 for reason 'Unknown'
+[controller_server-4] [INFO] [1787571655.311653240] [local_costmap.local_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3182.139 for reason 'Unknown'
+[planner_server-5] [INFO] [1787571655.311884600] [global_costmap.global_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3182.139 for reason 'Unknown'
+[controller_server-4] [INFO] [1787571655.347810904] [local_costmap.local_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3182.166 for reason 'Unknown'
+[planner_server-5] [INFO] [1787571655.347836216] [global_costmap.global_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3182.166 for reason 'Unknown'
+[controller_server-4] [INFO] [1787571655.383955864] [local_costmap.local_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3182.189 for reason 'Unknown'
+[planner_server-5] [INFO] [1787571655.384007704] [global_costmap.global_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3182.189 for reason 'Unknown'
+[planner_server-5] [INFO] [1787571655.420771416] [global_costmap.global_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3182.221 for reason 'Unknown'
+[controller_server-4] [INFO] [1787571655.420801112] [local_costmap.local_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3182.221 for reason 'Unknown'
+[planner_server-5] [INFO] [1787571655.454996248] [global_costmap.global_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3182.252 for reason 'Unknown'
+[controller_server-4] [INFO] [1787571655.455010776] [local_costmap.local_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3182.252 for reason 'Unknown'
+[planner_server-5] [INFO] [1787571655.486702712] [global_costmap.global_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3182.285 for reason 'Unknown'
+[controller_server-4] [INFO] [1787571655.486719096] [local_costmap.local_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3182.285 for reason 'Unknown'
+[controller_server-4] [INFO] [1787571655.523852856] [local_costmap.local_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3182.319 for reason 'Unknown'
+[planner_server-5] [INFO] [1787571655.524563416] [global_costmap.global_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3182.319 for reason 'Unknown'
+[planner_server-5] [INFO] [1787571655.559690648] [global_costmap.global_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3182.355 for reason 'Unknown'
+[controller_server-4] [INFO] [1787571655.559690072] [local_costmap.local_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3182.355 for reason 'Unknown'
+[planner_server-5] [INFO] [1787571655.592012472] [global_costmap.global_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3182.385 for reason 'Unknown'
+[controller_server-4] [INFO] [1787571655.592067640] [local_costmap.local_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3182.385 for reason 'Unknown'
+[planner_server-5] [INFO] [1787571655.612956504] [global_costmap.global_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3182.413 for reason 'Unknown'
+[controller_server-4] [INFO] [1787571655.612990360] [local_costmap.local_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3182.413 for reason 'Unknown'
+[planner_server-5] [INFO] [1787571655.648105208] [global_costmap.global_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3182.448 for reason 'Unknown'
+[controller_server-4] [INFO] [1787571655.648250584] [local_costmap.local_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3182.448 for reason 'Unknown'
+[controller_server-4] [INFO] [1787571655.679860216] [local_costmap.local_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3182.483 for reason 'Unknown'
+[planner_server-5] [INFO] [1787571655.680037656] [global_costmap.global_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3182.483 for reason 'Unknown'
+[controller_server-4] [INFO] [1787571655.701009944] [local_costmap.local_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3182.521 for reason 'Unknown'
+[planner_server-5] [INFO] [1787571655.701424600] [global_costmap.global_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3182.521 for reason 'Unknown'
+[controller_server-4] [INFO] [1787571655.749293528] [local_costmap.local_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3182.560 for reason 'Unknown'
+[planner_server-5] [INFO] [1787571655.749674264] [global_costmap.global_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3182.560 for reason 'Unknown'
+[controller_server-4] [INFO] [1787571655.783130136] [local_costmap.local_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3182.595 for reason 'Unknown'
+[planner_server-5] [INFO] [1787571655.783613944] [global_costmap.global_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3182.595 for reason 'Unknown'
+[controller_server-4] [INFO] [1787571655.814353144] [local_costmap.local_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3182.623 for reason 'Unknown'
+[planner_server-5] [INFO] [1787571655.814806936] [global_costmap.global_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3182.623 for reason 'Unknown'
+[planner_server-5] [INFO] [1787571655.850988568] [global_costmap.global_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3182.648 for reason 'Unknown'
+[controller_server-4] [INFO] [1787571655.851117048] [local_costmap.local_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3182.648 for reason 'Unknown'
+[controller_server-4] [INFO] [1787571655.884460472] [local_costmap.local_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3182.680 for reason 'Unknown'
+[planner_server-5] [INFO] [1787571655.884792408] [global_costmap.global_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3182.680 for reason 'Unknown'
+[controller_server-4] [INFO] [1787571655.916555256] [local_costmap.local_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3182.712 for reason 'Unknown'
+[planner_server-5] [INFO] [1787571655.917075480] [global_costmap.global_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3182.712 for reason 'Unknown'
+[controller_server-4] [INFO] [1787571655.948777336] [local_costmap.local_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3182.746 for reason 'Unknown'
+[planner_server-5] [INFO] [1787571655.948864440] [global_costmap.global_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3182.746 for reason 'Unknown'
+[planner_server-5] [INFO] [1787571655.983968408] [global_costmap.global_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3182.780 for reason 'Unknown'
+[controller_server-4] [INFO] [1787571655.985715960] [local_costmap.local_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3182.780 for reason 'Unknown'
+[controller_server-4] [INFO] [1787571656.016978776] [local_costmap.local_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3182.818 for reason 'Unknown'
+[planner_server-5] [INFO] [1787571656.017460600] [global_costmap.global_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3182.818 for reason 'Unknown'
+[controller_server-4] [INFO] [1787571656.047051192] [local_costmap.local_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3182.845 for reason 'Unknown'
+[planner_server-5] [INFO] [1787571656.047986232] [global_costmap.global_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3182.845 for reason 'Unknown'
+[controller_server-4] [INFO] [1787571656.066611960] [local_costmap.local_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3182.869 for reason 'Unknown'
+[planner_server-5] [INFO] [1787571656.066758808] [global_costmap.global_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3182.869 for reason 'Unknown'
+[controller_server-4] [INFO] [1787571656.113786104] [local_costmap.local_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3182.901 for reason 'Unknown'
+[planner_server-5] [INFO] [1787571656.114323352] [global_costmap.global_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3182.901 for reason 'Unknown'
+[controller_server-4] [INFO] [1787571656.143602232] [local_costmap.local_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3182.926 for reason 'Unknown'
+[planner_server-5] [INFO] [1787571656.145206424] [global_costmap.global_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3182.926 for reason 'Unknown'
+[planner_server-5] [INFO] [1787571656.169618232] [global_costmap.global_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3182.951 for reason 'Unknown'
+[controller_server-4] [INFO] [1787571656.169962424] [local_costmap.local_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3182.951 for reason 'Unknown'
+[controller_server-4] [INFO] [1787571656.232040056] [local_costmap.local_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3182.984 for reason 'Unknown'
+[planner_server-5] [INFO] [1787571656.236998264] [global_costmap.global_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3182.984 for reason 'Unknown'
+[controller_server-4] [INFO] [1787571656.318534456] [local_costmap.local_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3183.010 for reason 'Unknown'
+[planner_server-5] [INFO] [1787571656.318534680] [global_costmap.global_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3183.010 for reason 'Unknown'
+[controller_server-4] [INFO] [1787571656.367411768] [local_costmap.local_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3183.035 for reason 'Unknown'
+[planner_server-5] [INFO] [1787571656.372482712] [global_costmap.global_costmap_rclcpp_node]: Message Filter dropping message: frame 'camera_depth_optical_frame' at time 3183.035 for reason 'Unknown'
+[realsense2_camera_node-3]  24/08 19:41:28,075 WARNING [281472887937440] (messenger-libusb.cpp:42) control_transfer returned error, index: 768, error: Resource temporarily unavailable, number: 11
+[realsense2_camera_node-3]  24/08 19:41:32,131 WARNING [281472887937440] (messenger-libusb.cpp:42) control_transfer returned error, index: 768, error: Resource temporarily unavailable, number: 11
+[realsense2_camera_node-3]  24/08 19:43:06,341 WARNING [281472887937440] (messenger-libusb.cpp:42) control_transfer returned error, index: 768, error: Resource temporarily unavailable, number: 11
+[realsense2_camera_node-3]  24/08 19:43:06,392 WARNING [281472887937440] (messenger-libusb.cpp:42) control_transfer returned error, index: 768, error: Resource temporarily unavailable, number: 11
+[realsense2_camera_node-3]  24/08 19:43:07,444 WARNING [281472887937440] (messenger-libusb.cpp:42) control_transfer returned error, index: 768, error: Resource temporarily unavailable, number: 11
+[realsense2_camera_node-3]  24/08 19:43:13,503 WARNING [281472887937440] (messenger-libusb.cpp:42) control_transfer returned error, index: 768, error: Resource temporarily unavailable, number: 11
+[ERROR] [waypoint_follower-8]: process has died [pid 7553, exit code -9, cmd '/opt/ros/foxy/lib/nav2_waypoint_follower/waypoint_follower --ros-args -r __node:=waypoint_follower --params-file /tmp/tmpkhvyqqtz -r /tf:=tf -r /tf_static:=tf_static'].
+[ERROR] [static_transform_publisher-1]: process has died [pid 7528, exit code -9, cmd '/opt/ros/foxy/lib/tf2_ros/static_transform_publisher 0.25 0.0 0.12 0 0 0 base_link camera_link --ros-args -r __node:=base2camera_tf_broadcaster'].
+[ERROR] [odom_to_tf.py-2]: process has died [pid 7530, exit code -9, cmd '/home/ysc/lite_cog_ros2/nav/install/dr_nav2_mapless/lib/dr_nav2_mapless/odom_to_tf.py --ros-args -r __node:=odom_to_tf'].
+[ERROR] [controller_server-4]: process has died [pid 7534, exit code -9, cmd '/opt/ros/foxy/lib/nav2_controller/controller_server --ros-args --params-file /tmp/tmp76tx6y_f -r /tf:=tf -r /tf_static:=tf_static'].
+[ERROR] [lifecycle_manager-9]: process has died [pid 7555, exit code -9, cmd '/opt/ros/foxy/lib/nav2_lifecycle_manager/lifecycle_manager --ros-args -r __node:=lifecycle_manager_navigation --params-file /tmp/launch_params_zvyrm1oq --params-file /tmp/launch_params_s6tvs6vl --params-file /tmp/launch_params__qwas_4a'].
+[ERROR] [planner_server-5]: process has died [pid 7536, exit code -9, cmd '/opt/ros/foxy/lib/nav2_planner/planner_server --ros-args -r __node:=planner_server --params-file /tmp/tmp6c7_jssz -r /tf:=tf -r /tf_static:=tf_static'].
+[ERROR] [realsense2_camera_node-3]: process has died [pid 7532, exit code -9, cmd '/home/ysc/lite_cog_ros2/driver/realsense_ws/install/realsense2_camera/lib/realsense2_camera/realsense2_camera_node --ros-args --log-level info --ros-args -r __node:=camera -r __ns:=/camera --params-file /tmp/launch_params_qvqbsdh5'].

@@ -1,0 +1,30 @@
+#!/usr/bin/env python3
+import rclpy
+from rclpy.node import Node
+from std_msgs.msg import Int32MultiArray
+import time
+
+class Check(Node):
+    def __init__(self):
+        super().__init__('state_check')
+        self.last = None
+        self.count = 0
+        self.create_subscription(Int32MultiArray, '/robot_state_debug', self.cb, 10)
+
+    def cb(self, msg):
+        self.last = list(msg.data)
+        self.count += 1
+
+def main():
+    rclpy.init()
+    node = Check()
+    start = time.time()
+    while time.time() - start < 10:
+        rclpy.spin_once(node, timeout_sec=0.2)
+    print(f"messages: {node.count}")
+    print("fields: [robot_basic_state, robot_gait_state, robot_policy_state, robot_motion_state, task_state, is_robot_need_move, zero_position_flag]")
+    print(f"latest: {node.last}")
+    rclpy.shutdown()
+
+if __name__ == '__main__':
+    main()

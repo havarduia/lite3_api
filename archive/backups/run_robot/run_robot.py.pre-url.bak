@@ -1,0 +1,253 @@
+#!/usr/bin/env python3
+"""Run a sequence of Lite3 moves with cleanup, fail-fast, and a run log.
+
+This is NOT a second API over lite3.py - you call lite3's own methods, with
+their own signatures, and get their own return values back. It only adds the
+three things a bare script kept getting wrong:
+
+  1. He goes back down. Whatever the script does or dies of, the posture and
+     nav2 state found on arrival are restored on the way out.
+  2. A failed step stops the run. Carrying on past "I could not turn" means
+     the next walk goes somewhere nobody asked for.
+  3. A log of what each step actually did - which is rarely what was asked:
+     walks stop short on obstacles, turns overshoot.
+
+    source ~/lite3_env.sh && python3 run_robot.py
+
+    from run_robot import Mission
+    with Mission() as m:
+        bot = m.bot
+        m.step(bot.stand)
+        m.step(bot.walk, 0.5, speed=0.2)
+        m.step(bot.turn_deg, 90)
+        m.summary()
+
+Everything else - the battery floor, must-be-standing, the forward-only
+obstacle guard - still lives in lite3.py and still raises Lite3Error up
+through here.
+"""
+import sys
+import time
+
+from lite3 import Lite3, Lite3Error
+
+
+class Mission:
+    """Opens a Lite3, runs steps through it, and restores what it found.
+
+    Restoring is by observation, not bookkeeping: if he was lying down when
+    we arrived he is lying down when we leave, however the steps in between
+    got him up. Same for nav2 - a stack that was already running is someone
+    else's and is left alone.
+
+    keepalive=True emits the controller heartbeat, which means the robot
+    accepts commands with NO handheld powered on. That removes the interlock
+    a human is holding, so it is off by default.
+    """
+
+    def __init__(self, keepalive=False, verbose=True):
+        self.keepalive = keepalive
+        self.verbose = verbose
+        self.bot = None
+        self.results = []        # (name, status, detail, seconds)
+        self.failed = None       # name of the step that stopped the run
+        self._found_standing = None
+        self._found_nav = None
+
+    # --- lifecycle ---------------------------------------------------------
+    def __enter__(self):
+        self.bot = Lite3(auto_mode=True)
+        if self.keepalive:
+            self.bot.heartbeat_start()
+        # wait_ready, not merely "not lying": the 8 -> 9 -> 1 transition after
+        # a controller appears passes through a state where stand() is refused.
+        self.bot.wait_ready()
+        self._found_standing = self.bot.standing
+        self._found_nav = self.bot.nav_running
+        self._say('connect  %s' % self.bot.status())
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        # KeyboardInterrupt has already been through lite3's SIGINT handler,
+        # which estopped. Anything else has not, so stop him hard first.
+        if exc_type is not None and exc_type is not KeyboardInterrupt:
+            self._say('*** %s - stopping ***' % exc_type.__name__)
+            self._quietly(self.bot.estop, 'estop')
+        self.close()
+        return False
+
+    def close(self):
+        """Restore what we found, then disconnect. Every stage runs even if
+        an earlier one throws - a failed nav_stop must not skip the sit."""
+        if self.bot is None:
+            return
+        if self.bot.nav_running and not self._found_nav:
+            self._quietly(self.bot.nav_stop, 'nav_stop')
+        if self._found_standing is False:
+            self._quietly(self.bot.sit, 'sit')
+        elif self._found_standing:
+            # Say why he is being left on his feet, rather than trailing off
+            # and leaving you to wonder whether the sit was skipped or failed.
+            self._record('cleanup sit', 'SKIP', 'he was standing on arrival')
+        self._quietly(self.bot.close, 'close')
+        self.bot = None
+
+    def _quietly(self, fn, what):
+        """A cleanup stage: logged either way, never raises out of teardown.
+
+        Recorded like any other step, so a failed sit shows up in the summary
+        and in ok - a robot left standing is a failed run, not a footnote.
+        """
+        t0 = time.time()
+        try:
+            fn()
+        except Exception as e:
+            self._record('cleanup %s' % what, 'FAIL', str(e), time.time() - t0)
+        else:
+            self._record('cleanup %s' % what, 'OK', '', time.time() - t0)
+
+    # --- running steps -----------------------------------------------------
+    def step(self, fn, *args, **kw):
+        """Call a lite3 method, timed and recorded. Returns its value.
+
+        A failure skips every later step. An unexpected (non-Lite3Error)
+        exception is a bug rather than a refusal, so it estops and propagates
+        instead of being tidied away into the log.
+        """
+        return self._run(fn, args, kw, True)
+
+    def optional(self, fn, *args, **kw):
+        """Like step(), but a failure here does not stop the run."""
+        return self._run(fn, args, kw, False)
+
+    def sound(self, clip):
+        """Play one of the robot's own clips, e.g. sound('okstop').
+
+        Not a step(): voice.py raises VoiceError, not Lite3Error, so step()
+        would treat a flaky ssh to the speaker as a bug and estop the run.
+        A missing sound is logged as WARN and never stops anything.
+        """
+        name = 'play(%r)' % clip
+        if self.failed:
+            return self._record(name, 'SKIP', 'after %s failed' % self.failed)
+        t0 = time.time()
+        try:
+            self.bot.play(clip)
+        except Exception as e:
+            self._record(name, 'WARN', str(e)[:70], time.time() - t0)
+        else:
+            self._record(name, 'OK', '', time.time() - t0)
+
+    def speak(self, text):
+        """Say `text` out loud. Like sound(), a failure is WARN, never a stop."""
+        name = 'say(%r)' % text[:24]
+        if self.failed:
+            return self._record(name, 'SKIP', 'after %s failed' % self.failed)
+        t0 = time.time()
+        try:
+            self.bot.say(text)
+        except Exception as e:
+            self._record(name, 'WARN', str(e)[:70], time.time() - t0)
+        else:
+            self._record(name, 'OK', '', time.time() - t0)
+
+    def _run(self, fn, args, kw, required):
+        name = self._name(fn, args, kw)
+        if self.failed:
+            return self._record(name, 'SKIP', 'after %s failed' % self.failed)
+        t0 = time.time()
+        try:
+            value = fn(*args, **kw)
+        except Lite3Error as e:
+            self._record(name, 'FAIL', str(e), time.time() - t0)
+            if required:
+                self.failed = name
+            return None
+        except KeyboardInterrupt:
+            self._record(name, 'STOP', 'Ctrl-C', time.time() - t0)
+            self.failed = name
+            raise
+        except Exception:
+            self._record(name, 'ERROR', 'unhandled exception', time.time() - t0)
+            self.failed = name
+            raise
+        self._record(name, 'OK', self._detail(value), time.time() - t0)
+        return value
+
+    @staticmethod
+    def _name(fn, args, kw):
+        bits = ['%g' % a if isinstance(a, float) else repr(a) for a in args]
+        bits += ['%s=%r' % (k, v) for k, v in sorted(kw.items())]
+        return '%s(%s)' % (getattr(fn, '__name__', 'step'), ', '.join(bits))
+
+    @staticmethod
+    def _detail(value):
+        """One line describing what a lite3 return value says happened."""
+        if isinstance(value, dict):
+            parts = []
+            if 'moved' in value:
+                parts.append('moved %.2f m' % value['moved'])
+            if 'turned_deg' in value:
+                parts.append('turned %+.1f deg' % value['turned_deg'])
+            if 'reason' in value:
+                parts.append(value['reason'])
+            return ', '.join(parts)
+        if isinstance(value, float):
+            return '%.2f' % value
+        return '' if value is True or value is None else str(value)[:70]
+
+    def _record(self, name, status, detail='', seconds=0.0):
+        self.results.append((name, status, detail, seconds))
+        self._say('[%-5s] %-28s %s' % (status, name, detail))
+        return None
+
+    def _say(self, line):
+        if self.verbose:
+            print(line)
+            sys.stdout.flush()
+
+    # --- result ------------------------------------------------------------
+    @property
+    def ok(self):
+        return not any(s in ('FAIL', 'ERROR', 'STOP')
+                       for _, s, _, _ in self.results)
+
+    def summary(self):
+        """Print the run table. Returns True if nothing failed."""
+        print('\n==== SUMMARY ====')
+        for name, status, detail, secs in self.results:
+            print('  %-5s %-28s %5.1fs  %s' % (status, name, secs, detail))
+        print('  %s in %.1fs' % ('all OK' if self.ok else 'FAILED',
+                                 sum(s for _, _, _, s in self.results)))
+        return self.ok
+
+
+def demo():
+    """Stand, look around, step into whatever room there is, turn back, sit."""
+    # Summarise AFTER the with block, not inside it: the sit and the
+    # disconnect happen on the way out, so a summary printed inside would
+    # report a run that had not finished yet, and its exit code could not
+    # see a failed sit.
+    m = Mission(keepalive=True)
+    with m:
+        bot = m.bot
+        m.speak('Bababooey')
+        m.step(bot.stand)
+        print(bot.scan_text())
+        clear = m.step(bot.clearance)
+        room = min(0.5, clear - 0.8) if clear else 0.0
+        if room >= 0.2:
+            m.speak('WE ARE GOING TO DIE!')
+            m.step(bot.walk, room)
+        else:
+            m.speak('only %.2f m clear - staying put' % clear)
+        m.speak('YOU WILL DIE YOU WILL DIE, AI WILL TAKE OVER')
+        m.step(bot.turn_deg, 90)
+        m.sound('okturnright')
+        m.step(bot.turn_deg, -90)
+        m.sound('oksitdown')
+    return m.summary()
+
+
+if __name__ == '__main__':
+    sys.exit(0 if demo() else 1)

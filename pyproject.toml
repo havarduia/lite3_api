@@ -1,0 +1,15 @@
+# Metadata only, for when this becomes a real repo.
+#
+# Do NOT expect `pip install` to work on the robot: the heavy dependencies
+# (rclpy, tf2_ros, the nav2 and realsense message packages) come from the ROS2
+# Foxy workspaces that env/lite3_env.sh sources, not from PyPI, and the
+# robot's pip mirror is unreachable anyway. Scripts add the repo root to
+# sys.path themselves, so nothing needs installing.
+[project]
+name = "lite3-robot"
+version = "0.1.0"
+description = "Python API and behaviours for a DeepRobotics Lite3 Pro on ROS2 Foxy"
+requires-python = ">=3.8"
+
+[tool.setuptools]
+packages = ["robot"]

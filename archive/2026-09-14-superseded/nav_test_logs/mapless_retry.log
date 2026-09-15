@@ -1,0 +1,227 @@
+[INFO] [launch]: All log files can be found below /home/ysc/.ros/log/2026-08-24-19-43-49-042593-lite-12217
+[INFO] [launch]: Default logging verbosity is set to INFO
+[INFO] [realsense2_camera_node-3]: process started with pid [12223]
+[INFO] [static_transform_publisher-1]: process started with pid [12219]
+[INFO] [odom_to_tf.py-2]: process started with pid [12221]
+[INFO] [controller_server-4]: process started with pid [12225]
+[INFO] [planner_server-5]: process started with pid [12227]
+[INFO] [recoveries_server-6]: process started with pid [12229]
+[INFO] [bt_navigator-7]: process started with pid [12240]
+[INFO] [waypoint_follower-8]: process started with pid [12243]
+[INFO] [lifecycle_manager-9]: process started with pid [12254]
+[static_transform_publisher-1] 1787571830.456126 [0] static_tra: using network interface eth0 (udp/192.168.1.103) selected arbitrarily from: eth0, docker0
+[static_transform_publisher-1] [INFO] [1787571830.517017912] [base2camera_tf_broadcaster]: Spinning until killed publishing transform from 'base_link' to 'camera_link'
+[controller_server-4] 1787571830.511155 [0] controller: using network interface eth0 (udp/192.168.1.103) selected arbitrarily from: eth0, docker0
+[planner_server-5] 1787571830.549956 [0] planner_se: using network interface eth0 (udp/192.168.1.103) selected arbitrarily from: eth0, docker0
+[bt_navigator-7] 1787571830.591488 [0] bt_navigat: using network interface eth0 (udp/192.168.1.103) selected arbitrarily from: eth0, docker0
+[waypoint_follower-8] 1787571830.603414 [0] waypoint_f: using network interface eth0 (udp/192.168.1.103) selected arbitrarily from: eth0, docker0
+[recoveries_server-6] 1787571830.691598 [0] recoveries: using network interface eth0 (udp/192.168.1.103) selected arbitrarily from: eth0, docker0
+[bt_navigator-7] [INFO] [1787571830.754112632] [bt_navigator]: 
+[bt_navigator-7] 	bt_navigator lifecycle node launched. 
+[bt_navigator-7] 	Waiting on external lifecycle transitions to activate
+[bt_navigator-7] 	See https://design.ros2.org/articles/node_lifecycle.html for more information.
+[bt_navigator-7] [INFO] [1787571830.754493560] [bt_navigator]: Creating
+[lifecycle_manager-9] 1787571830.770731 [0] lifecycle_: using network interface eth0 (udp/192.168.1.103) selected arbitrarily from: eth0, docker0
+[waypoint_follower-8] [INFO] [1787571830.771180184] [waypoint_follower]: 
+[waypoint_follower-8] 	waypoint_follower lifecycle node launched. 
+[waypoint_follower-8] 	Waiting on external lifecycle transitions to activate
+[waypoint_follower-8] 	See https://design.ros2.org/articles/node_lifecycle.html for more information.
+[waypoint_follower-8] [INFO] [1787571830.777930456] [waypoint_follower]: Creating
+[controller_server-4] [INFO] [1787571830.834889656] [controller_server]: 
+[controller_server-4] 	controller_server lifecycle node launched. 
+[controller_server-4] 	Waiting on external lifecycle transitions to activate
+[controller_server-4] 	See https://design.ros2.org/articles/node_lifecycle.html for more information.
+[planner_server-5] [INFO] [1787571830.845707288] [planner_server]: 
+[planner_server-5] 	planner_server lifecycle node launched. 
+[planner_server-5] 	Waiting on external lifecycle transitions to activate
+[planner_server-5] 	See https://design.ros2.org/articles/node_lifecycle.html for more information.
+[planner_server-5] [INFO] [1787571830.860511320] [planner_server]: Creating
+[lifecycle_manager-9] [INFO] [1787571830.888786552] [lifecycle_manager_navigation]: Creating
+[controller_server-4] [INFO] [1787571830.894380568] [controller_server]: Creating controller server
+[recoveries_server-6] [INFO] [1787571831.037428984] [recoveries_server]: 
+[recoveries_server-6] 	recoveries_server lifecycle node launched. 
+[recoveries_server-6] 	Waiting on external lifecycle transitions to activate
+[recoveries_server-6] 	See https://design.ros2.org/articles/node_lifecycle.html for more information.
+[planner_server-5] [INFO] [1787571831.092179352] [global_costmap.global_costmap]: 
+[planner_server-5] 	global_costmap lifecycle node launched. 
+[planner_server-5] 	Waiting on external lifecycle transitions to activate
+[planner_server-5] 	See https://design.ros2.org/articles/node_lifecycle.html for more information.
+[planner_server-5] [INFO] [1787571831.113604184] [global_costmap.global_costmap]: Creating Costmap
+[controller_server-4] [INFO] [1787571831.116895096] [local_costmap.local_costmap]: 
+[controller_server-4] 	local_costmap lifecycle node launched. 
+[controller_server-4] 	Waiting on external lifecycle transitions to activate
+[controller_server-4] 	See https://design.ros2.org/articles/node_lifecycle.html for more information.
+[controller_server-4] [INFO] [1787571831.122621592] [local_costmap.local_costmap]: Creating Costmap
+[realsense2_camera_node-3] 1787571831.131942 [0] realsense2: using network interface eth0 (udp/192.168.1.103) selected arbitrarily from: eth0, docker0
+[lifecycle_manager-9] [INFO] [1787571831.145431928] [lifecycle_manager_navigation]: [34m[1mCreating and initializing lifecycle service clients[0m[0m
+[lifecycle_manager-9] [INFO] [1787571831.305537080] [lifecycle_manager_navigation]: [34m[1mStarting managed nodes bringup...[0m[0m
+[lifecycle_manager-9] [INFO] [1787571831.305762776] [lifecycle_manager_navigation]: [34m[1mConfiguring controller_server[0m[0m
+[controller_server-4] [INFO] [1787571831.324854680] [controller_server]: Configuring controller interface
+[controller_server-4] [INFO] [1787571831.329198616] [controller_server]: Controller frequency set to 5.0000Hz
+[controller_server-4] [INFO] [1787571831.329358360] [local_costmap.local_costmap]: Configuring
+[controller_server-4] [INFO] [1787571831.374604184] [local_costmap.local_costmap]: Using plugin "stvl_obstacle_layer"
+[realsense2_camera_node-3] [0m[INFO] [1787571831.427703032] [camera.camera]: RealSense ROS v3.2.3[0m
+[realsense2_camera_node-3] [0m[INFO] [1787571831.428117848] [camera.camera]: Built with LibRealSense v2.50.0[0m
+[realsense2_camera_node-3] [0m[INFO] [1787571831.428232344] [camera.camera]: Running with LibRealSense v2.50.0[0m
+[controller_server-4] [INFO] [1787571831.492854808] [local_costmap.local_costmap]: stvl_obstacle_layer being initialized as SpatioTemporalVoxelLayer!
+[controller_server-4] [INFO] [1787571831.493047224] [local_costmap.local_costmap]: stvl_obstacle_layer's global frame is odom.
+[controller_server-4] [INFO] [1787571831.515972440] [local_costmap.local_costmap]: stvl_obstacle_layer loaded parameters from parameter server.
+[controller_server-4] [INFO] [1787571831.525954968] [local_costmap.local_costmap]: stvl_obstacle_layer created underlying voxel grid.
+[controller_server-4] [INFO] [1787571831.576405016] [local_costmap.local_costmap]: Voxel filter activated.
+[controller_server-4] [INFO] [1787571831.586171672] [local_costmap.local_costmap]: stvl_obstacle_layer initialization complete!
+[controller_server-4] [INFO] [1787571831.588475352] [local_costmap.local_costmap]: Initialized plugin "stvl_obstacle_layer"
+[controller_server-4] [INFO] [1787571831.588599032] [local_costmap.local_costmap]: Using plugin "inflation_layer"
+[controller_server-4] [INFO] [1787571831.602651224] [local_costmap.local_costmap]: Initialized plugin "inflation_layer"
+[controller_server-4] [INFO] [1787571831.662906744] [controller_server]: Created progress_checker : progress_checker of type nav2_controller::SimpleProgressChecker
+[controller_server-4] [INFO] [1787571831.667686776] [controller_server]: Created goal_checker : goal_checker of type nav2_controller::SimpleGoalChecker
+[controller_server-4] [INFO] [1787571831.685416216] [controller_server]: Created controller : FollowPath of type dwb_core::DWBLocalPlanner
+[controller_server-4] [INFO] [1787571831.691402392] [controller_server]: Setting transform_tolerance to 0.200000
+[controller_server-4] [INFO] [1787571831.805412024] [controller_server]: Using critic "PreferForward" (dwb_critics::PreferForwardCritic)
+[controller_server-4] [INFO] [1787571831.809864440] [controller_server]: Critic plugin initialized
+[controller_server-4] [INFO] [1787571831.811429368] [controller_server]: Using critic "GoalDist" (dwb_critics::GoalDistCritic)
+[controller_server-4] [INFO] [1787571831.813693048] [controller_server]: Critic plugin initialized
+[controller_server-4] [INFO] [1787571831.814802104] [controller_server]: Using critic "PathDist" (dwb_critics::PathDistCritic)
+[controller_server-4] [INFO] [1787571831.818392824] [controller_server]: Critic plugin initialized
+[controller_server-4] [INFO] [1787571831.819641464] [controller_server]: Using critic "RotateToGoal" (dwb_critics::RotateToGoalCritic)
+[controller_server-4] [INFO] [1787571831.825107288] [controller_server]: Critic plugin initialized
+[controller_server-4] [INFO] [1787571831.826499288] [controller_server]: Using critic "BaseObstacle" (dwb_critics::BaseObstacleCritic)
+[controller_server-4] [INFO] [1787571831.828478104] [controller_server]: Critic plugin initialized
+[controller_server-4] [INFO] [1787571831.828612600] [controller_server]: Controller Server has FollowPath  controllers available.
+[lifecycle_manager-9] [INFO] [1787571831.866939736] [lifecycle_manager_navigation]: [34m[1mConfiguring planner_server[0m[0m
+[planner_server-5] [INFO] [1787571831.868069496] [planner_server]: Configuring
+[planner_server-5] [INFO] [1787571831.868208664] [global_costmap.global_costmap]: Configuring
+[planner_server-5] [INFO] [1787571831.902438296] [global_costmap.global_costmap]: Using plugin "stvl_obstacle_layer"
+[planner_server-5] [INFO] [1787571832.053203416] [global_costmap.global_costmap]: stvl_obstacle_layer being initialized as SpatioTemporalVoxelLayer!
+[planner_server-5] [INFO] [1787571832.053408184] [global_costmap.global_costmap]: stvl_obstacle_layer's global frame is odom.
+[planner_server-5] [INFO] [1787571832.062445304] [global_costmap.global_costmap]: stvl_obstacle_layer loaded parameters from parameter server.
+[planner_server-5] [INFO] [1787571832.077593752] [global_costmap.global_costmap]: stvl_obstacle_layer created underlying voxel grid.
+[planner_server-5] [INFO] [1787571832.098056920] [global_costmap.global_costmap]: Voxel filter activated.
+[planner_server-5] [INFO] [1787571832.110165976] [global_costmap.global_costmap]: stvl_obstacle_layer initialization complete!
+[planner_server-5] [INFO] [1787571832.110332696] [global_costmap.global_costmap]: Initialized plugin "stvl_obstacle_layer"
+[planner_server-5] [INFO] [1787571832.110887096] [global_costmap.global_costmap]: Using plugin "inflation_layer"
+[realsense2_camera_node-3] [0m[INFO] [1787571832.120338808] [camera.camera]: Device with serial number 344322074523 was found.
+[realsense2_camera_node-3] [0m
+[realsense2_camera_node-3] [0m[INFO] [1787571832.120648408] [camera.camera]: Device with physical ID 4-3.1-5 was found.[0m
+[realsense2_camera_node-3] [0m[INFO] [1787571832.120737112] [camera.camera]: Device with name Intel RealSense D435I was found.[0m
+[realsense2_camera_node-3] [0m[INFO] [1787571832.122618744] [camera.camera]: Device with port number 4-3.1 was found.[0m
+[realsense2_camera_node-3] [0m[INFO] [1787571832.122785656] [camera.camera]: Device USB type: 3.2[0m
+[planner_server-5] [INFO] [1787571832.139558264] [global_costmap.global_costmap]: Initialized plugin "inflation_layer"
+[realsense2_camera_node-3] [0m[INFO] [1787571832.145712632] [camera.camera]: getParameters...[0m
+[planner_server-5] [INFO] [1787571832.269589080] [planner_server]: Created global planner plugin GridBased of type nav2_navfn_planner/NavfnPlanner
+[planner_server-5] [INFO] [1787571832.269775128] [planner_server]: Configuring plugin GridBased of type NavfnPlanner
+[planner_server-5] [INFO] [1787571832.367723224] [planner_server]: Planner Server has GridBased  planners available.
+[lifecycle_manager-9] [INFO] [1787571832.421149208] [lifecycle_manager_navigation]: [34m[1mConfiguring recoveries_server[0m[0m
+[realsense2_camera_node-3] filter_voxel: 1 filter_leaf_size_m: 0.05
+[realsense2_camera_node-3] [0m[INFO] [1787571832.434120568] [camera.camera]: setupDevice...[0m
+[realsense2_camera_node-3] [0m[INFO] [1787571832.434264792] [camera.camera]: JSON file is not provided[0m
+[realsense2_camera_node-3] [0m[INFO] [1787571832.434362200] [camera.camera]: Device Name: Intel RealSense D435I[0m
+[realsense2_camera_node-3] [0m[INFO] [1787571832.434444920] [camera.camera]: Device physical port: 4-3.1-5[0m
+[realsense2_camera_node-3] [0m[INFO] [1787571832.434580920] [camera.camera]: Device FW version: 05.13.00.50[0m
+[realsense2_camera_node-3] [0m[INFO] [1787571832.434664184] [camera.camera]: Device Product ID: 0x0B3A[0m
+[realsense2_camera_node-3] [0m[INFO] [1787571832.434738904] [camera.camera]: Enable PointCloud: On[0m
+[realsense2_camera_node-3] [0m[INFO] [1787571832.435149080] [camera.camera]: Align Depth: Off[0m
+[realsense2_camera_node-3] [0m[INFO] [1787571832.435238328] [camera.camera]: Sync Mode: On[0m
+[realsense2_camera_node-3] [0m[INFO] [1787571832.435420920] [camera.camera]: Device Sensors: [0m
+[recoveries_server-6] [INFO] [1787571832.426363608] [recoveries_server]: Configuring
+[recoveries_server-6] [INFO] [1787571832.477354232] [recoveries_server]: Creating recovery plugin spin of type nav2_recoveries/Spin
+[recoveries_server-6] [INFO] [1787571832.485129720] [recoveries_server]: Configuring spin
+[recoveries_server-6] [INFO] [1787571832.515339128] [recoveries_server]: Creating recovery plugin backup of type nav2_recoveries/BackUp
+[recoveries_server-6] [INFO] [1787571832.521499096] [recoveries_server]: Configuring backup
+[recoveries_server-6] [INFO] [1787571832.545295288] [recoveries_server]: Creating recovery plugin wait of type nav2_recoveries/Wait
+[recoveries_server-6] [INFO] [1787571832.566745144] [recoveries_server]: Configuring wait
+[lifecycle_manager-9] [INFO] [1787571832.604755352] [lifecycle_manager_navigation]: [34m[1mConfiguring bt_navigator[0m[0m
+[bt_navigator-7] [INFO] [1787571832.610581656] [bt_navigator]: Configuring
+[realsense2_camera_node-3] [0m[INFO] [1787571832.619984600] [camera.camera]: Stereo Module was found.[0m
+[realsense2_camera_node-3] [0m[INFO] [1787571832.775515800] [camera.camera]: RGB Camera was found.[0m
+[realsense2_camera_node-3] [0m[INFO] [1787571832.776265080] [camera.camera]: Motion Module was found.[0m
+[realsense2_camera_node-3] [0m[INFO] [1787571832.776523352] [camera.camera]: (Infrared, 0) sensor isn't supported by current device! -- Skipping...[0m
+[realsense2_camera_node-3] [0m[INFO] [1787571832.776629944] [camera.camera]: (Fisheye, 0) sensor isn't supported by current device! -- Skipping...[0m
+[realsense2_camera_node-3] [0m[INFO] [1787571832.776716376] [camera.camera]: (Pose, 0) sensor isn't supported by current device! -- Skipping...[0m
+[realsense2_camera_node-3] [0m[INFO] [1787571832.776810072] [camera.camera]: Add Filter: pointcloud[0m
+[realsense2_camera_node-3] [0m[INFO] [1787571832.780101176] [camera.camera]: num_filters: 1[0m
+[realsense2_camera_node-3] [0m[INFO] [1787571832.780271064] [camera.camera]: Setting Dynamic reconfig parameters.[0m
+[bt_navigator-7] [INFO] [1787571832.823454808] [bt_navigator_rclcpp_node]: Waiting for "compute_path_to_pose" action server
+[bt_navigator-7] [INFO] [1787571832.825118840] [bt_navigator_rclcpp_node]: "ComputePathToPose" BtActionNode initialized
+[bt_navigator-7] [INFO] [1787571832.829191896] [bt_navigator_rclcpp_node]: Waiting for "global_costmap/clear_entirely_global_costmap" service
+[bt_navigator-7] [INFO] [1787571832.829669976] [bt_navigator_rclcpp_node]: "ClearGlobalCostmap-Context" BtServiceNode initialized
+[bt_navigator-7] [INFO] [1787571832.854388536] [bt_navigator_rclcpp_node]: Waiting for "follow_path" action server
+[bt_navigator-7] [INFO] [1787571832.854955320] [bt_navigator_rclcpp_node]: "FollowPath" BtActionNode initialized
+[bt_navigator-7] [INFO] [1787571832.867626008] [bt_navigator_rclcpp_node]: Waiting for "local_costmap/clear_entirely_local_costmap" service
+[bt_navigator-7] [INFO] [1787571832.868080664] [bt_navigator_rclcpp_node]: "ClearLocalCostmap-Context" BtServiceNode initialized
+[bt_navigator-7] [INFO] [1787571832.873646840] [bt_navigator_rclcpp_node]: Waiting for "local_costmap/clear_entirely_local_costmap" service
+[bt_navigator-7] [INFO] [1787571832.874459736] [bt_navigator_rclcpp_node]: "ClearLocalCostmap-Subtree" BtServiceNode initialized
+[bt_navigator-7] [INFO] [1787571832.880148760] [bt_navigator_rclcpp_node]: Waiting for "global_costmap/clear_entirely_global_costmap" service
+[bt_navigator-7] [INFO] [1787571832.881383096] [bt_navigator_rclcpp_node]: "ClearGlobalCostmap-Subtree" BtServiceNode initialized
+[bt_navigator-7] [INFO] [1787571832.911206840] [bt_navigator_rclcpp_node]: Waiting for "spin" action server
+[bt_navigator-7] [INFO] [1787571832.913700920] [bt_navigator_rclcpp_node]: "Spin" BtActionNode initialized
+[bt_navigator-7] [INFO] [1787571832.937234712] [bt_navigator_rclcpp_node]: Waiting for "wait" action server
+[bt_navigator-7] [INFO] [1787571832.939834744] [bt_navigator_rclcpp_node]: "Wait" BtActionNode initialized
+[lifecycle_manager-9] [INFO] [1787571832.962464216] [lifecycle_manager_navigation]: [34m[1mConfiguring waypoint_follower[0m[0m
+[waypoint_follower-8] [INFO] [1787571832.963640600] [waypoint_follower]: Configuring
+[lifecycle_manager-9] [INFO] [1787571833.078718392] [lifecycle_manager_navigation]: [34m[1mActivating controller_server[0m[0m
+[controller_server-4] [INFO] [1787571833.085959576] [controller_server]: Activating
+[controller_server-4] [INFO] [1787571833.087770328] [local_costmap.local_costmap]: Activating
+[controller_server-4] [INFO] [1787571833.087902744] [local_costmap.local_costmap]: Checking transform
+[controller_server-4] [INFO] [1787571833.088038744] [local_costmap.local_costmap]: Timed out waiting for transform from base_link to odom to become available, tf error: Invalid frame ID "odom" passed to canTransform argument target_frame - frame does not exist
+[odom_to_tf.py-2] 1787571833.137373 [0]    python3: using network interface eth0 (udp/192.168.1.103) selected arbitrarily from: eth0, docker0
+[controller_server-4] [INFO] [1787571833.588476632] [local_costmap.local_costmap]: start
+[controller_server-4] [INFO] [1787571833.588656056] [local_costmap.local_costmap]: stvl_obstacle_layer was activated.
+[lifecycle_manager-9] [INFO] [1787571833.646925112] [lifecycle_manager_navigation]: [34m[1mActivating planner_server[0m[0m
+[planner_server-5] [INFO] [1787571833.650867352] [planner_server]: Activating
+[planner_server-5] [INFO] [1787571833.651124184] [global_costmap.global_costmap]: Activating
+[planner_server-5] [INFO] [1787571833.651335032] [global_costmap.global_costmap]: Checking transform
+[planner_server-5] [INFO] [1787571833.651744696] [global_costmap.global_costmap]: start
+[planner_server-5] [INFO] [1787571833.651838456] [global_costmap.global_costmap]: stvl_obstacle_layer was activated.
+[planner_server-5] [INFO] [1787571833.703632408] [planner_server]: Activating plugin GridBased of type NavfnPlanner
+[lifecycle_manager-9] [INFO] [1787571833.705861112] [lifecycle_manager_navigation]: [34m[1mActivating recoveries_server[0m[0m
+[recoveries_server-6] [INFO] [1787571833.707869368] [recoveries_server]: Activating
+[recoveries_server-6] [INFO] [1787571833.708079544] [recoveries_server]: Activating spin
+[recoveries_server-6] [INFO] [1787571833.708226968] [recoveries_server]: Activating backup
+[recoveries_server-6] [INFO] [1787571833.708307480] [recoveries_server]: Activating wait
+[lifecycle_manager-9] [INFO] [1787571833.711413784] [lifecycle_manager_navigation]: [34m[1mActivating bt_navigator[0m[0m
+[bt_navigator-7] [INFO] [1787571833.712238776] [bt_navigator]: Activating
+[lifecycle_manager-9] [INFO] [1787571833.714131448] [lifecycle_manager_navigation]: [34m[1mActivating waypoint_follower[0m[0m
+[waypoint_follower-8] [INFO] [1787571833.716035800] [waypoint_follower]: Activating
+[lifecycle_manager-9] [INFO] [1787571833.722498776] [lifecycle_manager_navigation]: [34m[1mManaged nodes are active[0m[0m
+[realsense2_camera_node-3] [0m[INFO] [1787571838.913081272] [camera.camera]: Done Setting Dynamic reconfig parameters.[0m
+[realsense2_camera_node-3] [0m[INFO] [1787571838.922836312] [camera.camera]: depth stream is enabled - width: 424, height: 240, fps: 30, Format: Z16[0m
+[realsense2_camera_node-3] [0m[INFO] [1787571838.923040504] [camera.camera]: setupPublishers...[0m
+[realsense2_camera_node-3] [0m[INFO] [1787571838.952185944] [camera.camera]: setupStreams...[0m
+[realsense2_camera_node-3] [0m[INFO] [1787571839.270496920] [camera.camera]: SELECTED BASE:Depth, 0[0m
+[realsense2_camera_node-3] [0m[INFO] [1787571839.277144184] [camera.camera]: Device Serial No: 344322074523[0m
+[realsense2_camera_node-3] [0m[INFO] [1787571839.277378456] [camera.camera]: RealSense Node Is Up![0m
+[realsense2_camera_node-3] [33m[WARN] [1787571839.385919640] [camera.camera]: [0m
+[realsense2_camera_node-3]  24/08 19:43:59,392 WARNING [281472091023776] (messenger-libusb.cpp:42) control_transfer returned error, index: 768, error: Resource temporarily unavailable, number: 11
+[realsense2_camera_node-3]  24/08 19:43:59,444 WARNING [281472091023776] (messenger-libusb.cpp:42) control_transfer returned error, index: 768, error: Resource temporarily unavailable, number: 11
+[realsense2_camera_node-3]  24/08 19:43:59,605 WARNING [281472091023776] (messenger-libusb.cpp:42) control_transfer returned error, index: 768, error: Resource temporarily unavailable, number: 11
+[realsense2_camera_node-3] [0m[INFO] [1787571839.634108472] [camera.camera]: publishing unordered pointcloud.[0m
+[realsense2_camera_node-3] [33m[WARN] [1787571839.918935640] [camera.camera]: Hardware Notification:Depth stream start failure,1.78757e+12,Error,Hardware Error[0m
+[realsense2_camera_node-3]  24/08 19:44:00,485 WARNING [281472091023776] (messenger-libusb.cpp:42) control_transfer returned error, index: 768, error: Resource temporarily unavailable, number: 11
+[realsense2_camera_node-3]  24/08 19:44:13,912 WARNING [281472091023776] (messenger-libusb.cpp:42) control_transfer returned error, index: 768, error: Resource temporarily unavailable, number: 11
+[realsense2_camera_node-3]  24/08 19:44:33,991 WARNING [281472091023776] (messenger-libusb.cpp:42) control_transfer returned error, index: 768, error: Resource temporarily unavailable, number: 11
+[realsense2_camera_node-3]  24/08 19:44:34,041 WARNING [281472091023776] (messenger-libusb.cpp:42) control_transfer returned error, index: 768, error: Resource temporarily unavailable, number: 11
+[bt_navigator-7] [INFO] [1787571897.237234264] [bt_navigator]: Begin navigating from current location to (1.55, 0.10)
+[controller_server-4] [INFO] [1787571897.311746680] [controller_server]: Received a goal, begin computing control effort.
+[controller_server-4] [INFO] [1787571897.548882264] [controller_server]: Reached the goal!
+[bt_navigator-7] [INFO] [1787571897.586976312] [bt_navigator]: Navigation succeeded
+[realsense2_camera_node-3]  24/08 19:45:08,137 WARNING [281472091023776] (messenger-libusb.cpp:42) control_transfer returned error, index: 768, error: Resource temporarily unavailable, number: 11
+[realsense2_camera_node-3]  24/08 19:46:47,336 WARNING [281472091023776] (messenger-libusb.cpp:42) control_transfer returned error, index: 768, error: Resource temporarily unavailable, number: 11
+[realsense2_camera_node-3]  24/08 19:46:47,387 WARNING [281472091023776] (messenger-libusb.cpp:42) control_transfer returned error, index: 768, error: Resource temporarily unavailable, number: 11
+[planner_server-5] [WARN] [1787572078.052359064] [planner_server]: No planners specified in action call. Server will use only plugin GridBased  in server. This warning will appear once.
+[realsense2_camera_node-3]  24/08 19:48:41,620 WARNING [281472091023776] (messenger-libusb.cpp:42) control_transfer returned error, index: 768, error: Resource temporarily unavailable, number: 11
+[realsense2_camera_node-3]  24/08 19:50:02,793 WARNING [281472091023776] (messenger-libusb.cpp:42) control_transfer returned error, index: 768, error: Resource temporarily unavailable, number: 11
+[bt_navigator-7] [INFO] [1787572206.217034392] [bt_navigator]: Begin navigating from current location to (1.05, 0.07)
+[controller_server-4] [INFO] [1787572206.294661720] [controller_server]: Received a goal, begin computing control effort.
+[controller_server-4] [INFO] [1787572206.504882840] [controller_server]: Reached the goal!
+[controller_server-4] [INFO] [1787572206.505773432] [controller_server]: Received a goal, begin computing control effort.
+[controller_server-4] [INFO] [1787572206.645776568] [controller_server]: Reached the goal!
+[bt_navigator-7] [INFO] [1787572206.681400888] [bt_navigator]: Navigation succeeded
+[ERROR] [lifecycle_manager-9]: process has died [pid 12254, exit code -9, cmd '/opt/ros/foxy/lib/nav2_lifecycle_manager/lifecycle_manager --ros-args -r __node:=lifecycle_manager_navigation --params-file /tmp/launch_params_hs1acvx1 --params-file /tmp/launch_params_7ic_6jyy --params-file /tmp/launch_params_os4ryqqk'].
+[ERROR] [waypoint_follower-8]: process has died [pid 12243, exit code -9, cmd '/opt/ros/foxy/lib/nav2_waypoint_follower/waypoint_follower --ros-args -r __node:=waypoint_follower --params-file /tmp/tmpgu2pz45b -r /tf:=tf -r /tf_static:=tf_static'].
+[ERROR] [static_transform_publisher-1]: process has died [pid 12219, exit code -9, cmd '/opt/ros/foxy/lib/tf2_ros/static_transform_publisher 0.25 0.0 0.12 0 0 0 base_link camera_link --ros-args -r __node:=base2camera_tf_broadcaster'].
+[ERROR] [recoveries_server-6]: process has died [pid 12229, exit code -9, cmd '/opt/ros/foxy/lib/nav2_recoveries/recoveries_server --ros-args -r __node:=recoveries_server --params-file /tmp/tmpto5q7eh6 -r /tf:=tf -r /tf_static:=tf_static'].
+[ERROR] [bt_navigator-7]: process has died [pid 12240, exit code -9, cmd '/opt/ros/foxy/lib/nav2_bt_navigator/bt_navigator --ros-args -r __node:=bt_navigator --params-file /tmp/tmp94n1448r -r /tf:=tf -r /tf_static:=tf_static'].
+[ERROR] [odom_to_tf.py-2]: process has died [pid 12221, exit code -9, cmd '/home/ysc/lite_cog_ros2/nav/install/dr_nav2_mapless/lib/dr_nav2_mapless/odom_to_tf.py --ros-args -r __node:=odom_to_tf'].
+[ERROR] [planner_server-5]: process has died [pid 12227, exit code -9, cmd '/opt/ros/foxy/lib/nav2_planner/planner_server --ros-args -r __node:=planner_server --params-file /tmp/tmpcbedvioa -r /tf:=tf -r /tf_static:=tf_static'].
+[ERROR] [controller_server-4]: process has died [pid 12225, exit code -9, cmd '/opt/ros/foxy/lib/nav2_controller/controller_server --ros-args --params-file /tmp/tmplw3voaca -r /tf:=tf -r /tf_static:=tf_static'].
+[ERROR] [realsense2_camera_node-3]: process has died [pid 12223, exit code -9, cmd '/home/ysc/lite_cog_ros2/driver/realsense_ws/install/realsense2_camera/lib/realsense2_camera/realsense2_camera_node --ros-args --log-level info --ros-args -r __node:=camera -r __ns:=/camera --params-file /tmp/launch_params_0q0djdaj'].

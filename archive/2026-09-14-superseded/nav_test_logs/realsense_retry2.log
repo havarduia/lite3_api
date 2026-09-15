@@ -1,0 +1,35 @@
+[INFO] [launch]: All log files can be found below /home/ysc/.ros/log/2026-08-24-19-34-54-094827-lite-14031
+[INFO] [launch]: Default logging verbosity is set to INFO
+[INFO] [realsense2_camera_node-1]: process started with pid [14033]
+[realsense2_camera_node-1] 1787571294.611603 [0] realsense2: using network interface eth0 (udp/192.168.1.103) selected arbitrarily from: eth0, docker0
+[realsense2_camera_node-1] [0m[INFO] [1787571294.750420056] [camera.camera]: RealSense ROS v3.2.3[0m
+[realsense2_camera_node-1] [0m[INFO] [1787571294.750802808] [camera.camera]: Built with LibRealSense v2.50.0[0m
+[realsense2_camera_node-1] [0m[INFO] [1787571294.750908120] [camera.camera]: Running with LibRealSense v2.50.0[0m
+[realsense2_camera_node-1] [0m[INFO] [1787571295.177215160] [camera.camera]: Device with serial number 344322074523 was found.
+[realsense2_camera_node-1] [0m
+[realsense2_camera_node-1] [0m[INFO] [1787571295.177475288] [camera.camera]: Device with physical ID 4-3.1-3 was found.[0m
+[realsense2_camera_node-1] [0m[INFO] [1787571295.177600600] [camera.camera]: Device with name Intel RealSense D435I was found.[0m
+[realsense2_camera_node-1] [0m[INFO] [1787571295.179032632] [camera.camera]: Device with port number 4-3.1 was found.[0m
+[realsense2_camera_node-1] [0m[INFO] [1787571295.179193560] [camera.camera]: Device USB type: 3.2[0m
+[realsense2_camera_node-1] [0m[INFO] [1787571295.199538456] [camera.camera]: getParameters...[0m
+[realsense2_camera_node-1] filter_voxel: 1 filter_leaf_size_m: 0.05
+[realsense2_camera_node-1] [0m[INFO] [1787571295.323275992] [camera.camera]: setupDevice...[0m
+[realsense2_camera_node-1] [0m[INFO] [1787571295.323501560] [camera.camera]: JSON file is not provided[0m
+[realsense2_camera_node-1] [0m[INFO] [1787571295.323627544] [camera.camera]: Device Name: Intel RealSense D435I[0m
+[realsense2_camera_node-1] [0m[INFO] [1787571295.323727672] [camera.camera]: Device physical port: 4-3.1-3[0m
+[realsense2_camera_node-1] [0m[INFO] [1787571295.323818904] [camera.camera]: Device FW version: 05.13.00.50[0m
+[realsense2_camera_node-1] [0m[INFO] [1787571295.324008536] [camera.camera]: Device Product ID: 0x0B3A[0m
+[realsense2_camera_node-1] [0m[INFO] [1787571295.324145624] [camera.camera]: Enable PointCloud: On[0m
+[realsense2_camera_node-1] [0m[INFO] [1787571295.324232536] [camera.camera]: Align Depth: Off[0m
+[realsense2_camera_node-1] [0m[INFO] [1787571295.324312952] [camera.camera]: Sync Mode: On[0m
+[realsense2_camera_node-1] [0m[INFO] [1787571295.324505208] [camera.camera]: Device Sensors: [0m
+[realsense2_camera_node-1] [0m[INFO] [1787571295.498507160] [camera.camera]: Stereo Module was found.[0m
+[realsense2_camera_node-1] [0m[INFO] [1787571295.599988408] [camera.camera]: RGB Camera was found.[0m
+[realsense2_camera_node-1] [0m[INFO] [1787571295.600899160] [camera.camera]: Motion Module was found.[0m
+[realsense2_camera_node-1] [0m[INFO] [1787571295.601184728] [camera.camera]: (Infrared, 0) sensor isn't supported by current device! -- Skipping...[0m
+[realsense2_camera_node-1] [0m[INFO] [1787571295.601294840] [camera.camera]: (Fisheye, 0) sensor isn't supported by current device! -- Skipping...[0m
+[realsense2_camera_node-1] [0m[INFO] [1787571295.601375000] [camera.camera]: (Pose, 0) sensor isn't supported by current device! -- Skipping...[0m
+[realsense2_camera_node-1] [0m[INFO] [1787571295.601490168] [camera.camera]: Add Filter: pointcloud[0m
+[realsense2_camera_node-1] [0m[INFO] [1787571295.604995992] [camera.camera]: num_filters: 1[0m
+[realsense2_camera_node-1] [0m[INFO] [1787571295.605182968] [camera.camera]: Setting Dynamic reconfig parameters.[0m
+[ERROR] [realsense2_camera_node-1]: process has died [pid 14033, exit code -9, cmd '/home/ysc/lite_cog_ros2/driver/realsense_ws/install/realsense2_camera/lib/realsense2_camera/realsense2_camera_node --ros-args --log-level info --ros-args -r __node:=camera -r __ns:=/camera --params-file /tmp/launch_params_uwdhlfcg'].

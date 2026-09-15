@@ -1,0 +1,51 @@
+[INFO] [launch]: All log files can be found below /home/ysc/.ros/log/2026-08-24-19-33-10-071623-lite-13205
+[INFO] [launch]: Default logging verbosity is set to INFO
+[INFO] [realsense2_camera_node-1]: process started with pid [13207]
+[realsense2_camera_node-1] 1787571190.711909 [0] realsense2: using network interface eth0 (udp/192.168.1.103) selected arbitrarily from: eth0, docker0
+[realsense2_camera_node-1] [0m[INFO] [1787571190.842822168] [camera.camera]: RealSense ROS v3.2.3[0m
+[realsense2_camera_node-1] [0m[INFO] [1787571190.843178296] [camera.camera]: Built with LibRealSense v2.50.0[0m
+[realsense2_camera_node-1] [0m[INFO] [1787571190.843305432] [camera.camera]: Running with LibRealSense v2.50.0[0m
+[realsense2_camera_node-1] [0m[INFO] [1787571191.428010104] [camera.camera]: Device with serial number 344322074523 was found.
+[realsense2_camera_node-1] [0m
+[realsense2_camera_node-1] [0m[INFO] [1787571191.429414072] [camera.camera]: Device with physical ID 4-3.1-3 was found.[0m
+[realsense2_camera_node-1] [0m[INFO] [1787571191.429604280] [camera.camera]: Device with name Intel RealSense D435I was found.[0m
+[realsense2_camera_node-1] [0m[INFO] [1787571191.430943096] [camera.camera]: Device with port number 4-3.1 was found.[0m
+[realsense2_camera_node-1] [0m[INFO] [1787571191.431082360] [camera.camera]: Device USB type: 3.2[0m
+[realsense2_camera_node-1] [0m[INFO] [1787571191.447622840] [camera.camera]: getParameters...[0m
+[realsense2_camera_node-1] filter_voxel: 1 filter_leaf_size_m: 0.05
+[realsense2_camera_node-1] [0m[INFO] [1787571191.640232120] [camera.camera]: setupDevice...[0m
+[realsense2_camera_node-1] [0m[INFO] [1787571191.640436376] [camera.camera]: JSON file is not provided[0m
+[realsense2_camera_node-1] [0m[INFO] [1787571191.640555160] [camera.camera]: Device Name: Intel RealSense D435I[0m
+[realsense2_camera_node-1] [0m[INFO] [1787571191.640645624] [camera.camera]: Device physical port: 4-3.1-3[0m
+[realsense2_camera_node-1] [0m[INFO] [1787571191.640800024] [camera.camera]: Device FW version: 05.13.00.50[0m
+[realsense2_camera_node-1] [0m[INFO] [1787571191.640885016] [camera.camera]: Device Product ID: 0x0B3A[0m
+[realsense2_camera_node-1] [0m[INFO] [1787571191.640962136] [camera.camera]: Enable PointCloud: On[0m
+[realsense2_camera_node-1] [0m[INFO] [1787571191.641042104] [camera.camera]: Align Depth: Off[0m
+[realsense2_camera_node-1] [0m[INFO] [1787571191.641119640] [camera.camera]: Sync Mode: On[0m
+[realsense2_camera_node-1] [0m[INFO] [1787571191.641312248] [camera.camera]: Device Sensors: [0m
+[realsense2_camera_node-1] [0m[INFO] [1787571191.825174648] [camera.camera]: Stereo Module was found.[0m
+[realsense2_camera_node-1] [0m[INFO] [1787571191.907966616] [camera.camera]: RGB Camera was found.[0m
+[realsense2_camera_node-1] [0m[INFO] [1787571191.908841176] [camera.camera]: Motion Module was found.[0m
+[realsense2_camera_node-1] [0m[INFO] [1787571191.909295608] [camera.camera]: (Infrared, 0) sensor isn't supported by current device! -- Skipping...[0m
+[realsense2_camera_node-1] [0m[INFO] [1787571191.909438936] [camera.camera]: (Fisheye, 0) sensor isn't supported by current device! -- Skipping...[0m
+[realsense2_camera_node-1] [0m[INFO] [1787571191.910644920] [camera.camera]: (Pose, 0) sensor isn't supported by current device! -- Skipping...[0m
+[realsense2_camera_node-1] [0m[INFO] [1787571191.910772184] [camera.camera]: Add Filter: pointcloud[0m
+[realsense2_camera_node-1] [0m[INFO] [1787571191.914112408] [camera.camera]: num_filters: 1[0m
+[realsense2_camera_node-1] [0m[INFO] [1787571191.914287992] [camera.camera]: Setting Dynamic reconfig parameters.[0m
+[realsense2_camera_node-1] [0m[INFO] [1787571198.373701528] [camera.camera]: Done Setting Dynamic reconfig parameters.[0m
+[realsense2_camera_node-1] [0m[INFO] [1787571198.377049464] [camera.camera]: depth stream is enabled - width: 424, height: 240, fps: 30, Format: Z16[0m
+[realsense2_camera_node-1] [0m[INFO] [1787571198.377241944] [camera.camera]: setupPublishers...[0m
+[realsense2_camera_node-1] [0m[INFO] [1787571198.405724248] [camera.camera]: setupStreams...[0m
+[realsense2_camera_node-1]  24/08 19:33:18,692 WARNING [281473206696352] (messenger-libusb.cpp:42) control_transfer returned error, index: 768, error: Resource temporarily unavailable, number: 11
+[realsense2_camera_node-1] [0m[INFO] [1787571198.744994776] [camera.camera]: SELECTED BASE:Depth, 0[0m
+[realsense2_camera_node-1] [0m[INFO] [1787571198.753458008] [camera.camera]: Device Serial No: 344322074523[0m
+[realsense2_camera_node-1] [0m[INFO] [1787571198.760452696] [camera.camera]: RealSense Node Is Up![0m
+[realsense2_camera_node-1] [33m[WARN] [1787571198.827723672] [camera.camera]: [0m
+[realsense2_camera_node-1]  24/08 19:33:18,841 WARNING [281473206696352] (messenger-libusb.cpp:42) control_transfer returned error, index: 768, error: Resource temporarily unavailable, number: 11
+[realsense2_camera_node-1]  24/08 19:33:18,892 WARNING [281473206696352] (messenger-libusb.cpp:42) control_transfer returned error, index: 768, error: Resource temporarily unavailable, number: 11
+[realsense2_camera_node-1]  24/08 19:33:19,047 WARNING [281473206696352] (messenger-libusb.cpp:42) control_transfer returned error, index: 768, error: Resource temporarily unavailable, number: 11
+[realsense2_camera_node-1] [0m[INFO] [1787571199.189539256] [camera.camera]: publishing unordered pointcloud.[0m
+[realsense2_camera_node-1] [33m[WARN] [1787571199.381453464] [camera.camera]: Hardware Notification:Depth stream start failure,1.78757e+12,Error,Hardware Error[0m
+[realsense2_camera_node-1]  24/08 19:33:19,420 WARNING [281473206696352] (messenger-libusb.cpp:42) control_transfer returned error, index: 768, error: Resource temporarily unavailable, number: 11
+[realsense2_camera_node-1]  24/08 19:33:19,476 WARNING [281473206696352] (messenger-libusb.cpp:42) control_transfer returned error, index: 768, error: Resource temporarily unavailable, number: 11
+[ERROR] [realsense2_camera_node-1]: process has died [pid 13207, exit code -9, cmd '/home/ysc/lite_cog_ros2/driver/realsense_ws/install/realsense2_camera/lib/realsense2_camera/realsense2_camera_node --ros-args --log-level info --ros-args -r __node:=camera -r __ns:=/camera --params-file /tmp/launch_params_ah9ram97'].

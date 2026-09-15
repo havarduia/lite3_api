@@ -1,0 +1,194 @@
+#!/usr/bin/env python3
+"""Rocky walks a route and says what he sees along the way.
+
+    python3 rocky_walk.py                          # walk 2 m forward, commenting
+    python3 rocky_walk.py "walk 1.5, turn 90, walk 1, turn -90"
+    python3 rocky_walk.py "goto 2.5, goto 1.5 90"  # Nav2: routes around obstacles
+    python3 rocky_walk.py --interactive            # type steps one at a time
+    python3 rocky_walk.py --every 3 --speed 0.2 "walk 3"
+    python3 rocky_walk.py --dry-run                # comments only, no movement
+
+Steps (comma separated, or one per line with --interactive):
+    walk <m>            straight line, blind to routing, stops for obstacles
+    turn <deg>          in place, +ve = left
+    goto <m> [<deg>]    Nav2 goal <m> ahead of where he faces now, arriving
+                        turned <deg> (+ve = left). Plans around obstacles.
+
+Movement is lite3.py's: the robot stands first, walk() stops for obstacles
+within --stop metres using the depth camera (so realsense_ros2.service must be
+running; --blind walks without that guard), Ctrl-C is an e-stop (it also kills
+Nav2), and it sits again at the end. If any step is a goto - or with
+--interactive - mapless Nav2 is started after standing (it needs the pose
+settled first) and stopped before sitting. It sends its own controller
+heartbeat by default, so no handheld is needed - which also means Ctrl-C and
+the power switch are the only e-stops. --handheld uses the real controller.
+
+A step that fails (goal in an obstacle, planner abort, obstacle at the start)
+is reported and skipped; the API has already halted the robot by then.
+
+Commentary runs in a background thread: look (front camera -> Gemini Live ->
+Piper), wait --every seconds, look again, until the route is done. It never
+controls the robot, so a failed look is just printed and skipped.
+"""
+import argparse
+import sys
+import threading
+import time
+
+from rocky import Rocky
+
+WALKING = ('You are walking right now. In one or two short sentences, say what '
+           'you see ahead of you and what you think of it. Do not repeat what '
+           'you already said unless something changed. Only describe what you '
+           'see; do not announce moves, the walking is not yours to choose.')
+DONE = 'You just finished your walk. Say one short sentence about it.'
+NAV_STATUS = {4: 'arrived', 5: 'cancelled', 6: 'aborted - no path'}
+
+
+def parse_step(step):
+    """'walk 1.5' -> ('walk', [1.5]); 'goto 2 90' -> ('goto', [2.0, 90.0])"""
+    verb, *args = step.split()
+    nargs = {'walk': (1,), 'turn': (1,), 'goto': (1, 2)}
+    if verb not in nargs or len(args) not in nargs[verb]:
+        raise ValueError('bad step %r: use "walk <m>", "turn <deg>" or '
+                         '"goto <m> [<deg>]"' % step)
+    return verb, [float(x) for x in args]
+
+
+def parse_route(text):
+    try:
+        return [parse_step(s) for s in filter(None, (s.strip() for s in text.split(',')))]
+    except ValueError as e:
+        raise SystemExit(e)
+
+
+class Commentator(threading.Thread):
+    def __init__(self, rocky, every):
+        super().__init__(daemon=True)
+        self.rocky, self.every = rocky, every
+        self.stop = threading.Event()
+
+    def run(self):
+        while not self.stop.is_set():
+            t = time.time()
+            try:
+                print('\nRocky:', end=' ', flush=True)
+                self.rocky.look(WALKING, on_sentence=lambda s: print(s, end=' ', flush=True))
+                print(flush=True)
+            except Exception as e:          # never let a look take down the walk
+                print('\n[look failed: %s]' % e, flush=True)
+            self.stop.wait(max(0.0, self.every - (time.time() - t)))
+
+
+def run_step(bot, a, verb, args):
+    from lite3 import Lite3Error
+    try:
+        if verb == 'walk':
+            r = bot.walk(args[0], speed=a.speed,
+                         stop_distance=None if a.blind else a.stop)
+            print('\n[walked %.2f m, %s]' % (r['moved'], r['reason']))
+        elif verb == 'turn':
+            bot.turn_deg(args[0])
+            print('\n[turned %+.0f deg]' % args[0])
+        else:
+            status = bot.goto(*args)
+            print('\n[goto %.1f m: %s]' % (args[0], NAV_STATUS.get(status, 'status %s' % status)))
+    except Lite3Error as e:
+        print('\n[%s %s skipped: %s]' % (verb, ' '.join('%g' % x for x in args), e))
+
+
+def steps_from_stdin():
+    print('Steps: walk <m> | turn <deg> | goto <m> [<deg>]. Ctrl-D to finish.')
+    while True:
+        try:
+            line = input('step> ').strip()
+        except EOFError:
+            return
+        if line:
+            try:
+                yield parse_step(line)
+            except ValueError as e:
+                print(e)
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__.split('\n')[0])
+    ap.add_argument('route', nargs='?', default='walk 2')
+    ap.add_argument('--interactive', action='store_true',
+                    help='read steps from the keyboard instead of the route')
+    ap.add_argument('--every', type=float, default=0.0,
+                    help='min seconds from one comment to the next (0 = back to back)')
+    ap.add_argument('--speed', type=float, default=0.15)
+    ap.add_argument('--stop', type=float, default=0.45,
+                    help='obstacle stop distance in metres, measured from the '
+                         'BODY CENTRE: the nose is ~0.33 m ahead of it, so '
+                         '0.45 stops ~12 cm short of the nose')
+    ap.add_argument('--blind', action='store_true',
+                    help='walk without the depth-camera obstacle stop')
+    ap.add_argument('--handheld', dest='heartbeat', action='store_false',
+                    help='use the powered-on handheld instead of our own heartbeat')
+    ap.add_argument('--dry-run', action='store_true', help='comment only, do not move')
+    ap.add_argument('--voice', default=None)
+    a = ap.parse_args()
+    route = None if a.interactive else parse_route(a.route)
+    use_nav = a.interactive or any(v == 'goto' for v, _ in route)
+    if not a.blind and a.stop < 0.4:
+        raise SystemExit('--stop %.2f is inside or at the robot\'s nose (~0.33 m from '
+                         'the body centre the distance is measured from); the '
+                         'camera cannot see that close either. Use >= 0.4.' % a.stop)
+
+    rocky = Rocky(**({'voice': a.voice} if a.voice else {}))
+    talk = Commentator(rocky, a.every)
+    try:
+        if a.dry_run:
+            talk.start()
+            time.sleep(20)
+            return 0
+        from lite3 import Lite3
+        with Lite3() as bot:
+            if a.heartbeat:
+                bot.heartbeat_start()
+            try:
+                # wait_ready() alone can return at once on a stale 98 (idle,
+                # lying) from before the heartbeat took hold; the 8 -> 9 -> 1
+                # handover takes ~2 s and a stand sent inside it is ignored.
+                if a.heartbeat:
+                    time.sleep(3.0)
+                if a.heartbeat and not bot.wait_ready():
+                    raise SystemExit('interlock never came up')
+                bot.stand()
+                if use_nav:
+                    # Standing makes leg odometry jump; nav_start() refuses
+                    # until the pose has settled, so give it a moment first.
+                    deadline = time.time() + 15
+                    while not bot.pose_settled() and time.time() < deadline:
+                        time.sleep(0.5)
+                    print('[starting Nav2...]', flush=True)
+                    bot.nav_start()
+                    print('[Nav2 up]', flush=True)
+                talk.start()
+                for verb, args in (steps_from_stdin() if a.interactive else route):
+                    run_step(bot, a, verb, args)
+            finally:
+                talk.stop.set()
+                bot.halt()
+                if talk.is_alive():
+                    talk.join(timeout=30)   # let the current comment finish
+                try:
+                    if use_nav:
+                        bot.nav_stop()
+                    bot.sit()               # sit FIRST ...
+                finally:
+                    if a.heartbeat:
+                        bot.heartbeat_stop()    # ... disarm SECOND
+        print('\nRocky:', end=' ', flush=True)
+        rocky.reply(DONE, on_sentence=lambda s: print(s, end=' ', flush=True))
+        print()
+        return 0
+    finally:
+        talk.stop.set()
+        rocky.close()
+
+
+if __name__ == '__main__':
+    sys.exit(main())

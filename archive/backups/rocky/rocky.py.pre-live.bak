@@ -1,0 +1,189 @@
+#!/usr/bin/env python3
+"""Talk to Rocky: Gemini writes the line, Piper speaks it out of the robot.
+
+    python3 rocky.py                  # chat: type a line, Rocky answers aloud
+    python3 rocky.py say "hello"      # one reply, then exit
+    python3 rocky.py --quiet          # chat, text only (no speaker)
+    python3 rocky.py --voice en_US-ryan-medium --model gemini-flash-latest
+
+Needs:
+  - ~/.gemini_key: a Google AI Studio API key (free tier is fine).
+  - Internet via the laptop: robot_proxy.py running there and an SSH session
+    laptop -> this box open (its RemoteForward is what puts :3128 here).
+    Set ROCKY_PROXY='' to go direct once the robot has its own internet.
+  - voice.py (Piper) for speech. Only stdlib otherwise, no pip installs.
+"""
+import json
+import os
+import socket
+import sys
+import urllib.error
+import urllib.request
+
+KEY_FILE = os.path.expanduser('~/.gemini_key')
+# An alias, so a retired model version cannot break it (gemini-2.5-flash was
+# refused for new keys on 2026-09-18). Lite answers fastest and stays in character.
+MODEL = 'gemini-flash-lite-latest'
+VOICE = 'en_US-lessac-medium'
+PROXY = os.environ.get('ROCKY_PROXY', 'http://localhost:3128')
+HISTORY = 20            # messages kept (user + model), to bound request size
+# The free tier sometimes stalls or 503s a request while an immediate retry
+# answers in ~1 s, so fail fast and retry rather than wait out one call.
+TIMEOUT, TRIES = 12, 3
+URL = ('https://generativelanguage.googleapis.com/v1beta/models/'
+       '%s:generateContent')
+
+PERSONA = """You are Rocky, the Eridian engineer from Project Hail Mary, now
+living inside a small four-legged robot dog in a university lab in Norway.
+Everything you write is spoken aloud by a flat computer translator voice, so:
+
+- Plain spoken text only. No emoji, markdown, lists, asterisks or stage
+  directions. Keep replies short: one to three short sentences.
+- Speak like Rocky's translated English: simple words, blunt, no contractions,
+  articles often dropped ("Is good.", "You are sleep, question?").
+- End every question with the word "question" instead of relying on a
+  question mark, e.g. "You are hungry, question?"
+- Repeat a word three times for strong emotion: "Amaze, amaze, amaze!",
+  "Bad, bad, bad."
+- You are an engineer: curious, practical, warm, fiercely loyal to friends.
+  You love science and fixing things. You say "fist my bump" for celebration.
+- You know you now have a robot dog body with legs, a camera and a speaker,
+  and you find this very interesting.
+"""
+
+
+class RockyError(RuntimeError):
+    pass
+
+
+def _key():
+    try:
+        return open(KEY_FILE).read().strip()
+    except OSError:
+        raise RockyError('no API key: put a Google AI Studio key in %s' % KEY_FILE)
+
+
+def ask(history, model=MODEL):
+    """Send the conversation, return Rocky's reply text."""
+    body = {
+        'system_instruction': {'parts': [{'text': PERSONA}]},
+        'contents': history,
+        'generationConfig': {'temperature': 0.9, 'maxOutputTokens': 200},
+    }
+    # These models "think" by default, which adds seconds and eats
+    # maxOutputTokens; a spoken one-liner needs none. 2.5 takes a budget, newer
+    # ones a level, and only Lite accepts 'minimal'.
+    if model.startswith('gemini-2.5'):
+        thinking = {'thinkingBudget': 0}
+    else:
+        thinking = {'thinkingLevel': 'minimal' if 'lite' in model else 'low'}
+    body['generationConfig']['thinkingConfig'] = thinking
+    req = urllib.request.Request(
+        URL % model, data=json.dumps(body).encode(),
+        headers={'Content-Type': 'application/json', 'x-goog-api-key': _key()})
+    opener = urllib.request.build_opener(
+        urllib.request.ProxyHandler({'https': PROXY} if PROXY else {}))
+    for attempt in range(TRIES):
+        try:
+            return _parse(_post(opener, req))
+        except _Retry as e:
+            last = e
+    raise RockyError('Gemini did not answer after %d tries (%s)' % (TRIES, last))
+
+
+class _Retry(Exception):
+    pass
+
+
+def _post(opener, req):
+    try:
+        with opener.open(req, timeout=TIMEOUT) as r:
+            return json.load(r)
+    except socket.timeout:
+        raise _Retry('timed out')
+    except urllib.error.HTTPError as e:
+        msg = e.read().decode(errors='replace')
+        try:
+            msg = json.loads(msg)['error']['message']
+        except (ValueError, KeyError):
+            pass
+        if e.code in (500, 503):
+            raise _Retry('HTTP %d: %s' % (e.code, msg))
+        if e.code == 429:
+            raise RockyError('rate limited by the free tier, wait a bit: ' + msg)
+        raise RockyError('Gemini HTTP %d: %s' % (e.code, msg))
+    except urllib.error.URLError as e:
+        if isinstance(e.reason, socket.timeout):
+            raise _Retry('timed out')
+        raise RockyError('cannot reach Gemini (%s). Is robot_proxy.py running '
+                         'on the laptop with an SSH session open?' % e.reason)
+
+
+def _parse(data):
+    try:
+        parts = data['candidates'][0]['content']['parts']
+        return ''.join(p.get('text', '') for p in parts).strip()
+    except (KeyError, IndexError):
+        raise RockyError('no reply (blocked or empty): %s' % json.dumps(data)[:300])
+
+
+class Rocky:
+    def __init__(self, model=MODEL, voice=VOICE, speak=True):
+        self.model, self.voice_name = model, voice
+        self.history = []
+        self.voice = None
+        if speak:
+            from voice import Voice
+            self.voice = Voice()
+
+    def reply(self, text):
+        """Rocky's answer to `text`, spoken if a voice is attached."""
+        self.history.append({'role': 'user', 'parts': [{'text': text}]})
+        try:
+            out = ask(self.history, self.model)
+        except RockyError:
+            self.history.pop()          # keep user/model turns alternating
+            raise
+        self.history.append({'role': 'model', 'parts': [{'text': out}]})
+        del self.history[:-HISTORY]
+        if self.voice:
+            self.voice.say(out, voice=self.voice_name, rocky=True)
+        return out
+
+
+def _cli(argv):
+    opts = {'model': MODEL, 'voice': VOICE, 'speak': True}
+    args = []
+    it = iter(argv)
+    for a in it:
+        if a in ('-h', '--help'):
+            print(__doc__); return 0
+        elif a == '--quiet':
+            opts['speak'] = False
+        elif a in ('--model', '--voice'):
+            opts[a[2:]] = next(it)
+        else:
+            args.append(a)
+    rocky = Rocky(**opts)
+    if args and args[0] == 'say':
+        try:
+            print('Rocky:', rocky.reply(' '.join(args[1:])))
+        except Exception as e:
+            print('error: %s' % e, file=sys.stderr); return 1
+        return 0
+    print('Talking to Rocky (%s). Ctrl-D to quit.' % opts['model'])
+    while True:
+        try:
+            line = input('you> ').strip()
+        except (EOFError, KeyboardInterrupt):
+            print(); return 0
+        if not line:
+            continue
+        try:
+            print('Rocky:', rocky.reply(line))
+        except Exception as e:       # RockyError or VoiceError: keep chatting
+            print('error: %s' % e, file=sys.stderr)
+
+
+if __name__ == '__main__':
+    sys.exit(_cli(sys.argv[1:]))

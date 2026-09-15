@@ -1,0 +1,985 @@
+#!/usr/bin/env python3
+"""lite3 - one-import API for the DeepRobotics Lite3 Pro on ROS2 Foxy.
+
+    source ~/lite3_env.sh
+    python3 -c "
+    from lite3 import Lite3
+    with Lite3() as bot:
+        bot.stand()
+        bot.walk(0.5)
+        print(bot.scan_text())
+    "
+
+A Lite3 instance owns one rclpy node spinning in a background thread, so state
+is always live: bot.battery, bot.pose and bot.standing are plain attributes,
+not callbacks you have to pump. Motion calls block until they finish and are
+guaranteed to leave a zero Twist behind, including on exception or Ctrl-C.
+
+Everything the robot gets wrong quietly is enforced here rather than left to
+the caller:
+
+  * RMW is pinned to CycloneDDS before rclpy loads. A FastRTPS shell discovers
+    nothing and hangs with no error.
+  * Auto mode is set before any velocity. In manual mode /cmd_vel is silently
+    ignored - packets arrive and nothing happens.
+  * Motion refuses below 20% battery, where the robot declines to stand and
+    reports no reason.
+  * Motion refuses unless basic_state == 6 (standing). Velocity is ignored
+    when the robot is prone, again silently.
+  * nav_start() refuses unless the robot is standing AND its pose has settled.
+    The stand-up transition jumps leg odometry by over a metre in one step; a
+    costmap built before that jump shows a clear path straight into a real
+    obstacle.
+  * The nav2 stack is launched into its own process group and stopped by that
+    group. Its children do not carry the launch file's name, so pkill -f
+    dr_nav2_mapless leaves them running - but widening the pattern to catch
+    them reaches static_transform_publisher, which transfer_ros2 and
+    realsense_ros2 also use, and takes those services down too.
+  * goto() checks the goal cell for LETHAL before sending. NavFn cannot plan
+    into one and the 0.15 m tolerance will not escape it.
+"""
+import math
+import os
+import signal
+import socket
+import struct
+import subprocess
+import threading
+import time
+from contextlib import contextmanager
+os.environ.setdefault('RMW_IMPLEMENTATION', 'rmw_cyclonedds_cpp')
+
+import rclpy                                           # noqa: E402
+from geometry_msgs.msg import Twist                    # noqa: E402
+from nav_msgs.msg import OccupancyGrid, Odometry       # noqa: E402
+from rclpy.executors import SingleThreadedExecutor     # noqa: E402
+from rclpy.node import Node                            # noqa: E402
+from rclpy.qos import (DurabilityPolicy, QoSProfile,   # noqa: E402
+                       ReliabilityPolicy)
+from sensor_msgs.msg import PointCloud2                # noqa: E402
+from std_msgs.msg import Int32MultiArray               # noqa: E402
+from tf2_ros import Buffer, TransformListener          # noqa: E402
+
+# --- jy_exe on the motion computer -----------------------------------------
+MOTION_ADDR = ('192.168.1.120', 43893)
+CMD_STAND_TOGGLE = 0x21010202
+CMD_MODE_AUTO = 0x21010C03
+CMD_MODE_MANUAL = 0x21010C02
+CMD_ZERO = 0x31010C05
+CMD_HEARTBEAT = 0x21040001
+HEARTBEAT_HZ = 2.0
+
+# --- /robot_state_debug ----------------------------------------------------
+STATE_FIELDS = ('basic', 'gait', 'policy', 'motion', 'task', 'need_move',
+                'zero_flag', 'battery')
+STANDING = 6
+# Lying/ready postures, reached different ways: 1 after a commanded lie-down,
+# 8 after power-on, 98 seen on a cold boot. Transitional states (4, 5, 7) and
+# zeroing (17) are not safe to toggle from.
+LYING = (1, 8, 98)
+# Settled, commandable states. 9 is deliberately NOT here: it is the
+# transitional value on the way 8 -> 9 -> 1 when a controller appears (and it
+# also shows up in the low-battery 1 -> 8 -> 9 -> 1 oscillation). Treating 9
+# as ready makes the next command get refused for toggling mid-transition.
+READY_STATES = (1, 6, 98)
+
+BATTERY_REFUSE = 20
+BATTERY_WARN = 30
+
+# --- limits ----------------------------------------------------------------
+MAX_SPEED = 0.6          # m/s
+MAX_YAW_RATE = 0.8       # rad/s
+HARD_TIMEOUT = 30.0      # s, ceiling on any single motion call
+
+# --- camera mounting, from voa/launch/voa_launch.py -------------------------
+# base_link -> camera_link  xyz 0.25489 0 0.07249  rpy 0 0.34907 0
+# The 20 degree nose-down pitch is REAL. Assume the camera is level and the
+# floor reads as a wall across the whole view at ~0.54 m.
+CAM_PITCH, CAM_X, CAM_Z = 0.34907, 0.25489, 0.07249
+STAND_HEIGHT = 0.33
+FLOOR_MARGIN, CEILING = 0.08, 0.60
+MIN_VALID, MAX_RANGE = 0.15, 4.0
+
+# --- nav2 ------------------------------------------------------------------
+NAV_LAUNCH = ('ros2 launch dr_nav2_mapless dr_nav2_mapless.launch.py '
+              'launch_realsense:=false use_rviz:=false')
+# Nav2's children do not carry the launch file's name, so killing by name
+# either misses them or, if you widen the pattern, reaches outside the stack.
+# static_transform_publisher in particular is used by transfer and realsense
+# too - pkill'ing it takes THOSE services down with it, because ros2 launch
+# tears down a whole unit when one of its children dies. So the stack is
+# launched via setsid into its own process group and killed by that group.
+NAV_PGID_FILE = '/tmp/lite3_nav2.pgid'
+NAV_MARKERS = ('dr_nav2_mapless', 'bt_navigator', 'planner_server',
+               'controller_server')
+# Never kill a group containing one of these - they belong to the services.
+# Match executables, not words: the nav2 launch line itself contains
+# "launch_realsense:=false", and a bare 'realsense' here made the guard
+# exclude the very group it was meant to kill.
+NAV_NEVER = ('jetson2motion', 'transfer_ros2', 'start_transfer',
+             'realsense2_camera', 'realsense_ros2', 'voa_composition',
+             'voa_ros2')
+
+LETHAL = 99
+
+
+class Lite3Error(RuntimeError):
+    """Refused for a reason the caller can act on."""
+
+
+def _udp(code, value=0):
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    s.sendto(struct.pack('<III', code, value, 0), MOTION_ADDR)
+    s.close()
+
+
+class _Node(Node):
+    def __init__(self):
+        super().__init__('lite3_api')
+        best = QoSProfile(depth=1)
+        best.reliability = ReliabilityPolicy.BEST_EFFORT
+        cloud_qos = QoSProfile(depth=2)
+        cloud_qos.reliability = ReliabilityPolicy.BEST_EFFORT
+        latched = QoSProfile(depth=1)
+        latched.reliability = ReliabilityPolicy.RELIABLE
+        latched.durability = DurabilityPolicy.TRANSIENT_LOCAL
+
+        self.pub = self.create_publisher(Twist, 'cmd_vel', best)
+        self.state = None
+        self.odom = None
+        self.cloud = None
+        self.grid = None
+        self.create_subscription(Int32MultiArray, '/robot_state_debug',
+                                 self._state_cb, 10)
+        self.create_subscription(Odometry, 'leg_odom2', self._odom_cb, 10)
+        self.create_subscription(PointCloud2, '/camera/depth/color/points',
+                                 self._cloud_cb, cloud_qos)
+        self.create_subscription(OccupancyGrid, '/global_costmap/costmap',
+                                 self._grid_cb, latched)
+        self.tf = Buffer()
+        self.tf_listener = TransformListener(self.tf, self)
+
+    def _state_cb(self, m):
+        self.state = dict(zip(STATE_FIELDS, m.data))
+
+    def _odom_cb(self, m):
+        p, q = m.pose.pose.position, m.pose.pose.orientation
+        yaw = math.atan2(2.0 * (q.w * q.z + q.x * q.y),
+                         1.0 - 2.0 * (q.y * q.y + q.z * q.z))
+        self.odom = (p.x, p.y, yaw)
+
+    def _cloud_cb(self, m):
+        self.cloud = m
+
+    def _grid_cb(self, m):
+        self.grid = m
+
+
+class Lite3:
+    """Live handle on the robot. Use as a context manager."""
+
+    def __init__(self, auto_mode=True, timeout=10.0, estop_on_sigint=True):
+        rclpy.init(args=None)
+        self._node = _Node()
+        self._exec = SingleThreadedExecutor()
+        self._exec.add_node(self._node)
+        self._stop_spin = threading.Event()
+        self._thread = threading.Thread(target=self._spin, daemon=True)
+        self._thread.start()
+        self._closed = False
+        self._clients = []
+        self._hb_stop = threading.Event()
+        self._hb_thread = None
+        self._hb_count = 0
+        self._goal_handle = None
+        self._estopped = False
+        self._prev_sigint = None
+        if estop_on_sigint:
+            self._install_sigint()
+        if not self._wait(lambda: self._node.state is not None, timeout):
+            self.close()
+            raise Lite3Error(
+                'no /robot_state_debug within %.0fs. Is transfer_ros2.service '
+                'running, and is Lite_motion stopped? (They fight over UDP '
+                '43897.)' % timeout)
+        if auto_mode:
+            self.auto()
+
+    # --- emergency stop ----------------------------------------------------
+    # Ctrl-C alone is NOT a stop once Nav2 is driving: controller_server is a
+    # separate process publishing its own cmd_vel, so zero Twists from here
+    # just race it. A real stop has to remove the other publisher too.
+    def _install_sigint(self):
+        try:
+            self._prev_sigint = signal.getsignal(signal.SIGINT)
+            signal.signal(signal.SIGINT, self._on_sigint)
+        except ValueError:
+            # Not the main thread; signals cannot be installed there.
+            self._prev_sigint = None
+
+    def _on_sigint(self, signum, frame):
+        print('\n*** Ctrl-C - EMERGENCY STOP ***')
+        self.estop()
+        raise KeyboardInterrupt
+
+    def estop(self, disarm=False):
+        """Stop the robot as hard as software can, in the order that matters.
+
+        1. SIGINT is ignored for the duration, so a second Ctrl-C cannot
+           abort the stop halfway and leave the robot walking.
+        2. Any Nav2 goal is cancelled.
+        3. Zero Twist burst, so whatever is still listening gets a stop.
+        4. The Nav2 stack is killed - this is the one that matters, because
+           controller_server outlives this process and keeps publishing.
+        5. Another zero Twist burst, now that nothing else is publishing.
+
+        disarm=True additionally stops the heartbeat, after which jy_exe
+        ignores every network command (basic_state falls to 8). That is the
+        strongest stop available, but UNTESTED while the robot is standing -
+        it may or may not settle gracefully - so it is opt-in.
+        """
+        prev = None
+        try:
+            prev = signal.getsignal(signal.SIGINT)
+            signal.signal(signal.SIGINT, signal.SIG_IGN)
+        except ValueError:
+            pass
+        try:
+            if self._goal_handle is not None:
+                try:
+                    self._goal_handle.cancel_goal_async()
+                except Exception:
+                    pass
+                self._goal_handle = None
+            self.halt()
+            try:
+                self.nav_stop()
+            except Exception:
+                pass
+            self.halt()
+            if disarm:
+                self.heartbeat_stop()
+            self._estopped = True
+        finally:
+            if prev is not None:
+                try:
+                    signal.signal(signal.SIGINT, prev)
+                except ValueError:
+                    pass
+        return True
+
+    # --- plumbing ----------------------------------------------------------
+    def _spin(self):
+        while not self._stop_spin.is_set():
+            self._exec.spin_once(timeout_sec=0.05)
+
+    @staticmethod
+    def _wait(pred, timeout, period=0.05):
+        end = time.time() + timeout
+        while time.time() < end:
+            if pred():
+                return True
+            time.sleep(period)
+        return pred()
+
+    def close(self):
+        if self._closed:
+            return
+        self._closed = True
+        if self._prev_sigint is not None:
+            try:
+                signal.signal(signal.SIGINT, self._prev_sigint)
+            except ValueError:
+                pass
+        # Stop the robot BEFORE dropping the keepalive, not after. Stopping the
+        # keepalive disengages the interlock (basic_state -> 8), and whether a
+        # STANDING robot settles gracefully from there has never been observed
+        # - we have only ever seen it disengage while he was lying down. So
+        # halt while commands are still being accepted, then disarm.
+        try:
+            self.halt()
+        except Exception:
+            pass
+        self.heartbeat_stop()
+        # Teardown order is load-bearing and each step is a crash we hit:
+        #   1. stop the spin thread FIRST - destroying anything underneath a
+        #      live executor segfaults,
+        #   2. then action clients, while the node is still alive, or
+        #      ActionClient.__del__ runs post-teardown and raises InvalidHandle,
+        #   3. then the executor and the node.
+        self._stop_spin.set()
+        self._thread.join(timeout=5.0)
+        for c in self._clients:
+            try:
+                c.destroy()
+            except Exception:
+                pass
+        self._clients = []
+        try:
+            self._exec.shutdown(timeout_sec=2.0)
+            self._exec.remove_node(self._node)
+            self._node.destroy_node()
+        except Exception:
+            pass
+        try:
+            rclpy.shutdown()
+        except Exception:
+            pass
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        self.close()
+        return False
+
+    # --- state -------------------------------------------------------------
+    @property
+    def state(self):
+        """dict: basic, gait, policy, motion, task, need_move, zero_flag, battery."""
+        return dict(self._node.state or {})
+
+    @property
+    def battery(self):
+        """Percent, or None on an older transfer build that does not publish it."""
+        return self.state.get('battery')
+
+    @property
+    def standing(self):
+        return self.state.get('basic') == STANDING
+
+    @property
+    def pose(self):
+        """(x, y, yaw) in the odom frame, or None."""
+        return self._node.odom
+
+    def wait_pose(self, timeout=5.0):
+        if not self._wait(lambda: self._node.odom is not None, timeout):
+            raise Lite3Error('no /leg_odom2 - refusing to move blind')
+        return self._node.odom
+
+    def pose_settled(self, window=1.5, tol=0.02):
+        """True if the robot's odometry has not moved for `window` seconds.
+
+        The stand-up transition jumps the pose by over a metre in one step.
+        Anything that builds a world model must wait for this to be True.
+        """
+        self.wait_pose()
+        a = self.pose
+        time.sleep(window)
+        b = self.pose
+        return math.hypot(b[0] - a[0], b[1] - a[1]) <= tol
+
+    # --- posture and mode --------------------------------------------------
+    
+    def heartbeat_start(self):
+        """Emit the controller keepalive at 2 Hz until stopped.
+        SAFETY: this replaces the handheld's role in the interlock - the robot
+        will accept commands with no controller powered on."""
+        if self.heartbeat_running:
+            return
+        self._hb_stop.clear()
+        self._hb_count = 0
+        self._hb_thread = threading.Thread(target=self._hb_loop, daemon=True)
+        self._hb_thread.start()
+
+    def _hb_loop(self):
+        while not self._hb_stop.is_set():
+            try:
+                _udp(CMD_HEARTBEAT)
+                self._hb_count += 1
+            except OSError:
+                pass
+            self._hb_stop.wait(1.0 / HEARTBEAT_HZ)
+
+    def heartbeat_stop(self):
+        self._hb_stop.set()
+        if self._hb_thread is not None:
+            self._hb_thread.join(timeout=2.0)
+            self._hb_thread = None
+
+    @property
+    def heartbeat_running(self):
+        return self._hb_thread is not None and self._hb_thread.is_alive()
+
+    @contextmanager
+    def heartbeat(self):
+        self.heartbeat_start()
+        try:
+            yield self
+        finally:
+            self.heartbeat_stop()
+    
+    def wait_ready(self, timeout=10.0):
+        """Block until basic_state is SETTLED and commandable. True if it is.
+
+        The transition after a controller appears runs 8 -> 9 -> 1 over about
+        two seconds, and **9 is transitional, not ready**. Waiting merely for
+        "not 8" returns during that window, and the stand() that follows is
+        refused for toggling from a transitional state. So wait for one of the
+        settled values instead.
+        """
+        return self._wait(lambda: self.state.get('basic') in READY_STATES,
+                          timeout)
+
+    def auto(self):
+        """Required before any velocity. No topic reports the mode, so we just
+        set it; touching a handheld joystick silently reverts it to manual."""
+        _udp(CMD_MODE_AUTO)
+        time.sleep(0.5)
+
+    def manual(self):
+        _udp(CMD_MODE_MANUAL)
+        time.sleep(0.5)
+
+    def zero(self):
+        _udp(CMD_ZERO)
+
+    def stand(self, timeout=20.0):
+        """Stand up. Idempotent - the underlying command is a toggle, this is not."""
+        if self.standing:
+            return True
+        basic = self.state.get('basic')
+        if basic not in LYING:
+            raise Lite3Error(
+                'basic_state=%s is transitional or unknown; expected one of %s '
+                '(lying). Not toggling - it could lie the robot down mid-move.'
+                % (basic, LYING))
+        self._require_battery()
+        _udp(CMD_STAND_TOGGLE)
+        if not self._wait(lambda: self.standing, timeout):
+            raise Lite3Error(
+                'timed out standing (basic_state=%s). Is the handheld powered '
+                'ON and connected? With it off, jy_exe ignores every network '
+                'command and basic_state sits at 8.' % self.state.get('basic'))
+        time.sleep(1.0)          # let the pose settle before anyone reads it
+        return True
+
+    def sit(self, timeout=20.0):
+        """Lie down. Idempotent."""
+        if not self.standing:
+            return True
+        self.halt()
+        _udp(CMD_STAND_TOGGLE)
+        return self._wait(lambda: self.state.get('basic') in LYING, timeout)
+
+    # --- motion ------------------------------------------------------------
+    def _require_battery(self, force=False):
+        b = self.battery
+        if b is None or force:
+            return
+        if b < BATTERY_REFUSE:
+            raise Lite3Error(
+                'battery %d%% is below %d%%. The robot will refuse to stand and '
+                'will not say why. Pass force=True to override.'
+                % (b, BATTERY_REFUSE))
+        if b < BATTERY_WARN:
+            print('WARNING: battery %d%% - charge soon' % b)
+
+    def _require_standing(self):
+        if not self.standing:
+            raise Lite3Error(
+                'basic_state=%s, not standing (%d). Velocity is silently '
+                'ignored unless the robot is standing - call stand() first.'
+                % (self.state.get('basic'), STANDING))
+
+    def _drive(self, vx=0.0, vy=0.0, wz=0.0):
+        t = Twist()
+        t.linear.x, t.linear.y, t.angular.z = float(vx), float(vy), float(wz)
+        self._node.pub.publish(t)
+
+    def halt(self):
+        """Publish a zero Twist, repeatedly. Best-effort QoS can drop one."""
+        for _ in range(20):
+            self._drive()
+            time.sleep(0.02)
+
+    def _run(self, vx, vy, wz, done, limit, force, abort=None):
+        """Drive until done(), the time limit, or abort() returns a reason."""
+        self._require_battery(force)
+        self._require_standing()
+        self.auto()
+        self.wait_pose()
+        start = self.pose
+        deadline = time.time() + min(limit, HARD_TIMEOUT)
+        reason = 'time limit'
+        try:
+            while time.time() < deadline:
+                self._drive(vx, vy, wz)
+                time.sleep(0.05)
+                if abort is not None:
+                    stop = abort()
+                    if stop:
+                        reason = stop
+                        break
+                if done(start, self.pose):
+                    reason = 'target reached'
+                    break
+        finally:
+            self.halt()
+            time.sleep(0.5)
+        return {'reason': reason, 'start': start, 'end': self.pose}
+
+    def walk(self, distance, speed=0.15, stop_distance=0.6, force=False):
+        """Walk forward `distance` metres. Blocking. Negative walks backward.
+
+        Stops early if the depth camera sees something within `stop_distance`
+        metres of the path ahead; the result's 'reason' says which obstacle
+        and how far. Pass stop_distance=None to walk blind.
+
+        The camera faces FORWARD ONLY, so the guard cannot apply to a negative
+        distance - backing up is always blind, and it says so once.
+        """
+        speed = abs(speed)
+        if not 0 < speed <= MAX_SPEED:
+            raise Lite3Error('speed must be in (0, %s] m/s' % MAX_SPEED)
+        vx = math.copysign(speed, distance)
+        target = abs(distance)
+
+        def done(s, p):
+            return p is not None and math.hypot(p[0] - s[0], p[1] - s[1]) >= target
+
+        abort = None
+        if stop_distance is not None:
+            # Posture first: a prone robot's camera stares at the floor a few
+            # centimetres away, so the clearance pre-flight would report an
+            # "obstacle" and hide the real problem.
+            self._require_battery(force)
+            self._require_standing()
+            if distance < 0:
+                print('NOTE: the depth camera only looks forward - backing up '
+                      'is unguarded')
+            else:
+                # Fail before moving rather than stopping one cycle in.
+                here = self.clearance()
+                if here <= stop_distance:
+                    raise Lite3Error(
+                        'obstacle already at %.2f m, inside the %.2f m stop '
+                        'distance. Refusing to start.' % (here, stop_distance))
+                # clearance() walks the whole cloud, so sample it at 4 Hz
+                # rather than every 50 ms control cycle.
+                last = {'t': time.time()}
+
+                def abort():
+                    if time.time() - last['t'] < 0.25:
+                        return None
+                    last['t'] = time.time()
+                    try:
+                        c = self.clearance()
+                    except Lite3Error:
+                        return 'lost the depth stream - stopped rather than ' \
+                               'walking blind'
+                    if c <= stop_distance:
+                        return 'obstacle at %.2f m' % c
+                    return None
+
+        r = self._run(vx, 0.0, 0.0, done, target / speed + 10.0, force, abort)
+        r['moved'] = math.hypot(r['end'][0] - r['start'][0],
+                                r['end'][1] - r['start'][1])
+        return r
+
+    def strafe(self, distance, speed=0.15, force=False):
+        """Crab sideways. Positive is left."""
+        vy = math.copysign(abs(speed), distance)
+        target = abs(distance)
+
+        def done(s, p):
+            return p is not None and math.hypot(p[0] - s[0], p[1] - s[1]) >= target
+
+        return self._run(0.0, vy, 0.0, done, target / abs(speed) + 10.0, force)
+
+    def turn(self, radians, rate=0.4, force=False):
+        """Turn in place by `radians` RELATIVE to the heading at the moment
+        this is called. Positive is left. Any magnitude works, including 180
+        and beyond a full revolution.
+
+        Measured by accumulating per-sample increments, NOT by wrapping the
+        total difference from the start. Wrapping the total saturates at pi:
+        a 180 degree request could never satisfy `>= pi`, so the turn fell
+        through to its time limit and span ~409 degrees before stopping.
+        """
+        rate = min(abs(rate), MAX_YAW_RATE)
+        wz = math.copysign(rate, radians)
+        target = abs(radians)
+        acc = {'prev': None, 'total': 0.0}
+
+        def done(s, p):
+            if p is None:
+                return False
+            if acc['prev'] is None:
+                acc['prev'] = s[2]
+            # Wrap each INCREMENT, never the running total. Sampling is 20 Hz
+            # and the rate is capped at 0.8 rad/s, so a genuine step is under
+            # 0.05 rad; anything near pi is the -pi/+pi seam, not motion.
+            step = math.atan2(math.sin(p[2] - acc['prev']),
+                              math.cos(p[2] - acc['prev']))
+            acc['total'] += step
+            acc['prev'] = p[2]
+            return abs(acc['total']) >= target
+
+        r = self._run(0.0, 0.0, wz, done, target / rate + 10.0, force)
+        r['turned'] = acc['total']          # unwrapped, so 180+ reads correctly
+        return r
+
+    def turn_deg(self, degrees, **kw):
+        r = self.turn(math.radians(degrees), **kw)
+        r['turned_deg'] = math.degrees(r['turned'])
+        return r
+
+    # --- perception --------------------------------------------------------
+    def wait_cloud(self, timeout=10.0):
+        if not self._wait(lambda: self._node.cloud is not None, timeout):
+            raise Lite3Error(
+                'no point cloud. Start it with: sudo systemctl start '
+                'realsense_ros2.service   (and if it is running but silent, '
+                'check dmesg for "HC died" - the Jetson xHCI controller '
+                'crashes and a reboot, not a replug, is the fix.)')
+        return self._node.cloud
+
+    def scan(self, fov_deg=45, bin_deg=5):
+        """Nearest obstacle range per bearing bin, in base_link.
+
+        Returns [(bearing_deg, range_m or None), ...], bearing +ve = LEFT.
+        Applies the real 20 degree nose-down camera pitch and drops the floor
+        and anything above the robot's back.
+
+        Convert range to LATERAL offset (range * sin(bearing)) before judging
+        clearance: a wall reading 0.67 m at -10 deg is only 0.12 m off the
+        centreline, well inside the 0.225 m half-width.
+        """
+        m = self.wait_cloud()
+        f = {fd.name: fd.offset for fd in m.fields}
+        if not {'x', 'y', 'z'} <= set(f):
+            raise Lite3Error('cloud has no xyz fields')
+        ox, oy, oz = f['x'], f['y'], f['z']
+        step, data, n = m.point_step, m.data, m.width * m.height
+        cos_p, sin_p = math.cos(CAM_PITCH), math.sin(CAM_PITCH)
+
+        nbins = (2 * fov_deg) // bin_deg
+        bins = [None] * nbins
+        for i in range(0, n, 2):                 # every other point is plenty
+            base = i * step
+            if base + step > len(data):
+                break
+            xo = struct.unpack_from('<f', data, base + ox)[0]
+            yo = struct.unpack_from('<f', data, base + oy)[0]
+            zo = struct.unpack_from('<f', data, base + oz)[0]
+            if not (zo == zo) or zo < MIN_VALID or zo > MAX_RANGE:
+                continue
+            xc, yc, zc = zo, -xo, -yo            # optical -> camera body
+            xb = xc * cos_p + zc * sin_p + CAM_X
+            yb = yc
+            zb = -xc * sin_p + zc * cos_p + CAM_Z
+            h = zb + STAND_HEIGHT
+            if h < FLOOR_MARGIN or h > CEILING or xb < MIN_VALID:
+                continue
+            bearing = math.degrees(math.atan2(yb, xb))
+            if abs(bearing) > fov_deg:
+                continue
+            idx = min(max(int((bearing + fov_deg) // bin_deg), 0), nbins - 1)
+            r = math.hypot(xb, yb)
+            if bins[idx] is None or r < bins[idx]:
+                bins[idx] = r
+        return [(-fov_deg + i * bin_deg + bin_deg / 2.0, b)
+                for i, b in enumerate(bins)]
+
+    def clearance(self, half_width=0.225):
+        """Nearest obstacle directly in the robot's path, in metres.
+
+        Uses lateral offset, not raw range, so a wall off to one side does not
+        read as an obstacle ahead. inf means nothing in the way.
+        """
+        near = float('inf')
+        for bearing, r in self.scan():
+            if r is None:
+                continue
+            if abs(r * math.sin(math.radians(bearing))) <= half_width:
+                near = min(near, r * math.cos(math.radians(bearing)))
+        return near
+
+    def scan_text(self, fov_deg=45, bin_deg=5):
+        rows = self.scan(fov_deg, bin_deg)
+        out = ['bearing +ve = LEFT, bars scale to %.1f m' % MAX_RANGE, '']
+        for bearing, r in reversed(rows):
+            side = 'L' if bearing >= 0 else 'R'
+            if r is None:
+                bar, txt = '=' * 40, 'clear'
+            else:
+                bar = '#' * max(1, int(40 * r / MAX_RANGE))
+                txt = '%.2f m' % r
+            out.append('  %+5.1f %s  %-40s %s' % (bearing, side, bar, txt))
+        out.append('')
+        out.append('  clearance straight ahead: %.2f m' % self.clearance())
+        return '\n'.join(out)
+
+    # --- nav2 --------------------------------------------------------------
+    @property
+    def nav_running(self):
+        return subprocess.run(['pgrep', '-f', 'bt_navigator'],
+                              capture_output=True).returncode == 0
+
+    @staticmethod
+    def _nav_groups():
+        """Process groups that belong to a nav2 stack and nothing else.
+
+        Returns {pgid: [command lines]}. A group holding any NAV_NEVER process
+        is excluded - that is the guard that stops a cleanup from taking
+        transfer_ros2 or realsense_ros2 down with it.
+        """
+        out = subprocess.run(['ps', '-eo', 'pgid=,args='],
+                             capture_output=True, text=True).stdout
+        groups = {}
+        for line in out.splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            pgid, _, args = line.partition(' ')
+            if not pgid.isdigit():
+                continue
+            # Drop launch arguments (foo:=bar) before matching, so a value
+            # like launch_realsense:=false cannot look like a realsense node.
+            args = ' '.join(t for t in args.split() if ':=' not in t)
+            groups.setdefault(int(pgid), []).append(args)
+        mine = os.getpgid(0)
+        return {g: cmds for g, cmds in groups.items()
+                if g != mine
+                and any(m in c for c in cmds for m in NAV_MARKERS)
+                and not any(n in c for c in cmds for n in NAV_NEVER)}
+
+    def nav_stop(self, timeout=8.0):
+        """Stop the nav2 stack by process group. Returns the number killed."""
+        killed = 0
+        for pgid in self._nav_groups():
+            for sig in (signal.SIGINT, signal.SIGTERM, signal.SIGKILL):
+                try:
+                    os.killpg(pgid, sig)
+                except ProcessLookupError:
+                    break
+                end = time.time() + timeout / 3.0
+                while time.time() < end:
+                    try:
+                        os.killpg(pgid, 0)
+                    except ProcessLookupError:
+                        break
+                    time.sleep(0.2)
+                else:
+                    continue
+                break
+            killed += 1
+        if os.path.exists(NAV_PGID_FILE):
+            os.remove(NAV_PGID_FILE)
+        self._node.grid = None
+        time.sleep(1.0)
+        return killed
+
+    def nav_start(self, timeout=40.0):
+        """Launch mapless Nav2. Refuses unless the robot is standing and its
+        pose has settled - a costmap built across the stand-up pose jump shows
+        a clear path straight into a real obstacle."""
+        self._require_standing()
+        if not self.pose_settled():
+            raise Lite3Error(
+                'pose is still moving; refusing to build a costmap around it. '
+                'Wait for the robot to settle after standing.')
+        self.nav_stop()
+        proc = subprocess.Popen(
+            ['setsid', os.path.expanduser('~/start_nav2_mapless.sh')],
+            stdout=open('/tmp/nav2.log', 'w'), stderr=subprocess.STDOUT,
+            stdin=subprocess.DEVNULL)
+        # setsid makes the child a session and process-group leader, so its
+        # pid is the pgid of the whole stack.
+        with open(NAV_PGID_FILE, 'w') as f:
+            f.write(str(proc.pid))
+        if not self._wait(lambda: self.nav_running, timeout):
+            raise Lite3Error('nav2 did not come up; see /tmp/nav2.log')
+        if not self._wait(lambda: self._node.grid is not None, timeout):
+            raise Lite3Error('nav2 is up but published no costmap; see /tmp/nav2.log')
+        groups = self._nav_groups()
+        if len(groups) > 1:
+            raise Lite3Error(
+                '%d nav2 process groups are running - an earlier stack '
+                'survived. Call nav_stop() and retry.' % len(groups))
+        return True
+
+    def cost_at(self, x, y):
+        """Global costmap cost at an odom-frame point. None if off the map."""
+        g = self._node.grid
+        if g is None:
+            raise Lite3Error('no global costmap - is nav2 running?')
+        i = g.info
+        cx = int((x - i.origin.position.x) / i.resolution)
+        cy = int((y - i.origin.position.y) / i.resolution)
+        if not (0 <= cx < i.width and 0 <= cy < i.height):
+            return None
+        return g.data[cy * i.width + cx]
+
+    def cost_ahead(self, out_to=3.5, step=0.25):
+        """[(distance, cost), ...] along the robot's heading."""
+        x, y, yaw = self.wait_pose()
+        return [(d, self.cost_at(x + d * math.cos(yaw), y + d * math.sin(yaw)))
+                for d in [i * step for i in range(int(out_to / step) + 1)]]
+
+    def goto(self, forward, heading_deg=None, timeout=60.0, check=True):
+        """Navigate `forward` metres ahead, routing around obstacles.
+
+        Nav2 only gets him to the SPOT (yaw_goal_tolerance is 3.14 in
+        lite_nav2_mapless.yaml): making Nav2 rotate him at the goal had the
+        legged base stepping and drifting round it instead of stopping. So by
+        default he stops facing however he arrived.
+
+        heading_deg, if given, is the final heading relative to the heading
+        at the call - positive is left, as turn_deg(). It is done after
+        arrival with turn(), which is odometry-accurate.
+
+        Returns the action status: 4 = SUCCEEDED, 6 = ABORTED.
+        Checks the goal cell first - NavFn cannot plan into a LETHAL cell and
+        the goal tolerance will not escape one.
+
+        For an in-place turn use turn_deg() - a goal at the robot's own
+        position gives the planner nothing to plan and aborts.
+        """
+        from nav2_msgs.action import NavigateToPose
+        from geometry_msgs.msg import PoseStamped
+        from rclpy.action import ActionClient
+
+        self._require_standing()
+        self._require_battery()
+        if not self.nav_running:
+            raise Lite3Error('nav2 is not running - call nav_start() first')
+        if abs(forward) < 0.2:
+            raise Lite3Error(
+                'goal is %.2f m away - too close for the planner to produce a '
+                'path, it will abort. Use turn_deg() for rotation in place.'
+                % abs(forward))
+        x, y, yaw = self.wait_pose()
+        gx, gy = x + forward * math.cos(yaw), y + forward * math.sin(yaw)
+        gyaw = yaw + math.radians(heading_deg or 0.0)
+
+        if check:
+            c = self.cost_at(gx, gy)
+            if c is None:
+                raise Lite3Error('goal (%.2f, %.2f) is outside the costmap' % (gx, gy))
+            if c >= LETHAL:
+                raise Lite3Error(
+                    'goal cell cost %d is LETHAL - NavFn cannot plan into it '
+                    'and would abort with status 6. Pick a goal from '
+                    'cost_ahead(), not from scan(): the costmap knows about '
+                    'obstacles the camera cannot currently see.' % c)
+
+        client = ActionClient(self._node, NavigateToPose, 'navigate_to_pose')
+        self._clients.append(client)
+        if not client.wait_for_server(timeout_sec=10.0):
+            raise Lite3Error('navigate_to_pose action server not available')
+
+        goal = PoseStamped()
+        goal.header.frame_id = 'odom'
+        goal.header.stamp = self._node.get_clock().now().to_msg()
+        goal.pose.position.x, goal.pose.position.y = gx, gy
+        goal.pose.orientation.z = math.sin(gyaw / 2.0)
+        goal.pose.orientation.w = math.cos(gyaw / 2.0)
+        msg = NavigateToPose.Goal()
+        msg.pose = goal
+
+        fut = client.send_goal_async(msg)
+        if not self._wait(fut.done, 10.0):
+            raise Lite3Error('no response to the goal')
+        handle = fut.result()
+        if handle is None or not handle.accepted:
+            raise Lite3Error('goal rejected')
+        # Published so estop() can cancel the goal even when the SIGINT
+        # handler fires somewhere else entirely.
+        self._goal_handle = handle
+        result_fut = handle.get_result_async()
+        try:
+            if not self._wait(result_fut.done, timeout):
+                handle.cancel_goal_async()
+                self.halt()
+                raise Lite3Error('goal timed out after %.0fs; cancelled' % timeout)
+        except KeyboardInterrupt:
+            # estop() has already run from the signal handler; just propagate.
+            raise
+        finally:
+            self._goal_handle = None
+        status = result_fut.result().status
+        if status == 4 and heading_deg is not None:
+            err = gyaw - self.wait_pose()[2]
+            err = math.atan2(math.sin(err), math.cos(err))
+            if abs(err) > math.radians(5):
+                self.turn(err)
+        return status
+
+    # --- voice -------------------------------------------------------------
+    # The speaker is on the motion computer, not here; voice.py does the ssh +
+    # aplay. Imported lazily so lite3 still loads on a box without voice.py,
+    # and cached so the Voice handle (which only holds config) is made once.
+    @property
+    def voice(self):
+        v = getattr(self, '_voice', None)
+        if v is None:
+            from voice import Voice
+            v = self._voice = Voice()
+        return v
+
+    def say(self, text, wait=True, voice=None, rocky=False):
+        """Speak `text` out of the robot. Needs a TTS engine - see voice.say."""
+        return self.voice.say(text, wait=wait, voice=voice, rocky=rocky)
+
+    def play(self, name, wait=True):
+        """Play one of the robot's built-in clips, e.g. play('okstop')."""
+        return self.voice.play(name, wait=wait)
+
+    # --- summary -----------------------------------------------------------
+    def status(self):
+        s = self.state
+        p = self.pose
+        return ('basic={basic} gait={gait} battery={battery}% '.format(**s)
+                + ('standing' if self.standing else 'not standing')
+                + (' pose=(%.2f, %.2f, %.0f deg)' % (p[0], p[1], math.degrees(p[2]))
+                   if p else ' pose=unknown')
+                + ' nav2=' + ('up' if self.nav_running else 'down'))
+
+
+def _cli():
+    import sys
+    args = sys.argv[1:]
+    if not args:
+        print(__doc__)
+        print('commands: status stand sit auto walk <m> turn <deg> scan '
+              'nav-start nav-stop goto <m> cost')
+        return
+    cmd = args[0]
+    with Lite3(auto_mode=(cmd not in ('status', 'scan', 'cost'))) as bot:
+        if cmd == 'status':
+            print(bot.status())
+        elif cmd == 'stand':
+            bot.stand(); print(bot.status())
+        elif cmd == 'sit':
+            bot.sit(); print(bot.status())
+        elif cmd == 'auto':
+            bot.auto(); print('auto mode set')
+        elif cmd == 'walk':
+            print(bot.walk(float(args[1])))
+        elif cmd == 'turn':
+            print(bot.turn_deg(float(args[1])))
+        elif cmd == 'scan':
+            print(bot.scan_text())
+        elif cmd == 'nav-start':
+            bot.nav_start(); print('nav2 up')
+        elif cmd == 'nav-stop':
+            bot.nav_stop(); print('nav2 down')
+        elif cmd == 'goto':
+            print('status', bot.goto(float(args[1])))
+        elif cmd == 'estop':
+            print('estop:', bot.estop(disarm='--disarm' in args))
+            print(bot.status())
+        elif cmd == 'cost':
+            for d, c in bot.cost_ahead():
+                mark = ' LETHAL' if c is not None and c >= LETHAL else (
+                    ' inflated' if c is not None and c > 50 else '')
+                print('  +%4.2f m  cost %s%s' % (d, c, mark))
+        else:
+            print('unknown command: ' + cmd)
+
+
+if __name__ == '__main__':
+    _cli()
