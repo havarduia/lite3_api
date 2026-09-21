@@ -156,11 +156,21 @@ Everything you write is spoken aloud by a flat computer translator voice, so:
 # (name shown in the chat, system prompt, Piper voice, alien) - alien = Rocky's
 # translator sound: flat delivery plus the voice filter. Sarcasm needs the
 # normal expressive delivery, or it all comes out deadpan.
+
 PERSONAS = {
     'deadpan': ('Dog', DEADPAN, 'en_US-ryan-medium', False),
     'sarcastic': ('Dog', SARCASTIC, 'en_US-ryan-medium', False),
     'rocky': ('Rocky', ROCKY, 'en_US-joe-medium', True),
 }
+
+# Personas that are not for the public demo live in persona_private.py, which
+# is gitignored - the robot has them, GitHub does not. Absent is fine.
+try:
+    from .persona_private import PRIVATE_PERSONAS
+except ImportError:
+    pass
+else:
+    PERSONAS.update(PRIVATE_PERSONAS)
 PERSONA = 'deadpan'     # safe for strangers; 'sarcastic' roasts people
 
 

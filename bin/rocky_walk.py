@@ -288,7 +288,7 @@ def main():
                     help='m/s, max 0.6. Below ~0.2 the gait shuffles and drifts '
                          'sideways. walk steps add speed * 0.5 s to --stop as '
                          'reaction margin; person slows down near the target')
-    ap.add_argument('--stop', type=float, default=0.45,
+    ap.add_argument('--stop', type=float, default=1.0,
                     help='obstacle stop distance in metres, measured from the '
                          'BODY CENTRE: the nose is ~0.33 m ahead of it, so '
                          '0.45 stops ~12 cm short of the nose')
@@ -363,9 +363,14 @@ def main():
                 else:
                     for i, (verb, args) in enumerate(route):
                         near = None
-                        if a.finale and i == len(route) - 1 and verb == 'person':
-                            # Write the finale during the last metre so it
-                            # can be spoken on arrival.
+                        if (a.finale and i == len(route) - 1 and verb == 'person'
+                                and not a.look_up):
+                            # Write the finale during the last metre so it can
+                            # be spoken on arrival. Only when he is NOT tilting
+                            # up: that frame is grabbed mid-walk, before the
+                            # tilt, so he would describe knees and shoes. With
+                            # --look-up the finale is done live after tilting,
+                            # which costs ~3 s of silence but sees the person.
                             prep = Prepared(rocky, PREP_CONTEXT + a.finale)
                             near = prep.start
                         run_step(bot, a, verb, args, det, near, rocky)

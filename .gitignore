@@ -9,3 +9,4 @@ __pycache__/
 # since those .bak files are the project's only pre-git history.
 /*.bak
 /*.orig
+robot/persona_private.py

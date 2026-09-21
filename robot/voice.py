@@ -44,6 +44,13 @@ import sys
 HOST = 'ysc@192.168.1.120'          # motion computer, where the speaker is
 CLIP_DIR = '/home/ysc/lite3_voice'  # DEEP's own voice clips live here
 RATE, CHANNELS = 48000, 2           # the codec's known-good playback format
+# The ES8388 amp unmutes when a stream starts and that takes a moment: audio
+# beginning at sample zero is swallowed, leaving an audible pop and nothing
+# else. Measured 2026-09-21 - a 1.1 s clip was completely inaudible, the same
+# clip with this lead-in was clear. The robot's own clips carry their own
+# silence, which is why play() always worked. Raise it if the first syllable
+# is ever clipped.
+LEAD_IN_MS = 800
 # Straight to the ES8388. ysc's PulseAudio default is a null sink, so a
 # plain `aplay` "succeeds" silently. Needs ysc in the audio group on .120.
 DEVICE = 'plughw:0,0'
@@ -181,8 +188,8 @@ class Voice:
             raise VoiceError('ffmpeg not found on this machine - needed to '
                              'convert audio to the robot codec format')
         ff = ['ffmpeg', '-loglevel', 'error', '-i', src]
-        if af:
-            ff += ['-af', af]
+        lead = 'adelay=%d|%d' % (LEAD_IN_MS, LEAD_IN_MS)
+        ff += ['-af', lead + ',' + af if af else lead]
         ff += ['-f', 's16le', '-ar', str(RATE), '-ac', str(CHANNELS), '-']
         return (pre, ff)
 
@@ -334,7 +341,11 @@ class Speaker:
         ff = ['ffmpeg', '-loglevel', 'error', '-f', 's16le', '-ar', str(self.rate),
               '-ac', '1', '-i', '-']
         gain = 'volume=%.2f,alimiter=limit=0.95' % SOFT_GAIN
-        ff += ['-af', ','.join(f for f in (self.af, gain) if f)]
+        # Same amp lead-in as _ffmpeg_cmd: the ES8388 unmutes when the stream
+        # opens and swallows whatever is already playing. One stream serves a
+        # whole reply, so this costs LEAD_IN_MS once per reply, not per line.
+        lead = 'adelay=%d|%d' % (LEAD_IN_MS, LEAD_IN_MS)
+        ff += ['-af', ','.join(f for f in (self.af, gain, lead) if f)]
         ff += ['-f', 's16le', '-ar', str(RATE), '-ac', str(CHANNELS), '-']
         p_ff = subprocess.Popen(ff, stdin=subprocess.PIPE, stdout=subprocess.PIPE)
         p_ap = subprocess.Popen(
