@@ -6,14 +6,17 @@ on the robot's perception computer (Jetson Xavier NX, Ubuntu 20.04, Python 3.8).
 ## Layout
 
     robot/      the library - import this
-      lite3.py      the API: motion, state, depth, Nav2, e-stop, heartbeat
+      lite3.py      the API: state, heartbeat, posture, tricks, motion, e-stop
+      nav.py        Nav2: start/stop, costmap, goto()    (mixed into Lite3)
+      depth.py      depth-camera obstacle scan           (mixed into Lite3)
+      protocol.py   every UDP code and address, no ROS; also a raw-code CLI
       voice.py      audio out: Piper TTS, clip playback, YouTube, the speaker
       rocky.py      the talking persona, on Gemini Live with a REST fallback
       person.py     person detection and following
       run_robot.py  Mission: a scripted run with per-step logging
     bin/        things you run
       rocky_walk.py   walk or navigate a route, stop, look, talk
-      robot_cmd.py    raw EthCommand sender - the escape hatch for unwrapped codes
+      teleop.py       drive from the keyboard over SSH
     demos/      teaching and regression scripts
       demo.py        a guided tour of the API, lesson by lesson
       shake.py       end-to-end regression test          (MOVES THE ROBOT)
@@ -22,6 +25,7 @@ on the robot's perception computer (Jetson Xavier NX, Ubuntu 20.04, Python 3.8).
       lite3_env.sh          source this first - five ROS2 workspaces, CycloneDDS, PYTHONPATH
       start_nav2_mapless.sh mapless Nav2 stack (lite3.py starts this for you)
       start_realsense_slow.sh  RealSense at depth_fps 6, for diagnosing USB faults
+      start_realsense_color.sh RealSense with the colour stream (30 fps)
       cyclone_dds.xml
     archive/    pre-git history: the old .bak files, and superseded scripts
 
@@ -41,7 +45,7 @@ The scripts in `bin/` and `demos/` add the repo root to `sys.path` themselves,
 so they run even without sourcing - but they still need the ROS2 workspaces
 that `lite3_env.sh` sets up, so source it anyway.
 
-Paths are resolved relative to this directory (`_repo()` in `lite3.py`,
+Paths are resolved relative to this directory (`_repo()` in `nav.py`,
 `$BASH_SOURCE` in the shell scripts), so the repo can be moved or cloned
 anywhere without editing anything.
 

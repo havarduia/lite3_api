@@ -41,6 +41,8 @@ import threading
 import urllib.error
 import urllib.request
 
+from .protocol import CAMERA_URL
+
 KEY_FILE = os.path.expanduser('~/.gemini_key')
 # An alias, so a retired model version cannot break it (gemini-2.5-flash was
 # refused for new keys on 2026-09-18). Lite answers fastest and stays in character.
@@ -55,7 +57,6 @@ URL = ('https://generativelanguage.googleapis.com/v1beta/models/'
 # The front camera (on the motion computer) is already streamed by the robot's
 # own gst-launch -> mediamtx for the phone app, and gst holds /dev/video0, so
 # grab frames from that stream rather than the device.
-CAMERA_URL = 'rtsp://192.168.1.120:8554/test'
 # The free tier sometimes sits on a Live request for 20 s+. If no transcript
 # has started within FIRST_REPLY seconds, reconnect (resuming the session) and
 # ask once more, then give up so the caller can fall back to REST.

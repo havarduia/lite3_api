@@ -17,15 +17,15 @@ is: run aplay on 192.168.1.120. This module does exactly that from here.
 
 Or from the shell:
 
-    python3 voice.py list
-    python3 voice.py play OKstandup
-    python3 voice.py file ~/alarm.wav
-    python3 voice.py say "hello there"
-    python3 voice.py voices
-    python3 voice.py say --voice en_US-ryan-medium --rocky "amaze amaze amaze"
+    python3 -m robot.voice list
+    python3 -m robot.voice play OKstandup
+    python3 -m robot.voice file ~/alarm.wav
+    python3 -m robot.voice say "hello there"
+    python3 -m robot.voice voices
+    python3 -m robot.voice say --voice en_US-ryan-medium --rocky "amaze amaze amaze"
 
 Requirements:
-  - Passwordless SSH from here to ysc@192.168.1.120. Already set up.
+  - Passwordless SSH from here to the motion computer (protocol.MOTION_IP). Already set up.
   - ffmpeg on THIS machine, for play_file/say format conversion. Present.
   - ysc in the `audio` group on the motion computer, since aplay goes to
     DEVICE directly. Done 2026-09-15.
@@ -41,7 +41,9 @@ import shutil
 import subprocess
 import sys
 
-HOST = 'ysc@192.168.1.120'          # motion computer, where the speaker is
+from .protocol import MOTION_IP
+
+HOST = 'ysc@' + MOTION_IP          # motion computer, where the speaker is
 CLIP_DIR = '/home/ysc/lite3_voice'  # DEEP's own voice clips live here
 RATE, CHANNELS = 48000, 2           # the codec's known-good playback format
 # The ES8388 amp unmutes when a stream starts and that takes a moment: audio

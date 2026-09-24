@@ -27,8 +27,8 @@ import struct
 import threading
 import time
 
-TRACKER = ('192.168.1.120', 43901)
-DETECT, TARGETS = 0x21013302, 0x21013304
+from .protocol import TRACKER_ADDR as TRACKER, TRK_DETECT as DETECT, \
+    TRK_TARGETS as TARGETS, tracker_packet as _msg
 WIDTH, HEIGHT = 1280.0, 720.0       # bbox pixel space
 FRESH = 0.7                 # s: a detection older than this is not trusted
 GIVE_UP = 5.0               # s without the person before approach() stops
@@ -37,12 +37,6 @@ K_TURN = 2.4                # rad/s per unit of x offset
 MAX_TURN = 0.6              # rad/s
 SLOW_ZONE = 0.8             # m before the stop distance over which he slows down
 MIN_SPEED = 0.12            # m/s at the end of that ramp
-
-
-def _msg(code, **fields):
-    body = json.dumps(dict(timestamp=int(time.time() * 1000), sendIP='',
-                           destIP='', **fields)).encode()
-    return struct.pack('<iii', code, len(body), 1) + body
 
 
 class PersonDetector(threading.Thread):
