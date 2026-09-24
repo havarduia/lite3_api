@@ -766,20 +766,20 @@ class Lite3(Nav, Depth):
         return r
 
     # --- voice -------------------------------------------------------------
-    # The speaker is on the motion computer, not here; voice.py does the ssh +
-    # aplay. Imported lazily so lite3 still loads on a box without voice.py,
+    # The speaker is on the motion computer, not here; talk.py does the ssh +
+    # aplay. Imported lazily so lite3 still loads on a box without talk.py,
     # and cached so the Voice handle (which only holds config) is made once.
     @property
     def voice(self):
         v = getattr(self, '_voice', None)
         if v is None:
-            from .voice import Voice
+            from .talk import Voice
             v = self._voice = Voice()
         return v
 
-    def say(self, text, wait=True, voice=None, rocky=False):
-        """Speak `text` out of the robot. Needs a TTS engine - see voice.say."""
-        return self.voice.say(text, wait=wait, voice=voice, rocky=rocky)
+    def say(self, text, wait=True, voice=None, alien=False):
+        """Speak `text` out of the robot. Needs a TTS engine - see talk.Voice.say."""
+        return self.voice.say(text, wait=wait, voice=voice, alien=alien)
 
     def play(self, name, wait=True):
         """Play one of the robot's built-in clips, e.g. play('okstop')."""

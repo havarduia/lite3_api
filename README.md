@@ -10,12 +10,12 @@ on the robot's perception computer (Jetson Xavier NX, Ubuntu 20.04, Python 3.8).
       nav.py        Nav2: start/stop, costmap, goto()    (mixed into Lite3)
       depth.py      depth-camera obstacle scan           (mixed into Lite3)
       protocol.py   every UDP code and address, no ROS; also a raw-code CLI
-      voice.py      audio out: Piper TTS, clip playback, YouTube, the speaker
-      rocky.py      the talking persona, on Gemini Live with a REST fallback
+      talk.py       the speaker (clips, Piper TTS, YouTube) and the Gemini chat
+                    that talks through it, with personas
       person.py     person detection and following
       run_robot.py  Mission: a scripted run with per-step logging
     bin/        things you run
-      rocky_walk.py   walk or navigate a route, stop, look, talk
+      tour.py         walk or navigate a route, stop, look, talk
       teleop.py       drive from the keyboard over SSH
     demos/      teaching and regression scripts
       demo.py        a guided tour of the API, lesson by lesson
@@ -32,7 +32,7 @@ on the robot's perception computer (Jetson Xavier NX, Ubuntu 20.04, Python 3.8).
 ## Running things
 
     source ~/robot/env/lite3_env.sh
-    python3 ~/robot/bin/rocky_walk.py "walk 1.5, turn 90"
+    python3 ~/robot/bin/tour.py "walk 1.5, turn 90"
 
 Sourcing `lite3_env.sh` also puts the repo root on `PYTHONPATH`, so this works
 from anywhere afterwards:

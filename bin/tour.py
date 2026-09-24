@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """The robot walks a route and says what he sees along the way (--persona).
 
-    python3 ~/robot/bin/rocky_walk.py                          # walk 2 m forward, commenting
-    python3 ~/robot/bin/rocky_walk.py "walk 1.5, turn 90, walk 1, turn -90"
-    python3 ~/robot/bin/rocky_walk.py "goto 2.5, goto 1.5 90"  # Nav2: routes around obstacles
-    python3 ~/robot/bin/rocky_walk.py --interactive            # type steps one at a time
-    python3 ~/robot/bin/rocky_walk.py --speed 0.2 "walk 3"
-    python3 ~/robot/bin/rocky_walk.py --dry-run                # comments only, no movement
-    python3 ~/robot/bin/rocky_walk.py --finale "roast the person in front of you" "goto 2.8"
+    python3 ~/robot/bin/tour.py                          # walk 2 m forward, commenting
+    python3 ~/robot/bin/tour.py "walk 1.5, turn 90, walk 1, turn -90"
+    python3 ~/robot/bin/tour.py "goto 2.5, goto 1.5 90"  # Nav2: routes around obstacles
+    python3 ~/robot/bin/tour.py --interactive            # type steps one at a time
+    python3 ~/robot/bin/tour.py --speed 0.2 "walk 3"
+    python3 ~/robot/bin/tour.py --dry-run                # comments only, no movement
+    python3 ~/robot/bin/tour.py --finale "roast the person in front of you" "goto 2.8"
 
 Steps (comma separated, or one per line with --interactive):
     walk <m>            straight line, blind to routing, stops for obstacles
@@ -50,9 +50,9 @@ import sys
 import threading
 import time
 
-import os, sys
+import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from robot.rocky import Rocky
+from robot.talk import Talker
 
 PAUSED = ('You just stopped for a moment during your walk. In one or two short '
           'sentences, say what you see ahead of you and what you think of it. Do '
@@ -136,11 +136,11 @@ class Odometer(threading.Thread):
             self.last = p[:2]
 
 
-def comment(rocky, prompt):
+def comment(talker, prompt):
     """Look and speak, blocking - call it only while the robot stands still."""
     try:
-        print('\n%s:' % rocky.name, end=' ', flush=True)
-        rocky.look(prompt, on_sentence=lambda s: print(s, end=' ', flush=True))
+        print('\n%s:' % talker.name, end=' ', flush=True)
+        talker.look(prompt, on_sentence=lambda s: print(s, end=' ', flush=True))
         print(flush=True)
     except Exception as e:          # never let a look take down the walk
         print('\n[look failed: %s]' % e, flush=True)
@@ -154,18 +154,18 @@ class Prepared(threading.Thread):
     if it failed (the finale is then done live, the slow way).
     """
 
-    def __init__(self, rocky, prompt):
+    def __init__(self, talker, prompt):
         super().__init__(daemon=True)
-        self.rocky, self.prompt, self.result = rocky, prompt, None
+        self.talker, self.prompt, self.result = talker, prompt, None
 
     def run(self):
         try:
-            self.result = self.rocky.look(self.prompt, speak=False)
+            self.result = self.talker.look(self.prompt, speak=False)
         except Exception as e:
             print('\n[preparing the finale failed: %s]' % e, flush=True)
 
 
-def follow_and_talk(bot, a, det, rocky, seconds):
+def follow_and_talk(bot, a, det, talker, seconds):
     """Follow the person in segments of --talk-every seconds, stopping after
     each to say what he sees. The line is written during the last PREP_LEAD
     seconds of the segment so he can speak as soon as he halts."""
@@ -173,7 +173,7 @@ def follow_and_talk(bot, a, det, rocky, seconds):
     end = time.time() + seconds
     while time.time() < end - 1.0:
         seg = min(a.talk_every, end - time.time(), 29.0)   # steer() caps at 30 s
-        prep = Prepared(rocky, FOLLOWING)
+        prep = Prepared(talker, FOLLOWING)
         timer = threading.Timer(max(0.0, seg - PREP_LEAD), prep.start)
         timer.start()
         try:
@@ -184,16 +184,16 @@ def follow_and_talk(bot, a, det, rocky, seconds):
         if prep.ident is not None:            # the timer did start it
             prep.join(timeout=15)
         if prep.result:
-            print('%s:' % rocky.name, end=' ', flush=True)
-            rocky.say(prep.result, on_sentence=lambda s: print(s, end=' ', flush=True))
+            print('%s:' % talker.name, end=' ', flush=True)
+            talker.say(prep.result, on_sentence=lambda s: print(s, end=' ', flush=True))
             print(flush=True)
         else:
-            comment(rocky, FOLLOWING)
+            comment(talker, FOLLOWING)
         if r['reason'] != 'time limit':       # lost them, or no depth: stop
             break
 
 
-def run_step(bot, a, verb, args, det=None, near=None, rocky=None):
+def run_step(bot, a, verb, args, det=None, near=None, talker=None):
     from robot.lite3 import Lite3Error
     try:
         if verb == 'person':
@@ -204,7 +204,7 @@ def run_step(bot, a, verb, args, det=None, near=None, rocky=None):
                                 near=near)
             print('\n[person: moved %.2f m, %s]' % (r['moved'], r['reason']))
         elif verb == 'follow':
-            follow_and_talk(bot, a, det, rocky, args[0])
+            follow_and_talk(bot, a, det, talker, args[0])
         elif verb == 'walk':
             # walk() samples the depth camera at 4 Hz and has no slow-down
             # ramp, so give it half a second of travel as extra margin.
@@ -319,14 +319,14 @@ def main():
         det = person.PersonDetector()
         det.start()
 
-    rocky = Rocky(**{k: v for k, v in (('voice', a.voice), ('persona', a.persona)) if v})
-    if rocky.live:
+    talker = Talker(**{k: v for k, v in (('voice', a.voice), ('persona', a.persona)) if v})
+    if talker.live:
         # Connect to Gemini while he stands up and walks, not when he has
         # to speak.
-        threading.Thread(target=rocky.live.warm, daemon=True).start()
+        threading.Thread(target=talker.live.warm, daemon=True).start()
     try:
         if a.dry_run:
-            comment(rocky, PAUSED)
+            comment(talker, PAUSED)
             return 0
         from robot.lite3 import Lite3
         with Lite3() as bot:
@@ -356,10 +356,10 @@ def main():
                 # talk. On a fixed route the last pause is the finale's.
                 if a.interactive:
                     for verb, args in steps_from_stdin():
-                        run_step(bot, a, verb, args, det, rocky=rocky)
+                        run_step(bot, a, verb, args, det, talker=talker)
                         track.sample()
                         if verb != 'follow':          # follow talks as it goes
-                            comment(rocky, PAUSED)
+                            comment(talker, PAUSED)
                 else:
                     for i, (verb, args) in enumerate(route):
                         near = None
@@ -371,12 +371,12 @@ def main():
                             # tilt, so he would describe knees and shoes. With
                             # --look-up the finale is done live after tilting,
                             # which costs ~3 s of silence but sees the person.
-                            prep = Prepared(rocky, PREP_CONTEXT + a.finale)
+                            prep = Prepared(talker, PREP_CONTEXT + a.finale)
                             near = prep.start
-                        run_step(bot, a, verb, args, det, near, rocky)
+                        run_step(bot, a, verb, args, det, near, talker)
                         track.sample()
                         if verb != 'follow' and (i < len(route) - 1 or not a.finale):
-                            comment(rocky, PAUSED)
+                            comment(talker, PAUSED)
                 if a.finale:
                     if prep and prep.is_alive():
                         prep.join(timeout=15)
@@ -384,13 +384,13 @@ def main():
                     with (bot.tilt(a.look_up, settle=0.3) if a.look_up
                           else contextlib.nullcontext()):
                         if ready:
-                            print('\n%s:' % rocky.name, end=' ', flush=True)
-                            rocky.say(ready, on_sentence=lambda s: print(s, end=' ', flush=True))
+                            print('\n%s:' % talker.name, end=' ', flush=True)
+                            talker.say(ready, on_sentence=lambda s: print(s, end=' ', flush=True))
                             print(flush=True)
                         else:
                             # Short settle above: look() spends ~2 s grabbing
                             # a frame anyway, and by then he is tilted.
-                            comment(rocky, a.finale)
+                            comment(talker, a.finale)
             finally:
                 bot.halt()
                 try:
@@ -402,14 +402,14 @@ def main():
                         bot.heartbeat_stop()    # ... disarm SECOND
         if a.finale:
             return 0
-        print('\n%s:' % rocky.name, end=' ', flush=True)
-        rocky.reply(DONE % track.total, on_sentence=lambda s: print(s, end=' ', flush=True))
+        print('\n%s:' % talker.name, end=' ', flush=True)
+        talker.ask(DONE % track.total, on_sentence=lambda s: print(s, end=' ', flush=True))
         print()
         return 0
     finally:
         if det:
             det.stop()
-        rocky.close()
+        talker.close()
 
 
 if __name__ == '__main__':

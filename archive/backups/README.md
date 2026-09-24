@@ -3,6 +3,10 @@
 The `.bak` files that used to sit loose in `~`, filed by the script they belong
 to. Nothing references them, so moving or removing any of them breaks nothing.
 
+Since 2026-09-24 `voice.py` and `rocky.py` are merged into `robot/talk.py`
+(`Rocky` is `Talker`, `rocky=True` is `alien=True`), and `rocky_walk.py` is
+`bin/tour.py`. The backups below keep their old names.
+
 Restore one with a plain copy, e.g.
 
     cp ~/archive/backups/lite3/lite3.py.pre-arm.bak ~/lite3.py

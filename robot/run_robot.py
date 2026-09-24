@@ -123,7 +123,7 @@ class Mission:
     def sound(self, clip):
         """Play one of the robot's own clips, e.g. sound('okstop').
 
-        Not a step(): voice.py raises VoiceError, not Lite3Error, so step()
+        Not a step(): talk.py raises TalkError, not Lite3Error, so step()
         would treat a flaky ssh to the speaker as a bug and estop the run.
         A missing sound is logged as WARN and never stops anything.
         """
