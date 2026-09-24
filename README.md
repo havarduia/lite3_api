@@ -24,8 +24,11 @@ on the robot's perception computer (Jetson Xavier NX, Ubuntu 20.04, Python 3.8).
     env/        environment and launchers
       lite3_env.sh          source this first - five ROS2 workspaces, CycloneDDS, PYTHONPATH
       start_nav2_mapless.sh mapless Nav2 stack (lite3.py starts this for you)
-      start_realsense_slow.sh  RealSense at depth_fps 6, for diagnosing USB faults
-      start_realsense_color.sh RealSense with the colour stream (30 fps)
+      camera.launch.py      the D435i: depth + colour + IMU at 30 fps, vendor topic names
+      start_realsense_v4.sh starts it; realsense_ros2.service now calls this
+      realsense-ros-4.58.3-lite3.patch   our change to the ROS camera driver
+      transfer-jetson2motion.patch       our change to the vendor's transfer bridge
+      voa-lite3.patch                    our fix to the vendor's obstacle avoidance (voa)
       cyclone_dds.xml
     archive/    pre-git history: the old .bak files, and superseded scripts
 

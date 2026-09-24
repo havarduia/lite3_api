@@ -1,0 +1,60 @@
+--- a/src/voa/src/SafetyController.hpp
++++ b/src/voa/src/SafetyController.hpp
+@@ -319,8 +319,17 @@
+     }
+ 
+     void HandleStateCallback(geometry_msgs::msg::Twist::SharedPtr msg){
++        /// Lite3: the handheld publishes ~160 Hz even when idle, all zeros.
++        /// Taking those as commands overwrote every /cmd_vel from ROS, so VOA
++        /// output 0 nearly always. An idle handheld now does not drive; a
++        /// pushed stick still takes over.
++        if(msg->linear.x == 0.0 && msg->linear.y == 0.0 && msg->angular.z == 0.0){
++            if(!first_vel_in_)    first_vel_in_ = true;
++            return;
++        }
+         {
+             std::lock_guard<std::mutex> lock(vel_in_mutex_);
++            vel_in_time_ = std::chrono::steady_clock::now();
+             vel_in_ = msg;
+             new_vel_in_.store(true);
+         }        
+@@ -330,6 +339,7 @@
+     void CmdVelCallback(geometry_msgs::msg::Twist::SharedPtr msg){
+         {
+             std::lock_guard<std::mutex> lock(vel_in_mutex_);
++            vel_in_time_ = std::chrono::steady_clock::now();
+             vel_in_ = msg;
+             new_vel_in_.store(true);
+         }
+@@ -392,6 +402,12 @@
+             std::lock_guard<std::mutex> lock(vel_in_mutex_);
+             vel_in = vel_in_;
+             new_vel_in_.store(false);
++            /// Lite3: with idle handheld zeros no longer resetting vel_in_, a
++            /// sender that dies mid-motion would leave its last command here
++            /// forever. Anything older than kVelInTimeout counts as a stop.
++            if(std::chrono::steady_clock::now() - vel_in_time_ > kVelInTimeout){
++                vel_in = std::make_shared<geometry_msgs::msg::Twist>();
++            }
+         }
+     }
+ 
+@@ -772,6 +788,8 @@
+ 
+ private:
+     double timeout_s_;
++    std::chrono::steady_clock::time_point vel_in_time_{};
++    const std::chrono::milliseconds kVelInTimeout{500};
+ 
+     RobotState robot_state_ = RobotState::Slow;
+ 
+--- a/src/voa/config/voa.yaml
++++ b/src/voa/config/voa.yaml
+@@ -1,4 +1,6 @@
+-voa_composition:
++/**:  # Lite3: was voa_composition, which matches no node - the
++     # three nodes are grid_mapper, realsense_point_cloud_processer and
++     # safety_controller, so every value here was silently ignored.
+   ros__parameters:
+     timeout_s_pc: 3.000
+     pass_x_min: 0.0

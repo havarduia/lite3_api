@@ -1,0 +1,105 @@
+diff --git a/realsense2_camera/CMakeLists.txt b/realsense2_camera/CMakeLists.txt
+index 470f8c3..abad70d 100644
+--- a/realsense2_camera/CMakeLists.txt
++++ b/realsense2_camera/CMakeLists.txt
+@@ -109,6 +109,8 @@ find_package(builtin_interfaces REQUIRED)
+ find_package(rclcpp REQUIRED)
+ find_package(rclcpp_action REQUIRED)
+ find_package(realsense2_camera_msgs REQUIRED)
++find_package(pcl_conversions REQUIRED)  # Lite3: voxel filter
++find_package(PCL REQUIRED COMPONENTS common filters)
+ find_package(std_srvs REQUIRED)
+ find_package(std_msgs REQUIRED)
+ find_package(nav_msgs REQUIRED)
+@@ -284,6 +286,7 @@ target_link_libraries(${PROJECT_NAME}
+ )
+ 
+ set(dependencies
++  pcl_conversions
+   cv_bridge
+   image_transport
+   rclcpp
+@@ -346,6 +349,10 @@ install(FILES "${CMAKE_BINARY_DIR}/global_settings.yaml"
+ target_link_libraries(${PROJECT_NAME}
+   ${targets}
+ )
++# Lite3: the voxel filter in pointcloud_filter.cpp. 4.x links by target, so
++# PCL has to be added to the target explicitly.
++target_include_directories(${PROJECT_NAME} PRIVATE ${PCL_INCLUDE_DIRS} ${pcl_conversions_INCLUDE_DIRS})
++target_link_libraries(${PROJECT_NAME} ${PCL_LIBRARIES})
+ 
+ rclcpp_components_register_node(${PROJECT_NAME}
+   PLUGIN "realsense2_camera::RealSenseNodeFactory"
+diff --git a/realsense2_camera/include/pointcloud_filter.h b/realsense2_camera/include/pointcloud_filter.h
+index b2d2109..ad40f6c 100644
+--- a/realsense2_camera/include/pointcloud_filter.h
++++ b/realsense2_camera/include/pointcloud_filter.h
+@@ -43,5 +43,8 @@ namespace realsense2_camera
+             std::mutex _mutex_publisher;
+             rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr _pointcloud_publisher;
+             std::string _pointcloud_qos;
++            // Lite3: match the vendor's 3.2.3 fork (see Publish()).
++            bool _steady_stamp = false;
++            double _voxel_leaf_size = 0.0;
+     };
+ }
+diff --git a/realsense2_camera/package.xml b/realsense2_camera/package.xml
+index 21d9163..31629d9 100644
+--- a/realsense2_camera/package.xml
++++ b/realsense2_camera/package.xml
+@@ -15,6 +15,7 @@
+  
+   <buildtool_depend>ament_cmake</buildtool_depend>
+   <depend>eigen</depend>
++  <depend>pcl_conversions</depend>
+   <depend>builtin_interfaces</depend>
+   <depend>cv_bridge</depend>
+   <depend>image_transport</depend>
+diff --git a/realsense2_camera/src/pointcloud_filter.cpp b/realsense2_camera/src/pointcloud_filter.cpp
+index f2bc7cc..1e9e39b 100644
+--- a/realsense2_camera/src/pointcloud_filter.cpp
++++ b/realsense2_camera/src/pointcloud_filter.cpp
+@@ -15,6 +15,8 @@
+ #include <pointcloud_filter.h>
+ #include <fstream>
+ #include <sensor_msgs/point_cloud2_iterator.hpp>
++#include <pcl_conversions/pcl_conversions.h>
++#include <pcl/filters/voxel_grid.h>
+ 
+ 
+ using namespace realsense2_camera;
+@@ -27,6 +29,13 @@ PointcloudFilter::PointcloudFilter(std::shared_ptr<rs2::filter> filter, RosNodeB
+     _ordered_pc(ORDERED_PC)
+     {
+         setParameters();
++        // Lite3 additions, both off by default (stock behaviour):
++        //  pointcloud.steady_stamp    stamp the cloud with the steady clock, as
++        //                             every other robot topic is, so TF lookups work
++        //  pointcloud.voxel_leaf_size >0 thins the cloud with a PCL voxel grid
++        //                             (the vendor's filter_voxel / filter_leaf_size_m)
++        _steady_stamp = _node.declare_parameter<bool>("pointcloud.steady_stamp", false);
++        _voxel_leaf_size = _node.declare_parameter<double>("pointcloud.voxel_leaf_size", 0.0);
+     }
+ 
+ void PointcloudFilter::setParameters()
+@@ -246,6 +255,20 @@ void PointcloudFilter::Publish(rs2::points pc, const rclcpp::Time& t, const rs2:
+         msg_pointcloud->is_dense = true;
+         modifier.resize(valid_count);
+     }
++    if (_steady_stamp)
++        msg_pointcloud->header.stamp = rclcpp::Clock(RCL_STEADY_TIME).now();
++    if (_voxel_leaf_size > 0.0)
++    {
++        pcl::PointCloud<pcl::PointXYZ>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZ>);
++        pcl::fromROSMsg(*msg_pointcloud, *cloud);
++        pcl::VoxelGrid<pcl::PointXYZ> grid;
++        grid.setInputCloud(cloud);
++        grid.setLeafSize(_voxel_leaf_size, _voxel_leaf_size, _voxel_leaf_size);
++        grid.filter(*cloud);
++        auto header = msg_pointcloud->header;
++        pcl::toROSMsg(*cloud, *msg_pointcloud);
++        msg_pointcloud->header = header;
++    }
+     {
+         std::lock_guard<std::mutex> lock_guard(_mutex_publisher);
+         if (_pointcloud_publisher)

@@ -25,10 +25,10 @@ class Depth:
     def wait_cloud(self, timeout=10.0):
         if not self._wait(lambda: self._node.cloud is not None, timeout):
             raise Lite3Error(
-                'no point cloud. Start it with: sudo systemctl start '
-                'realsense_ros2.service   (and if it is running but silent, '
-                'check dmesg for "HC died" - the Jetson xHCI controller '
-                'crashes and a reboot, not a replug, is the fix.)')
+                'no point cloud. Start the camera with: python3 -m '
+                'robot.protocol camera on   (if it is up but silent, check '
+                'journalctl -u realsense_ros2, and that the Jetson has all 6 '
+                'cores: cat /sys/devices/system/cpu/online should say 0-5)')
         return self._node.cloud
 
     def scan(self, fov_deg=45, bin_deg=5):

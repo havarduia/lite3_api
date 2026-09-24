@@ -53,8 +53,8 @@ from rclpy.executors import SingleThreadedExecutor     # noqa: E402
 from rclpy.node import Node                            # noqa: E402
 from rclpy.qos import (DurabilityPolicy, QoSProfile,   # noqa: E402
                        ReliabilityPolicy)
-from sensor_msgs.msg import PointCloud2                # noqa: E402
-from std_msgs.msg import Int32MultiArray               # noqa: E402
+from sensor_msgs.msg import Imu, PointCloud2           # noqa: E402
+from std_msgs.msg import Float64, Int32MultiArray      # noqa: E402
 from tf2_ros import Buffer, TransformListener          # noqa: E402
 
 from . import protocol as P                            # noqa: E402
@@ -66,8 +66,11 @@ MAX_TILT_DEG = 14.0      # STICK_PITCH full scale, see protocol.py
 HEARTBEAT_HZ = 2.0
 
 # --- /robot_state_debug ----------------------------------------------------
+# error and charging (indices 8, 9) come from our Jetson2Motion.cpp build;
+# the robot's own header says it may not fill them in yet. On an older
+# transfer build they are simply absent from the dict.
 STATE_FIELDS = ('basic', 'gait', 'policy', 'motion', 'task', 'need_move',
-                'zero_flag', 'battery')
+                'zero_flag', 'battery', 'error', 'charging')
 STANDING = 6
 # Lying/ready postures, reached different ways: 1 after a commanded lie-down,
 # 8 after power-on, 98 seen on a cold boot. Transitional states (4, 5, 7) and
@@ -107,6 +110,14 @@ HARD_TIMEOUT = 30.0      # s, ceiling on any single motion call
 # something directly beside or behind him is still invisible.
 TURN_SWEEP = 0.43
 
+# Abort any motion call if the body rolls or pitches past this. Walking on the
+# flat stays within a few degrees; the robot is rated for 40 deg slopes, so
+# raise it before trying one.
+TILT_LIMIT_DEG = 30.0
+# A handheld stick past this (axes are -1..1) means a person has taken over:
+# the robot silently drops back to manual mode and ignores our velocities.
+HANDHELD_DEADBAND = 0.1
+
 class _Node(Node):
     def __init__(self):
         super().__init__('lite3_api')
@@ -123,6 +134,9 @@ class _Node(Node):
         self.odom = None
         self.cloud = None
         self.grid = None
+        self.us_front = self.us_rear = None
+        self.tilt = None            # (roll, pitch) in degrees
+        self.stick_time = 0.0       # last time a handheld stick was pushed
         self.create_subscription(Int32MultiArray, '/robot_state_debug',
                                  self._state_cb, 10)
         self.create_subscription(Odometry, 'leg_odom2', self._odom_cb, 10)
@@ -130,6 +144,15 @@ class _Node(Node):
                                  self._cloud_cb, cloud_qos)
         self.create_subscription(OccupancyGrid, '/global_costmap/costmap',
                                  self._grid_cb, latched)
+        # The two ultrasonic sensors. The rear one reads 0.28-0.6 m; 0.28 is
+        # both "closer than that" and, seen lying down, "no echo" - so it is
+        # exposed as a reading only, not yet used as a guard.
+        self.create_subscription(Float64, '/us_publisher/ultrasound_distance',
+                                 lambda m: setattr(self, 'us_rear', m.data), 10)
+        self.create_subscription(Float64, '/us_publisher/ultrasound_front',
+                                 lambda m: setattr(self, 'us_front', m.data), 10)
+        self.create_subscription(Imu, '/imu/data', self._imu_cb, 10)
+        self.create_subscription(Twist, '/handle_state', self._handle_cb, best)
         self.tf = Buffer()
         self.tf_listener = TransformListener(self.tf, self)
 
@@ -147,6 +170,18 @@ class _Node(Node):
 
     def _grid_cb(self, m):
         self.grid = m
+
+    def _imu_cb(self, m):
+        q = m.orientation
+        roll = math.atan2(2.0 * (q.w * q.x + q.y * q.z),
+                          1.0 - 2.0 * (q.x * q.x + q.y * q.y))
+        pitch = math.asin(max(-1.0, min(1.0, 2.0 * (q.w * q.y - q.z * q.x))))
+        self.tilt = (math.degrees(roll), math.degrees(pitch))
+
+    def _handle_cb(self, m):
+        if max(abs(m.linear.x), abs(m.linear.y),
+               abs(m.angular.z)) > HANDHELD_DEADBAND:
+            self.stick_time = time.time()
 
 
 class Lite3(Nav, Depth):
@@ -321,6 +356,16 @@ class Lite3(Nav, Depth):
     @property
     def standing(self):
         return self.state.get('basic') == STANDING
+
+    @property
+    def ultrasound(self):
+        """(front, rear) ultrasonic range in metres, None where not heard."""
+        return (self._node.us_front, self._node.us_rear)
+
+    @property
+    def attitude(self):
+        """(roll, pitch) of the body in degrees from the robot's IMU, or None."""
+        return self._node.tilt
 
     @property
     def pose(self):
@@ -579,6 +624,15 @@ class Lite3(Nav, Depth):
             self._drive()
             time.sleep(0.02)
 
+    def _safety(self, since):
+        """A reason to stop every motion call, whatever it is doing."""
+        if self._node.stick_time > since:
+            return 'handheld took over - stopped'
+        t = self._node.tilt
+        if t and max(abs(t[0]), abs(t[1])) > TILT_LIMIT_DEG:
+            return 'body tilted %.0f deg roll / %.0f deg pitch - stopped' % t
+        return None
+
     def _run(self, vx, vy, wz, done, limit, force, abort=None):
         """Drive until done(), the time limit, or abort() returns a reason."""
         self._require_battery(force)
@@ -586,10 +640,15 @@ class Lite3(Nav, Depth):
         self.auto()
         self.wait_pose()
         start = self.pose
-        deadline = time.time() + min(limit, HARD_TIMEOUT)
+        began = time.time()
+        deadline = began + min(limit, HARD_TIMEOUT)
         reason = 'time limit'
         try:
             while time.time() < deadline:
+                stop = self._safety(began)
+                if stop:
+                    reason = stop
+                    break
                 self._drive(vx, vy, wz)
                 time.sleep(0.05)
                 if abort is not None:
@@ -619,10 +678,15 @@ class Lite3(Nav, Depth):
         self.auto()
         self.wait_pose()
         start = self.pose
-        deadline = time.time() + min(limit, HARD_TIMEOUT)
+        began = time.time()
+        deadline = began + min(limit, HARD_TIMEOUT)
         reason = 'time limit'
         try:
             while time.time() < deadline:
+                stop = self._safety(began)
+                if stop:
+                    reason = stop
+                    break
                 out = control()
                 if isinstance(out, str):
                     reason = out
@@ -789,11 +853,18 @@ class Lite3(Nav, Depth):
     def status(self):
         s = self.state
         p = self.pose
+        f, r = self.ultrasound
+        t = self.attitude
         return ('basic={basic} gait={gait} battery={battery}% '.format(**s)
+                + ('error=%s ' % s['error'] if s.get('error') else '')
+                + ('charging ' if s.get('charging') else '')
                 + ('standing' if self.standing else 'not standing')
                 + (' pose=(%.2f, %.2f, %.0f deg)' % (p[0], p[1], math.degrees(p[2]))
                    if p else ' pose=unknown')
-                + ' nav2=' + ('up' if self.nav_running else 'down'))
+                + ' nav2=' + ('up' if self.nav_running else 'down')
+                + ' sonar front=%s rear=%s' % tuple(
+                    '-' if v is None else '%.2f' % v for v in (f, r))
+                + (' tilt=(%.0f, %.0f) deg' % t if t else ''))
 
 
 def _cli():
@@ -808,6 +879,7 @@ def _cli():
     cmd = args[0]
     with Lite3(auto_mode=(cmd not in ('status', 'scan', 'cost'))) as bot:
         if cmd == 'status':
+            time.sleep(0.5)     # let the sonar and IMU topics arrive
             print(bot.status())
         elif cmd == 'stand':
             bot.stand(); print(bot.status())

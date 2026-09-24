@@ -14,6 +14,7 @@ trick. Use Lite3 for anything but debugging and capturing unknown codes.
     python3 -m robot.protocol hello            # a name from ACTIONS
     python3 -m robot.protocol 0x21010300       # any number
     python3 -m robot.protocol stick_pitch -16000
+    python3 -m robot.protocol camera [on|off]   # camera services, no sudo
 
 Codes marked OFFICIAL are in DeepRoboticsLab source; COMMUNITY ones come from
 infodriver/lite3-sdk and have not been run on this robot. The rest were
@@ -27,6 +28,8 @@ import time
 MOTION_IP = '192.168.1.120'          # 192.168.2.1 on the robot's own wifi
 MOTION_ADDR = (MOTION_IP, 43893)     # jy_exe: every motion command
 TRACKER_ADDR = (MOTION_IP, 43901)    # track service, JSON payloads
+# jetson2app on THIS (perception) computer: starts/stops the camera services
+APP_ADDR = ('127.0.0.1', 43899)
 CAMERA_URL = 'rtsp://%s:8554/test' % MOTION_IP
 
 
@@ -49,9 +52,10 @@ POSTURE_ENTER, POSTURE_EXIT = 0x21010D05, 0x21010D06
 STICK_PITCH, STICK_ROLL = 0x21010130, 0x21010131
 
 # Built-in tricks: name -> (code, posture it starts from). hello/dance/twist
-# are OFFICIAL (Lite3_LLM); the rest COMMUNITY. None has been run on THIS
-# robot yet. backflip (0x21010502) is left out on purpose: the Pro manual
-# does not list it.
+# are OFFICIAL (Lite3_LLM); the rest COMMUNITY. dance VERIFIED 2026-09-24
+# (standing, 3 sends at 1 Hz); the others are not yet run on THIS robot.
+# backflip (0x21010502) is left out on purpose: the Pro manual does not
+# list it.
 ACTIONS = {
     'hello':      (0x21010506, 'lie'),
     'dance':      (0x2101030C, 'stand'),
@@ -71,6 +75,13 @@ ACTIONS = {
 #   telemetry to UDP 43897: 0x0901 robot state, 0x0902 joints, 0x0905
 #       handheld sticks. transfer_ros2 owns that port and republishes it.
 
+# --- app port (APP_ADDR), simple frames ---------------------------------------
+# The camera services (realsense_ros2 + voa_ros2), started the way the handheld
+# does it - no sudo needed. Only works while the robot's IMU topic is up.
+AI_SERVICES = 0x21012109    # value 0x40 start, 0x00 stop
+AI_QUERY = 0x2101210D       # reply: same code, value 0x11 up / 0x10 down
+CAMERA_ON, CAMERA_OFF = 0x40, 0x00
+
 # --- tracker port, 12 B header <code, json_len, 1> then JSON -----------------
 TRK_VIDEO = 0x21013301      # {"enabled":0|1}  video streaming
 TRK_DETECT = 0x21013302     # {"enabled":0|1}  person detection
@@ -84,6 +95,26 @@ def send(code, value=0):
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     try:
         s.sendto(struct.pack('<IiI', code, int(value), 0), MOTION_ADDR)
+    finally:
+        s.close()
+
+
+def camera(on=None):
+    """Start (True) or stop (False) the camera services; returns whether they
+    are up afterwards, or None if jetson2app did not answer."""
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        s.bind(('0.0.0.0', 0))
+        s.settimeout(3)
+        if on is not None:
+            s.sendto(struct.pack('<IiI', AI_SERVICES,
+                                 CAMERA_ON if on else CAMERA_OFF, 0), APP_ADDR)
+            time.sleep(20 if on else 5)     # the services take ~15 s to come up
+        s.sendto(struct.pack('<IiI', AI_QUERY, 0, 0), APP_ADDR)
+        try:
+            return struct.unpack('<IiI', s.recv(64)[:12])[1] == 0x11
+        except socket.timeout:
+            return None
     finally:
         s.close()
 
@@ -107,6 +138,10 @@ if __name__ == '__main__':
     import sys
     if len(sys.argv) < 2:
         sys.exit(__doc__)
+    if sys.argv[1] == 'camera':         # camera [on|off]
+        up = camera({'on': True, 'off': False}.get(sys.argv[2] if len(sys.argv) > 2 else None))
+        sys.exit(print('camera services:', {True: 'up', False: 'down',
+                                             None: 'no answer from jetson2app'}[up]))
     code = lookup(sys.argv[1])
     value = int(sys.argv[2], 0) if len(sys.argv) > 2 else 0
     send(code, value)
