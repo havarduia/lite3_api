@@ -46,6 +46,10 @@ MIN_RANGE = 0.27   # just under its 0.28 floor, so 0.28 still marks
 # intermittently (the edge), one at 27-32 deg steadily. 4.5 / 4.7 = no echo.
 FOV = 1.15         # rad, ~+-33 deg
 RATE_HZ = 20.0
+# Written on the first publish. env/start_nav2_mapless.sh waits for it before
+# launching Nav2, so the range layer never starts its no-readings clock
+# before there are readings.
+READY_FILE = '/tmp/sonar_range.ready'
 
 
 class SonarRange(Node):
@@ -54,6 +58,7 @@ class SonarRange(Node):
         self._stamp = None           # latest /leg_odom2 stamp (steady clock)
         self._last = {}
         self._pubs = {}
+        self._ready = False
         self.create_subscription(Odometry, 'leg_odom2', self._odom, 10)
         tfs = []
         for name, (topic, x, yaw, _) in SONARS.items():
@@ -80,6 +85,9 @@ class SonarRange(Node):
         if self._stamp is None:
             return
         for name, value in self._last.items():
+            if not self._ready:
+                open(READY_FILE, 'w').close()
+                self._ready = True
             r = Range()
             r.header.stamp = self._stamp
             r.header.frame_id = 'sonar_' + name
