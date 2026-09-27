@@ -1,0 +1,8 @@
+# /etc/sudoers.d/lite3-camera - lets ysc start/stop the camera and voa
+# services separately (robot.protocol camera/voa). Nothing else.
+# Install: sudo visudo -cf env/sudoers-lite3-camera &&
+#          sudo install -m 0440 env/sudoers-lite3-camera /etc/sudoers.d/lite3-camera
+ysc ALL=(root) NOPASSWD: /usr/bin/systemctl start realsense_ros2.service, \
+                         /usr/bin/systemctl stop realsense_ros2.service, \
+                         /usr/bin/systemctl start voa_ros2.service, \
+                         /usr/bin/systemctl stop voa_ros2.service

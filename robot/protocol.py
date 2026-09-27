@@ -14,7 +14,8 @@ trick. Use Lite3 for anything but debugging and capturing unknown codes.
     python3 -m robot.protocol hello            # a name from ACTIONS
     python3 -m robot.protocol 0x21010300       # any number
     python3 -m robot.protocol stick_pitch -16000
-    python3 -m robot.protocol camera [on|off]   # camera services, no sudo
+    python3 -m robot.protocol camera [on|off]   # depth camera service only
+    python3 -m robot.protocol voa [on|off]      # voa (brings the camera too)
 
 Codes marked OFFICIAL are in DeepRoboticsLab source; COMMUNITY ones come from
 infodriver/lite3-sdk and have not been run on this robot. The rest were
@@ -23,12 +24,13 @@ captured from the handheld or phone app here.
 import json
 import socket
 import struct
+import subprocess
 import time
 
 MOTION_IP = '192.168.1.120'          # 192.168.2.1 on the robot's own wifi
 MOTION_ADDR = (MOTION_IP, 43893)     # jy_exe: every motion command
 TRACKER_ADDR = (MOTION_IP, 43901)    # track service, JSON payloads
-# jetson2app on THIS (perception) computer: starts/stops the camera services
+# jetson2app on THIS (perception) computer: the app/handheld AI switch
 APP_ADDR = ('127.0.0.1', 43899)
 CAMERA_URL = 'rtsp://%s:8554/test' % MOTION_IP
 
@@ -76,8 +78,9 @@ ACTIONS = {
 #       handheld sticks. transfer_ros2 owns that port and republishes it.
 
 # --- app port (APP_ADDR), simple frames ---------------------------------------
-# The camera services (realsense_ros2 + voa_ros2), started the way the handheld
-# does it - no sudo needed. Only works while the robot's IMU topic is up.
+# The handheld/app AI switch: jetson2app (root) starts or stops realsense_ros2
+# AND voa_ros2 together. Only works while the robot's IMU topic is up. We no
+# longer use it - camera()/voa() below drive the two services separately.
 AI_SERVICES = 0x21012109    # value 0x40 start, 0x00 stop
 AI_QUERY = 0x2101210D       # reply: same code, value 0x11 up / 0x10 down
 CAMERA_ON, CAMERA_OFF = 0x40, 0x00
@@ -99,24 +102,31 @@ def send(code, value=0):
         s.close()
 
 
+def _service(unit, on):
+    """Start (True) or stop (False) a systemd unit, or just look (None);
+    returns whether it is active afterwards. Passwordless only for the exact
+    commands in env/sudoers-lite3-camera."""
+    if on is not None:
+        r = subprocess.run(['sudo', '-n', '/usr/bin/systemctl',
+                            'start' if on else 'stop', unit],
+                           stderr=subprocess.PIPE, universal_newlines=True)
+        if r.returncode:
+            raise Lite3Error('systemctl %s %s failed (%s) - is '
+                             'env/sudoers-lite3-camera installed?'
+                             % ('start' if on else 'stop', unit, r.stderr.strip()))
+    return subprocess.run(['systemctl', 'is-active', '--quiet', unit]).returncode == 0
+
+
 def camera(on=None):
-    """Start (True) or stop (False) the camera services; returns whether they
-    are up afterwards, or None if jetson2app did not answer."""
-    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    try:
-        s.bind(('0.0.0.0', 0))
-        s.settimeout(3)
-        if on is not None:
-            s.sendto(struct.pack('<IiI', AI_SERVICES,
-                                 CAMERA_ON if on else CAMERA_OFF, 0), APP_ADDR)
-            time.sleep(20 if on else 5)     # the services take ~15 s to come up
-        s.sendto(struct.pack('<IiI', AI_QUERY, 0, 0), APP_ADDR)
-        try:
-            return struct.unpack('<IiI', s.recv(64)[:12])[1] == 0x11
-        except socket.timeout:
-            return None
-    finally:
-        s.close()
+    """The depth camera service on its own. Active is not streaming: the
+    node takes a few seconds, so judge it by frames (Lite3.wait_cloud)."""
+    return _service('realsense_ros2.service', on)
+
+
+def voa(on=None):
+    """voa_ros2. Its drop-in (env/voa_ros2-override.conf) binds it to the
+    camera: starting voa starts the camera, stopping the camera stops voa."""
+    return _service('voa_ros2.service', on)
 
 
 def tracker_packet(code, **fields):
@@ -138,10 +148,11 @@ if __name__ == '__main__':
     import sys
     if len(sys.argv) < 2:
         sys.exit(__doc__)
-    if sys.argv[1] == 'camera':         # camera [on|off]
-        up = camera({'on': True, 'off': False}.get(sys.argv[2] if len(sys.argv) > 2 else None))
-        sys.exit(print('camera services:', {True: 'up', False: 'down',
-                                             None: 'no answer from jetson2app'}[up]))
+    if sys.argv[1] in ('camera', 'voa'):     # camera|voa [on|off]
+        on = {'on': True, 'off': False}.get(sys.argv[2] if len(sys.argv) > 2 else None)
+        globals()[sys.argv[1]](on)
+        sys.exit(print('camera: %s   voa: %s' % tuple(
+            'up' if f() else 'down' for f in (camera, voa))))
     code = lookup(sys.argv[1])
     value = int(sys.argv[2], 0) if len(sys.argv) > 2 else 0
     send(code, value)
