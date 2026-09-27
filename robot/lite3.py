@@ -110,6 +110,12 @@ HARD_TIMEOUT = 30.0      # s, ceiling on any single motion call
 # something directly beside or behind him is still invisible.
 TURN_SWEEP = 0.43
 
+# He keeps turning for ~0.17 s after the zero command: stopping at the target
+# overshot every turn by 3.5-4.5 deg at 0.4 rad/s (wall-referenced, 2026-09-28).
+# turn() stops this much time early and reports the heading once he settles.
+TURN_COAST_S = 0.17
+TURN_SETTLE_S = 0.5
+
 # Abort any motion call if the body rolls or pitches past this. Walking on the
 # flat stays within a few degrees; the robot is rated for 40 deg slopes, so
 # raise it before trying one.
@@ -783,6 +789,7 @@ class Lite3(Nav, Depth):
         rate = min(abs(rate), MAX_YAW_RATE)
         wz = math.copysign(rate, radians)
         target = abs(radians)
+        stop_at = target - min(rate * TURN_COAST_S, target / 2)
         acc = {'prev': None, 'total': 0.0}
 
         def done(s, p):
@@ -797,7 +804,7 @@ class Lite3(Nav, Depth):
                               math.cos(p[2] - acc['prev']))
             acc['total'] += step
             acc['prev'] = p[2]
-            return abs(acc['total']) >= target
+            return abs(acc['total']) >= stop_at
 
         abort = None
         if guard:
@@ -821,6 +828,11 @@ class Lite3(Nav, Depth):
                     return None
 
         r = self._run(0.0, 0.0, wz, done, target / rate + 10.0, force, abort)
+        # Let the coast finish, then count it, so turned is where he settled.
+        time.sleep(TURN_SETTLE_S)
+        p = self._node.odom
+        if p is not None and acc['prev'] is not None:
+            done(None, p)
         r['turned'] = acc['total']          # unwrapped, so 180+ reads correctly
         return r
 
