@@ -25,16 +25,26 @@ from sensor_msgs.msg import Range
 from std_msgs.msg import Float64
 from tf2_ros import StaticTransformBroadcaster
 
-# name: (input topic, x in base_link, yaw). x from the camera-sonar offset
-# (front face ~0.23 m ahead of base_link); the rear is not measured, so it is
-# placed at the back of the body (nose is 0.274 m ahead, body 0.61 m long).
+# name: (input topic, x in base_link, yaw, max range). x from the
+# camera-sonar offset (front face ~0.23 m ahead of base_link); the rear is not
+# measured, so it is placed at the back of the body (nose is 0.274 m ahead,
+# body 0.61 m long).
+#
+# Max range: a reading at or past it goes out AS max, which the range layer
+# treats as "nothing there". The FRONT is cut to 0.8 m: its wide beam hears a
+# chair base 30 deg off to the side, and the layer spreads every mark over
+# the whole cone, so a far front echo becomes a wall across the aisle. The
+# depth camera covers that distance properly; the front sonar is kept for
+# what the camera misses up close (under ~0.6 m, glass). The REAR is the only
+# sensor behind him, so it keeps its full range.
 SONARS = {
-    'front': ('/us_publisher/ultrasound_front', 0.23, 0.0),
-    'rear': ('/us_publisher/ultrasound_distance', -0.31, math.pi),
+    'front': ('/us_publisher/ultrasound_front', 0.23, 0.0, 0.8),
+    'rear': ('/us_publisher/ultrasound_distance', -0.31, math.pi, 4.0),
 }
 MIN_RANGE = 0.27   # just under its 0.28 floor, so 0.28 still marks
-MAX_RANGE = 4.0    # 4.5 / 4.7 are no-echo; send them as max (= nothing seen)
-FOV = 0.5          # rad; beam width is not in the manual - a guess
+# Beam width, measured 2026-09-28: objects ~1 m away at +-34 deg are caught
+# intermittently (the edge), one at 27-32 deg steadily. 4.5 / 4.7 = no echo.
+FOV = 1.15         # rad, ~+-33 deg
 RATE_HZ = 20.0
 
 
@@ -46,7 +56,7 @@ class SonarRange(Node):
         self._pubs = {}
         self.create_subscription(Odometry, 'leg_odom2', self._odom, 10)
         tfs = []
-        for name, (topic, x, yaw) in SONARS.items():
+        for name, (topic, x, yaw, _) in SONARS.items():
             self._pubs[name] = self.create_publisher(Range, '/sonar/' + name, 10)
             self.create_subscription(
                 Float64, topic, lambda m, n=name: self._last.__setitem__(n, m.data), 10)
@@ -75,8 +85,9 @@ class SonarRange(Node):
             r.header.frame_id = 'sonar_' + name
             r.radiation_type = Range.ULTRASOUND
             r.field_of_view = FOV
-            r.min_range, r.max_range = MIN_RANGE, MAX_RANGE
-            r.range = min(float(value), MAX_RANGE)
+            top = SONARS[name][3]
+            r.min_range, r.max_range = MIN_RANGE, top
+            r.range = min(float(value), top)
             self._pubs[name].publish(r)
 
 
