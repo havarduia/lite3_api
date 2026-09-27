@@ -1,0 +1,83 @@
+--- a/config/lite_nav2_mapless.yaml
++++ b/config/lite_nav2_mapless.yaml
+@@ -43,7 +43,7 @@
+     ros__parameters:
+       use_sim_time: False
+       always_send_full_costmap: True
+-      footprint_padding: 0.10
++      footprint_padding: 0.05   # was 0.20; reduced 2026-09-18 so he gets closer
+       footprint: "[[0.3, 0.2], [0.3, -0.2], [-0.3, -0.2], [-0.3, 0.2]]"
+       global_frame: odom
+       width: 8
+@@ -71,7 +71,7 @@
+         update_footprint_enabled: true
+         track_unknown_space:   false   #default space is unknown
+         decay_model:           0      #0=linear, 1=exponential, -1=persistent
+-        voxel_decay:           2.0     #seconds if linear, e^n if exponential -- longer than lidar's 0.3s since the camera's FOV is narrow and loses sight of obstacles when the robot turns
++        voxel_decay:           15.0       #seconds if linear, e^n if exponential; was 2.0 - forgot obstacles beside him, scraped a chair 2026-09-27; -- longer than lidar's 0.3s since the camera's FOV is narrow and loses sight of obstacles when the robot turns
+         mapping_mode:          false  # default off, saves map not for navigation
+         map_save_duration:     60.0     #default 60s, how often to autosave
+ 
+@@ -101,8 +101,8 @@
+ 
+       inflation_layer:
+         plugin: "nav2_costmap_2d::InflationLayer"
+-        inflation_radius: 0.3
+-        cost_scaling_factor: 10.0
++        inflation_radius: 0.45   # was 0.30 (0.50 originally); 0.30 let NavFn fail next to corners (2026-09-27)
++        cost_scaling_factor: 3.0
+         inflate_unknown: False
+         inflate_around_unknown: False
+ 
+@@ -111,7 +111,7 @@
+     ros__parameters:
+       use_sim_time: False
+       always_send_full_costmap: True
+-      footprint_padding: 0.10
++      footprint_padding: 0.05   # was 0.20; reduced 2026-09-18 so he gets closer
+       footprint: "[[0.3, 0.2], [0.3, -0.2], [-0.3, -0.2], [-0.3, 0.2]]"
+       global_frame: odom
+       width: 30
+@@ -139,7 +139,7 @@
+         update_footprint_enabled: true
+         track_unknown_space:   false   #default space is unknown
+         decay_model:           0      #0=linear, 1=exponential, -1=persistent
+-        voxel_decay:           2.0     #seconds if linear, e^n if exponential
++        voxel_decay:           15.0       #seconds if linear, e^n if exponential; was 2.0 - forgot obstacles beside him, scraped a chair 2026-09-27;
+         mapping_mode:          false  # default off, saves map not for navigation
+         map_save_duration:     60.0     #default 60s, how often to autosave
+ 
+@@ -169,8 +169,8 @@
+ 
+       inflation_layer:
+         plugin: "nav2_costmap_2d::InflationLayer"
+-        inflation_radius: 0.3
+-        cost_scaling_factor: 10.0
++        inflation_radius: 0.45   # was 0.30 (0.50 originally); 0.30 let NavFn fail next to corners (2026-09-27)
++        cost_scaling_factor: 3.0
+         inflate_unknown: False
+         inflate_around_unknown: False
+ 
+@@ -203,8 +203,11 @@
+       movement_time_allowance: 10.0
+     goal_checker:
+       plugin: "nav2_controller::SimpleGoalChecker"
+-      xy_goal_tolerance: 0.15
+-      yaw_goal_tolerance: 0.3
++      # Stop at the spot, whatever the heading. A final in-place rotation made
++      # the legged base step and drift around the goal instead of stopping;
++      # lite3.goto() does a requested final heading itself with turn().
++      xy_goal_tolerance: 0.25
++      yaw_goal_tolerance: 3.14
+       stateful: True
+ 
+     FollowPath:
+@@ -255,7 +258,7 @@
+       PathDist.aggregation_type: "sum"
+ 
+       RotateToGoal.scale: 32.0
+-      xy_goal_tolerance: 0.15
++      xy_goal_tolerance: 0.25
+       trans_stopped_velocity: 0.05
+       RotateToGoal.slowing_factor: 5.0
+       RotateToGoal.lookahead_time: -1.0
