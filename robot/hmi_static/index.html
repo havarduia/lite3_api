@@ -1,0 +1,394 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Lite3 Control</title>
+<style>
+:root {
+  --bg: #f4f5f7; --panel: #ffffff; --panel-2: #eef0f3; --line: #d9dde3;
+  --text: #16191d; --muted: #5d6570; --accent: #2563eb; --accent-text: #ffffff;
+  --ok: #15803d; --warn: #b45309; --bad: #b91c1c; --stop: #dc2626; --stop-text: #ffffff;
+  --radius: 10px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f1216; --panel: #171b21; --panel-2: #1f242b; --line: #2c333c;
+    --text: #e7eaee; --muted: #98a2ae; --accent: #60a5fa; --accent-text: #0b1220;
+    --ok: #4ade80; --warn: #fbbf24; --bad: #f87171;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f1216; --panel: #171b21; --panel-2: #1f242b; --line: #2c333c;
+  --text: #e7eaee; --muted: #98a2ae; --accent: #60a5fa; --accent-text: #0b1220;
+  --ok: #4ade80; --warn: #fbbf24; --bad: #f87171;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  background: var(--bg); color: var(--text);
+  font: 15px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  -webkit-tap-highlight-color: transparent;
+}
+header {
+  position: sticky; top: 0; z-index: 10;
+  display: flex; align-items: center; gap: 12px;
+  padding: 10px 16px; background: var(--panel); border-bottom: 1px solid var(--line);
+}
+header h1 { font-size: 17px; margin: 0; font-weight: 650; }
+.pill { font-size: 12px; padding: 3px 9px; border-radius: 99px; background: var(--panel-2); color: var(--muted); }
+.pill.ok { color: var(--ok); } .pill.bad { color: var(--bad); }
+#estop {
+  margin-left: auto; border: 0; border-radius: var(--radius);
+  background: var(--stop); color: var(--stop-text);
+  font-weight: 800; font-size: 16px; letter-spacing: .06em;
+  padding: 12px 22px; cursor: pointer; box-shadow: 0 2px 0 rgba(0,0,0,.25);
+}
+#estop:active { transform: translateY(1px); }
+main {
+  display: grid; gap: 14px; padding: 14px 16px 40px;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  max-width: 1400px; margin: 0 auto;
+}
+section { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px; min-width: 0; }
+section h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); margin: 0 0 10px; font-weight: 650; }
+.stats { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 8px; }
+.stat { background: var(--panel-2); border-radius: 8px; padding: 8px 10px; }
+.stat .k { font-size: 12px; color: var(--muted); }
+.stat .v { font-size: 18px; font-weight: 650; font-variant-numeric: tabular-nums; }
+.v.ok { color: var(--ok); } .v.warn { color: var(--warn); } .v.bad { color: var(--bad); }
+#busy { margin-top: 10px; font-size: 13px; color: var(--muted); min-height: 1.4em; }
+#busy.warn { color: var(--warn); }
+.row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.row + .row { margin-top: 10px; }
+button.b {
+  border: 1px solid var(--line); background: var(--panel-2); color: var(--text);
+  border-radius: 8px; padding: 9px 14px; font: inherit; font-weight: 600; cursor: pointer;
+}
+button.b.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
+button.b:disabled { opacity: .45; cursor: default; }
+.lbl { font-size: 13px; color: var(--muted); min-width: 64px; }
+input, select, textarea {
+  font: inherit; color: var(--text); background: var(--panel-2);
+  border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; min-width: 0;
+}
+input[type=number] { width: 84px; }
+textarea { width: 100%; resize: vertical; min-height: 44px; }
+.cams { display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+.cam { background: #000; border-radius: 8px; aspect-ratio: 16/10; display: grid; place-items: center; overflow: hidden; position: relative; }
+.cam img { width: 100%; height: 100%; object-fit: contain; }
+.cam .off { color: #9aa3ad; font-size: 13px; }
+.cam .tag { position: absolute; left: 8px; top: 6px; font-size: 11px; color: #fff; background: rgba(0,0,0,.55); padding: 2px 6px; border-radius: 5px; }
+canvas#scan { width: 100%; height: auto; display: block; background: var(--panel-2); border-radius: 8px; }
+.drive { display: grid; grid-template-columns: 1fr; gap: 12px; justify-items: center; }
+#pad {
+  width: min(260px, 70vw); aspect-ratio: 1; border-radius: 50%; position: relative;
+  background: radial-gradient(circle, var(--panel-2) 0 58%, var(--panel) 59% 100%);
+  border: 1px solid var(--line); touch-action: none; user-select: none; cursor: grab;
+}
+#pad.active { outline: 3px solid var(--accent); }
+#pad .knob {
+  position: absolute; width: 64px; height: 64px; border-radius: 50%;
+  left: calc(50% - 32px); top: calc(50% - 32px);
+  background: var(--accent); opacity: .9; pointer-events: none;
+}
+#pad .hint { position: absolute; inset: auto 0 10px; text-align: center; font-size: 12px; color: var(--muted); pointer-events: none; }
+#drivestate { font-size: 13px; color: var(--muted); min-height: 1.4em; text-align: center; }
+#drivestate.warn { color: var(--warn); }
+.note { font-size: 12px; color: var(--muted); margin-top: 8px; }
+#chat { max-height: 220px; overflow: auto; display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
+.msg { padding: 7px 10px; border-radius: 8px; background: var(--panel-2); font-size: 14px; }
+.msg.you { align-self: flex-end; background: var(--accent); color: var(--accent-text); }
+#log { max-height: 240px; overflow: auto; font: 12.5px/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+#log div { padding: 2px 0; border-bottom: 1px dashed var(--line); }
+#log .warn { color: var(--warn); } #log .error { color: var(--bad); }
+.wide { grid-column: 1 / -1; }
+@media (max-width: 520px) {
+  header h1 { font-size: 15px; }
+  #estop { padding: 11px 16px; }
+}
+</style>
+</head>
+<body>
+<header>
+  <h1>Lite3</h1>
+  <span id="conn" class="pill bad">offline</span>
+  <button id="estop" title="Cancel everything and halt (Space)">E-STOP</button>
+</header>
+
+<main>
+  <section>
+    <h2>Status</h2>
+    <div class="stats">
+      <div class="stat"><div class="k">Battery</div><div class="v" id="s-batt">–</div></div>
+      <div class="stat"><div class="k">Posture</div><div class="v" id="s-post">–</div></div>
+      <div class="stat"><div class="k">Nav2</div><div class="v" id="s-nav">–</div></div>
+      <div class="stat"><div class="k">Camera</div><div class="v" id="s-cam">–</div></div>
+      <div class="stat"><div class="k">VOA</div><div class="v" id="s-voa">–</div></div>
+      <div class="stat"><div class="k">Heartbeat</div><div class="v" id="s-hb">–</div></div>
+      <div class="stat"><div class="k">Sonar front</div><div class="v" id="s-sf">–</div></div>
+      <div class="stat"><div class="k">Sonar rear</div><div class="v" id="s-sr">–</div></div>
+      <div class="stat"><div class="k">Tilt roll / pitch</div><div class="v" id="s-tilt">–</div></div>
+      <div class="stat"><div class="k">Pose x, y, yaw</div><div class="v" id="s-pose" style="font-size:15px">–</div></div>
+    </div>
+    <div id="busy"></div>
+  </section>
+
+  <section>
+    <h2>Controls</h2>
+    <div class="row">
+      <span class="lbl">Body</span>
+      <button class="b primary" data-cmd="stand">Stand</button>
+      <button class="b" data-cmd="sit">Sit</button>
+    </div>
+    <div class="row">
+      <span class="lbl">Nav2</span>
+      <button class="b" data-cmd="nav" data-on="1">Start</button>
+      <button class="b" data-cmd="nav" data-on="0">Stop</button>
+    </div>
+    <div class="row">
+      <span class="lbl">Camera</span>
+      <button class="b" data-cmd="camera" data-on="1">On</button>
+      <button class="b" data-cmd="camera" data-on="0">Off</button>
+      <span class="lbl" style="min-width:auto;margin-left:10px">VOA</span>
+      <button class="b" data-cmd="voa" data-on="1">On</button>
+      <button class="b" data-cmd="voa" data-on="0">Off</button>
+    </div>
+    <div class="row">
+      <span class="lbl">Go to</span>
+      <input id="goto-m" type="number" step="0.1" value="1.5" aria-label="metres ahead"> m
+      <input id="goto-d" type="number" step="15" value="0" aria-label="final turn, degrees"> °
+      <button class="b primary" id="goto">Go</button>
+    </div>
+    <div class="note">Go to: Nav2 routes around obstacles to a point that far ahead, then turns (°, + = left). Starts Nav2 if needed.</div>
+  </section>
+
+  <section>
+    <h2>Drive (hold)</h2>
+    <div class="drive">
+      <div id="pad" aria-label="drive joystick"><div class="knob"></div><div class="hint">drag &amp; hold · or WASD / arrows</div></div>
+      <div class="row">
+        <span class="lbl">Speed</span>
+        <input id="speed" type="range" min="0.05" max="0.5" step="0.05" value="0.2" aria-label="max speed m/s">
+        <span id="speed-v" style="font-variant-numeric:tabular-nums">0.20 m/s</span>
+      </div>
+      <div id="drivestate"></div>
+    </div>
+    <div class="note">Moves only while held. Stops forward under 0.6 m from the depth camera, backward under 0.5 m on the rear sonar. Not available while Nav2 runs.</div>
+  </section>
+
+  <section>
+    <h2>Depth scan</h2>
+    <canvas id="scan" width="600" height="340"></canvas>
+    <div class="note">Nearest obstacle per 5° bearing from the RealSense, top-down, robot at the bottom facing up.</div>
+  </section>
+
+  <section class="wide">
+    <h2>Cameras</h2>
+    <div class="cams">
+      <div>
+        <div class="cam" id="cam-front"><span class="tag">front wide-angle</span><span class="off">hidden</span></div>
+        <div class="row" style="margin-top:8px"><button class="b" data-cam="front">Show</button></div>
+      </div>
+      <div>
+        <div class="cam" id="cam-realsense"><span class="tag">RealSense colour</span><span class="off">hidden</span></div>
+        <div class="row" style="margin-top:8px"><button class="b" data-cam="realsense">Show</button></div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Talk</h2>
+    <div class="row">
+      <span class="lbl">Persona</span>
+      <select id="persona" aria-label="persona"></select>
+    </div>
+    <div class="row"><textarea id="talk-text" placeholder="Text to say, or a question for him"></textarea></div>
+    <div class="row">
+      <button class="b" data-talk="say">Say it</button>
+      <button class="b primary" data-talk="ask">Ask</button>
+      <button class="b" data-talk="look">Look &amp; comment</button>
+    </div>
+    <div id="chat"></div>
+  </section>
+
+  <section>
+    <h2>Log</h2>
+    <div id="log"></div>
+  </section>
+</main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+let ws = null, lastStatus = null;
+
+function send(obj) { if (ws && ws.readyState === 1) ws.send(JSON.stringify(obj)); }
+
+function connect() {
+  ws = new WebSocket(`ws://${location.host}/ws`);
+  ws.onopen = () => { $('conn').textContent = 'online'; $('conn').className = 'pill ok'; };
+  ws.onclose = () => {
+    $('conn').textContent = 'offline'; $('conn').className = 'pill bad';
+    setTimeout(connect, 1500);
+  };
+  ws.onmessage = (e) => {
+    const m = JSON.parse(e.data);
+    if (m.t === 'status') renderStatus(m);
+    else if (m.t === 'log') addLog(m);
+    else if (m.t === 'said') addChat(m);
+    else if (m.t === 'hello') {
+      const sel = $('persona'); sel.innerHTML = '';
+      for (const p of m.personas) {
+        const o = document.createElement('option'); o.value = o.textContent = p;
+        if (p === m.persona) o.selected = true; sel.appendChild(o);
+      }
+      $('log').innerHTML = ''; $('chat').innerHTML = '';
+      for (const l of m.log) (l.t === 'said' ? addChat : addLog)(l);
+    }
+  };
+}
+
+function setV(id, text, cls) { const el = $(id); el.textContent = text; el.className = 'v' + (cls ? ' ' + cls : ''); }
+const fmt = (v, d = 2) => (v === null || v === undefined) ? '–' : Number(v).toFixed(d);
+
+function renderStatus(s) {
+  lastStatus = s;
+  const b = s.battery;
+  setV('s-batt', b == null ? '–' : b + '%', b == null ? '' : b < 20 ? 'bad' : b < 30 ? 'warn' : 'ok');
+  setV('s-post', s.standing ? 'standing' : s.basic_text, s.standing ? 'ok' : '');
+  setV('s-nav', s.nav ? 'running' : 'off', s.nav ? 'ok' : '');
+  setV('s-cam', s.camera == null ? '–' : s.camera ? 'up' : 'down', s.camera ? 'ok' : 'warn');
+  setV('s-voa', s.voa == null ? '–' : s.voa ? 'on' : 'off');
+  setV('s-hb', s.heartbeat ? 'on' : 'off', s.heartbeat ? 'ok' : 'warn');
+  const [f, r] = s.sonar || [];
+  setV('s-sf', f == null ? '–' : fmt(f) + ' m', f != null && f < 0.5 ? 'warn' : '');
+  setV('s-sr', r == null ? '–' : fmt(r) + ' m', r != null && r < 0.5 ? 'warn' : '');
+  setV('s-tilt', s.tilt ? `${fmt(s.tilt[0], 0)}° / ${fmt(s.tilt[1], 0)}°` : '–');
+  setV('s-pose', s.pose ? `${fmt(s.pose[0])}, ${fmt(s.pose[1])}, ${s.pose[2]}°` : '–');
+  const busy = $('busy');
+  if (s.estopped) { busy.textContent = 'E-STOP active - next command clears it'; busy.className = 'warn'; }
+  else { busy.textContent = s.busy ? 'Running: ' + s.busy : 'Idle'; busy.className = ''; }
+  const ds = $('drivestate');
+  ds.textContent = s.blocked ? 'Limited: ' + s.blocked : s.driving ? 'Driving' : (s.nav ? 'Nav2 running - driving disabled' : '');
+  ds.className = s.blocked ? 'warn' : '';
+  drawScan(s.scan);
+}
+
+function addLog(l) {
+  const d = document.createElement('div');
+  d.className = l.level || ''; d.textContent = `${l.time || ''}  ${l.msg}`;
+  const log = $('log'); log.appendChild(d); log.scrollTop = log.scrollHeight;
+}
+function addChat(m) {
+  const d = document.createElement('div');
+  d.className = 'msg' + (m.who === 'you' ? ' you' : ''); d.textContent = m.text;
+  const c = $('chat'); c.appendChild(d); c.scrollTop = c.scrollHeight;
+}
+
+// --- depth scan fan ------------------------------------------------------
+function drawScan(scan) {
+  const cv = $('scan'), g = cv.getContext('2d');
+  const W = cv.width, H = cv.height, ox = W / 2, oy = H - 14, R = H - 30, MAX = 4.0;
+  const css = getComputedStyle(document.documentElement);
+  const line = css.getPropertyValue('--line'), muted = css.getPropertyValue('--muted');
+  const accent = css.getPropertyValue('--accent'), warn = css.getPropertyValue('--warn');
+  g.clearRect(0, 0, W, H);
+  g.strokeStyle = line; g.fillStyle = muted; g.font = '12px system-ui'; g.lineWidth = 1;
+  for (const m of [1, 2, 3, 4]) {
+    g.beginPath(); g.arc(ox, oy, R * m / MAX, Math.PI + 0.35, 2 * Math.PI - 0.35); g.stroke();
+    g.fillText(m + ' m', ox + 4, oy - R * m / MAX + 12);
+  }
+  g.fillStyle = accent; g.fillRect(ox - 6, oy - 4, 12, 12);
+  if (!scan) { g.fillStyle = muted; g.fillText('no depth data', ox - 40, H / 2); return; }
+  for (const [bearing, r] of scan) {
+    const a0 = (bearing - 2.5) * Math.PI / 180, a1 = (bearing + 2.5) * Math.PI / 180;
+    const rr = R * Math.min(r == null ? MAX : r, MAX) / MAX;
+    // bearing +ve = LEFT; screen angle measured from straight up
+    g.beginPath(); g.moveTo(ox, oy);
+    g.arc(ox, oy, rr, -Math.PI / 2 - a1, -Math.PI / 2 - a0);
+    g.closePath();
+    g.fillStyle = r == null ? 'rgba(128,128,128,.12)' : r < 0.6 ? warn : accent;
+    g.globalAlpha = r == null ? 1 : 0.55; g.fill(); g.globalAlpha = 1;
+  }
+}
+
+// --- controls ------------------------------------------------------------
+document.querySelectorAll('[data-cmd]').forEach(b => b.addEventListener('click', () => {
+  const msg = { cmd: b.dataset.cmd };
+  if (b.dataset.on !== undefined) msg.on = b.dataset.on === '1';
+  send(msg);
+}));
+$('goto').addEventListener('click', () => send({ cmd: 'goto', m: parseFloat($('goto-m').value), deg: parseFloat($('goto-d').value) || 0 }));
+$('estop').addEventListener('click', () => { stopDrive(); send({ cmd: 'estop' }); });
+document.querySelectorAll('[data-talk]').forEach(b => b.addEventListener('click', () => {
+  send({ cmd: b.dataset.talk, text: $('talk-text').value, persona: $('persona').value });
+  if (b.dataset.talk !== 'look') $('talk-text').value = '';
+}));
+document.querySelectorAll('[data-cam]').forEach(b => b.addEventListener('click', () => {
+  const box = $('cam-' + b.dataset.cam), on = !box.querySelector('img');
+  box.querySelectorAll('img, .off').forEach(e => e.remove());
+  if (on) { const img = document.createElement('img'); img.src = `/stream/${b.dataset.cam}?${Date.now()}`; img.alt = b.dataset.cam + ' camera'; box.appendChild(img); }
+  else { const s = document.createElement('span'); s.className = 'off'; s.textContent = 'hidden'; box.appendChild(s); }
+  b.textContent = on ? 'Hide' : 'Show';
+}));
+$('speed').addEventListener('input', () => { $('speed-v').textContent = Number($('speed').value).toFixed(2) + ' m/s'; });
+
+// --- hold-to-drive: joystick + keyboard ----------------------------------
+let stick = { x: 0, y: 0 }, driveTimer = null;
+const keys = new Set();
+function driveVec() {
+  const vmax = parseFloat($('speed').value), wmax = lastStatus ? lastStatus.limits.wz * 0.75 : 0.6;
+  return { vx: -stick.y * vmax, wz: -stick.x * wmax };
+}
+function startDrive() {
+  if (driveTimer) return;
+  const tick = () => { const v = driveVec(); send({ cmd: 'drive', vx: v.vx, wz: v.wz }); };
+  tick(); driveTimer = setInterval(tick, 100);
+}
+function stopDrive() {
+  if (driveTimer) { clearInterval(driveTimer); driveTimer = null; }
+  stick = { x: 0, y: 0 }; placeKnob(0, 0); $('pad').classList.remove('active');
+  send({ cmd: 'drive', vx: 0, wz: 0 });
+}
+function placeKnob(x, y) {
+  const pad = $('pad'), r = pad.clientWidth / 2 - 32;
+  const k = pad.querySelector('.knob');
+  k.style.left = `calc(50% - 32px + ${x * r}px)`; k.style.top = `calc(50% - 32px + ${y * r}px)`;
+}
+const pad = $('pad');
+function padMove(e) {
+  const rect = pad.getBoundingClientRect();
+  let x = (e.clientX - rect.left) / rect.width * 2 - 1, y = (e.clientY - rect.top) / rect.height * 2 - 1;
+  const n = Math.hypot(x, y); if (n > 1) { x /= n; y /= n; }
+  if (Math.hypot(x, y) < 0.12) { x = 0; y = 0; }         // small dead zone
+  stick = { x, y }; placeKnob(x, y);
+}
+pad.addEventListener('pointerdown', (e) => { pad.setPointerCapture(e.pointerId); pad.classList.add('active'); padMove(e); startDrive(); });
+pad.addEventListener('pointermove', (e) => { if (driveTimer) padMove(e); });
+['pointerup', 'pointercancel', 'lostpointercapture'].forEach(ev => pad.addEventListener(ev, stopDrive));
+
+const KEYMAP = { ArrowUp: [0, -1], w: [0, -1], ArrowDown: [0, 1], s: [0, 1], ArrowLeft: [-1, 0], a: [-1, 0], ArrowRight: [1, 0], d: [1, 0] };
+function keyStick() {
+  let x = 0, y = 0; for (const k of keys) { x += KEYMAP[k][0]; y += KEYMAP[k][1]; }
+  const n = Math.hypot(x, y) || 1; stick = { x: x / n, y: y / n }; placeKnob(stick.x, stick.y);
+}
+window.addEventListener('keydown', (e) => {
+  if (e.target.matches('input, textarea, select')) return;
+  if (e.code === 'Space') { e.preventDefault(); stopDrive(); send({ cmd: 'estop' }); return; }
+  const k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+  if (!KEYMAP[k]) return;
+  e.preventDefault(); keys.add(k); keyStick(); startDrive();
+});
+window.addEventListener('keyup', (e) => {
+  const k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+  if (!keys.delete(k)) return;
+  if (keys.size) keyStick(); else stopDrive();
+});
+window.addEventListener('blur', () => { keys.clear(); stopDrive(); });
+document.addEventListener('visibilitychange', () => { if (document.hidden) { keys.clear(); stopDrive(); } });
+
+drawScan(null);
+connect();
+</script>
+</body>
+</html>
