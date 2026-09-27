@@ -1,6 +1,27 @@
 --- a/src/transfer/src/Jetson2Motion.cpp
 +++ b/src/transfer/src/Jetson2Motion.cpp
-@@ -64,6 +64,10 @@
+@@ -18,6 +18,7 @@
+ #include <netinet/in.h>
+ #include <arpa/inet.h>
+ #include <unistd.h>
++#include <chrono>
+ 
+ #pragma pack(push, 4)
+ struct MotionSimpleCMD{
+@@ -34,6 +35,12 @@
+ 
+ #define PI 3.1415926
+ 
++// Lite3: jy_exe's leg odometry under-counts straight-line distance. Walking
++// 1.712 m by odometry covered 1.960 m by tape (2026-09-27), and camera/sonar
++// sweeps at 0.1-0.3 m/s, forwards and backwards, agreed. Scale the horizontal
++// position and velocity; z and yaw are untouched (not measured).
++constexpr double kOdomScale = 1.15;
++
+ class MotionReceiver : public rclcpp::Node{
+ public:
+     MotionReceiver()
+@@ -63,6 +70,10 @@
          // imu_pub_100_ = create_publisher<sensor_msgs::msg::Imu>("/imu/data", 10);
          imu_pub_200_ = create_publisher<sensor_msgs::msg::Imu>("/imu/data", 10);        
          ultrasound_pub_ = create_publisher<std_msgs::msg::Float64>("/us_publisher/ultrasound_distance", 10);
@@ -11,7 +32,28 @@
          robot_state_pub_ = create_publisher<std_msgs::msg::Int32MultiArray>("/robot_state_debug", 10);
  
          tf_broadcaster_ = std::make_unique<tf2_ros::TransformBroadcaster>(*this);
-@@ -183,6 +187,9 @@
+@@ -139,16 +150,16 @@
+             leg_odom_data.header.stamp = rclcpp::Clock(RCL_STEADY_TIME).now();
+             q.setRPY(0, 0, robot_state->rpy[2] / 180 * PI);
+             leg_odom_data.pose.pose.orientation = tf2::toMsg(q);
+-            leg_odom_data.pose.pose.position.x = robot_state->pos_world[0];
+-            leg_odom_data.pose.pose.position.y = robot_state->pos_world[1];
++            leg_odom_data.pose.pose.position.x = kOdomScale * robot_state->pos_world[0];
++            leg_odom_data.pose.pose.position.y = kOdomScale * robot_state->pos_world[1];
+             leg_odom_data.pose.pose.position.z = robot_state->pos_world[2];
+             leg_odom_pub_->publish(leg_odom_data);
+ 
+             nav_msgs::msg::Odometry leg_odom_data2;     
+             leg_odom_data2.header.stamp = rclcpp::Clock(RCL_STEADY_TIME).now();
+             leg_odom_data2.pose = leg_odom_data.pose;
+-            leg_odom_data2.twist.twist.linear.x = robot_state->vel_body[0];
+-            leg_odom_data2.twist.twist.linear.y = robot_state->vel_body[1];
++            leg_odom_data2.twist.twist.linear.x = kOdomScale * robot_state->vel_body[0];
++            leg_odom_data2.twist.twist.linear.y = kOdomScale * robot_state->vel_body[1];
+             leg_odom_data2.twist.twist.angular.z = robot_state->rpy_vel[2];
+             leg_odom_pub2_->publish(leg_odom_data2);
+             
+@@ -182,6 +193,9 @@
              std_msgs::msg::Float64 ultrasound_distance;
              ultrasound_distance.data = robot_state->ultrasound[1];
              ultrasound_pub_->publish(ultrasound_distance);
@@ -21,11 +63,17 @@
  
              std_msgs::msg::Int32MultiArray robot_state_debug;
              robot_state_debug.data = {
-@@ -198,7 +205,11 @@
-                 /// it used to be discarded here, which made a flat battery
-                 /// invisible from ROS - the robot silently refuses to stand at
-                 /// low charge and nothing on this side reported why.
--                static_cast<int>(robot_state->battery_level)
+@@ -191,7 +205,17 @@
+                 robot_state->robot_motion_state,
+                 robot_state->task_state,
+                 robot_state->is_robot_need_move ? 1 : 0,
+-                robot_state->zero_position_flag ? 1 : 0
++                robot_state->zero_position_flag ? 1 : 0,
++                /// Battery percentage, appended as index 7 so existing indices
++                /// are unchanged. The robot sends this in every state packet but
++                /// it used to be discarded here, which made a flat battery
++                /// invisible from ROS - the robot silently refuses to stand at
++                /// low charge and nothing on this side reported why.
 +                static_cast<int>(robot_state->battery_level),
 +                /// index 8 and 9, appended for the same reason. protocol.hpp
 +                /// marks both "Not opened temporarily", so they may stay 0.
@@ -34,11 +82,56 @@
              };
              robot_state_pub_->publish(robot_state_debug);
  
-@@ -315,6 +326,7 @@
+@@ -308,6 +332,7 @@
      rclcpp::Publisher<sensor_msgs::msg::Imu>::SharedPtr imu_pub_200_;    
      rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr handle_pub_;
      rclcpp::Publisher<std_msgs::msg::Float64>::SharedPtr ultrasound_pub_;
 +    rclcpp::Publisher<std_msgs::msg::Float64>::SharedPtr ultrasound_front_pub_;
      rclcpp::Publisher<std_msgs::msg::Int32MultiArray>::SharedPtr robot_state_pub_;
      std::unique_ptr<tf2_ros::TransformBroadcaster> tf_broadcaster_;
+ };
+@@ -357,7 +382,7 @@
+             std::bind(&MotionSender::CmdVelCallback, this, std::placeholders::_1));
+         cmd_vel_corrected_sub_ = create_subscription<geometry_msgs::msg::Twist>(
+             "cmd_vel_corrected", best_effort_qos,
+-            std::bind(&MotionSender::CmdVelCallback, this, std::placeholders::_1));
++            std::bind(&MotionSender::CmdVelCorrectedCallback, this, std::placeholders::_1));
+         simplecmd_sub = create_subscription<transfer_interfaces::msg::MotionSimpleCMD>(
+             "simple_cmd", 10, 
+             std::bind(&MotionSender::SimpleCMDCallback, this, std::placeholders::_1));
+@@ -366,7 +391,27 @@
+             std::bind(&MotionSender::ComplexCMDCallback, this, std::placeholders::_1));
+     };
+ 
++    /// Obstacle avoidance (voa_composition) subscribes to cmd_vel and republishes
++    /// a corrected Twist on cmd_vel_corrected. This node listens to both, so
++    /// without this guard every command reached the robot twice - raw and
++    /// corrected, racing - and VOA could never actually veto anything.
++    /// While corrections are arriving, the corrected stream is authoritative and
++    /// the raw one is dropped. When VOA is not running no corrections arrive, so
++    /// raw cmd_vel passes through as before and nothing else breaks.
++    void CmdVelCorrectedCallback(const geometry_msgs::msg::Twist::SharedPtr msg){
++        last_corrected_ = std::chrono::steady_clock::now();
++        SendVelocity(msg);
++    }
++
+     void CmdVelCallback(const geometry_msgs::msg::Twist::SharedPtr msg){
++        auto since = std::chrono::steady_clock::now() - last_corrected_;
++        if (since < std::chrono::milliseconds(500)) {
++            return;   // VOA is live; only its corrected output may drive the robot
++        }
++        SendVelocity(msg);
++    }
++
++    void SendVelocity(const geometry_msgs::msg::Twist::SharedPtr msg){
+         RCLCPP_INFO(get_logger(),"recevied cmd_vel #############");
+         complex_cmd_.cmd_code = 320;
+         complex_cmd_.size = 8;
+@@ -432,6 +477,7 @@
+     struct sockaddr_in remote_addr_;
+     rclcpp::Subscription<geometry_msgs::msg::Twist>::SharedPtr cmd_vel_sub_;
+     rclcpp::Subscription<geometry_msgs::msg::Twist>::SharedPtr cmd_vel_corrected_sub_;
++    std::chrono::steady_clock::time_point last_corrected_{};
+     rclcpp::Subscription<transfer_interfaces::msg::MotionSimpleCMD>::SharedPtr simplecmd_sub;
+     rclcpp::Subscription<transfer_interfaces::msg::MotionComplexCMD>::SharedPtr complexcmd_sub;    
  };
