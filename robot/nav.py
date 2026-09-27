@@ -19,7 +19,7 @@ from .protocol import Lite3Error
 # launched via setsid into its own process group and killed by that group.
 NAV_PGID_FILE = '/tmp/lite3_nav2.pgid'
 NAV_MARKERS = ('dr_nav2_mapless', 'bt_navigator', 'planner_server',
-               'controller_server')
+               'controller_server', 'robot.sonar_range')
 # Never kill a group containing one of these - they belong to the services.
 # Match executables, not words: the nav2 launch line itself contains
 # "launch_realsense:=false", and a bare 'realsense' here made the guard

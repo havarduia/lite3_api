@@ -1,6 +1,6 @@
 --- a/config/lite_nav2_mapless.yaml
 +++ b/config/lite_nav2_mapless.yaml
-@@ -43,7 +43,7 @@
+@@ -43,14 +43,14 @@
      ros__parameters:
        use_sim_time: False
        always_send_full_costmap: True
@@ -9,6 +9,14 @@
        footprint: "[[0.3, 0.2], [0.3, -0.2], [-0.3, -0.2], [-0.3, 0.2]]"
        global_frame: odom
        width: 8
+       height: 8
+       origin_x: 0.0
+       origin_y: 0.0
+-      plugins: ["stvl_obstacle_layer", "inflation_layer"]
++      plugins: ["stvl_obstacle_layer", "range_layer", "inflation_layer"]
+       publish_frequency: 1.0
+       resolution: 0.10
+       robot_base_frame: base_link
 @@ -71,7 +71,7 @@
          update_footprint_enabled: true
          track_unknown_space:   false   #default space is unknown
@@ -18,8 +26,23 @@
          mapping_mode:          false  # default off, saves map not for navigation
          map_save_duration:     60.0     #default 60s, how often to autosave
  
-@@ -101,8 +101,8 @@
+@@ -99,10 +99,23 @@
+           model_type: 0                 #0=DEPTH_CAMERA (frustum model), 1=3D_LIDAR -- must be 0 for a depth camera
+           obstacle_range: 3.0           #meters, D435 reliable indoor range
  
++      range_layer:   # the two sonars, via robot/sonar_range.py (2026-09-28)
++        plugin: "nav2_costmap_2d::RangeSensorLayer"
++        enabled: True
++        topics: ["/sonar/front", "/sonar/rear"]
++        input_sensor_type: VARIABLE
++        # A reading at max_range (4.0 - its no-echo 4.5 is sent as 4.0) clears
++        # the cone. That only turns UNKNOWN cells free, never camera
++        # obstacles, and lets a mark fade once the thing behind him leaves.
++        clear_on_max_reading: True
++        no_readings_timeout: 1.0
++        clear_threshold: 0.2
++        mark_threshold: 0.8
++        inflate_cone: 1.0
        inflation_layer:
          plugin: "nav2_costmap_2d::InflationLayer"
 -        inflation_radius: 0.3
@@ -29,7 +52,7 @@
          inflate_unknown: False
          inflate_around_unknown: False
  
-@@ -111,7 +111,7 @@
+@@ -111,14 +124,14 @@
      ros__parameters:
        use_sim_time: False
        always_send_full_costmap: True
@@ -38,7 +61,15 @@
        footprint: "[[0.3, 0.2], [0.3, -0.2], [-0.3, -0.2], [-0.3, 0.2]]"
        global_frame: odom
        width: 30
-@@ -139,7 +139,7 @@
+       height: 30
+       origin_x: 0.0
+       origin_y: 0.0
+-      plugins: ["stvl_obstacle_layer", "inflation_layer"]
++      plugins: ["stvl_obstacle_layer", "range_layer", "inflation_layer"]
+       publish_frequency: 2.0
+       resolution: 0.10
+       robot_base_frame: base_link
+@@ -139,7 +152,7 @@
          update_footprint_enabled: true
          track_unknown_space:   false   #default space is unknown
          decay_model:           0      #0=linear, 1=exponential, -1=persistent
@@ -47,8 +78,23 @@
          mapping_mode:          false  # default off, saves map not for navigation
          map_save_duration:     60.0     #default 60s, how often to autosave
  
-@@ -169,8 +169,8 @@
+@@ -167,10 +180,23 @@
+           model_type: 0                 #0=DEPTH_CAMERA (frustum model)
+           obstacle_range: 3.0           #meters
  
++      range_layer:   # the two sonars, via robot/sonar_range.py (2026-09-28)
++        plugin: "nav2_costmap_2d::RangeSensorLayer"
++        enabled: True
++        topics: ["/sonar/front", "/sonar/rear"]
++        input_sensor_type: VARIABLE
++        # A reading at max_range (4.0 - its no-echo 4.5 is sent as 4.0) clears
++        # the cone. That only turns UNKNOWN cells free, never camera
++        # obstacles, and lets a mark fade once the thing behind him leaves.
++        clear_on_max_reading: True
++        no_readings_timeout: 1.0
++        clear_threshold: 0.2
++        mark_threshold: 0.8
++        inflate_cone: 1.0
        inflation_layer:
          plugin: "nav2_costmap_2d::InflationLayer"
 -        inflation_radius: 0.3
@@ -58,7 +104,7 @@
          inflate_unknown: False
          inflate_around_unknown: False
  
-@@ -203,8 +203,11 @@
+@@ -203,8 +229,11 @@
        movement_time_allowance: 10.0
      goal_checker:
        plugin: "nav2_controller::SimpleGoalChecker"
@@ -72,7 +118,7 @@
        stateful: True
  
      FollowPath:
-@@ -255,7 +258,7 @@
+@@ -255,7 +284,7 @@
        PathDist.aggregation_type: "sum"
  
        RotateToGoal.scale: 32.0
