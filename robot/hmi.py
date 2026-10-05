@@ -9,8 +9,8 @@ nothing on eduroam or the robot's own Wi-Fi can reach it. For HTTPS, run
 Both cameras are shown over WebRTC from the motion computer's mediamtx,
 through udp_relay.py: the front camera is the robot's own H.264 stream
 (1280x720, 30 fps), the RealSense colour is put there by rs_stream.py, which
-runs only while a page shows that view. The
-page falls back to MJPEG if WebRTC does not connect. It holds one Lite3 with the heartbeat
+runs only while a page shows that view. If WebRTC does not connect, the front
+camera falls back to MJPEG; the RealSense view has no fallback. It holds one Lite3 with the heartbeat
 running, so stop it before running any other script that drives the robot.
 
 Safety model:
@@ -53,7 +53,6 @@ FORWARD_STOP_M = 0.6   # camera clearance (from body centre), as walk()
 REAR_STOP_M = 0.5      # rear sonar reading
 DRIVE_MAX_VX = 0.5     # m/s, the page's speed slider tops out here
 DRIVE_MAX_WZ = 0.8     # rad/s
-RS_FPS = 30            # RealSense colour view; the camera itself gives 30
 RS_LINGER_S = 10.0     # rs_stream.py keeps running this long after the last viewer
 
 # basic_state values seen on this robot (see project notes)
@@ -122,36 +121,6 @@ class FrontCamera(threading.Thread):
                 proc.kill()
                 proc.wait()
             time.sleep(1.0)
-
-
-class RealSenseColour:
-    """/camera/color/image_raw as JPEGs, encoded only while someone watches."""
-
-    def __init__(self, frames):
-        import rclpy
-        from rclpy.executors import SingleThreadedExecutor
-        from rclpy.qos import qos_profile_sensor_data
-        from sensor_msgs.msg import Image
-        self.frames, self.last = frames, 0.0
-        self.node = rclpy.create_node('hmi_camera')
-        self.node.create_subscription(Image, '/camera/color/image_raw',
-                                      self._cb, qos_profile_sensor_data)
-        self.ex = SingleThreadedExecutor()
-        self.ex.add_node(self.node)
-        threading.Thread(target=self.ex.spin, daemon=True).start()
-
-    def _cb(self, m):
-        if self.frames.viewers == 0 or time.time() - self.last < 0.9 / RS_FPS:
-            return
-        import cv2
-        import numpy as np
-        self.last = time.time()
-        img = np.frombuffer(m.data, np.uint8).reshape(m.height, m.width, -1)
-        if m.encoding == 'rgb8':
-            img = img[:, :, ::-1]
-        ok, jpg = cv2.imencode('.jpg', img, [cv2.IMWRITE_JPEG_QUALITY, 70])
-        if ok:
-            self.frames.put(jpg.tobytes())
 
 
 class Robot:
@@ -355,7 +324,6 @@ class Server:
         self.pages = set()
         self.loop = None
         self.front = Frames()
-        self.rs = Frames()
         self.robot = None
         self.log = []
         self.rs_pages = set()       # pages showing the RealSense view
@@ -529,12 +497,10 @@ class Server:
         self.loop = asyncio.get_event_loop()
         self.robot = Robot(self.emit)
         FrontCamera(self.front).start()
-        RealSenseColour(self.rs)
         app = web.Application()
         app.router.add_get('/', self.index)
         app.router.add_get('/ws', self.ws)
         app.router.add_get('/stream/front', self.stream(self.front))
-        app.router.add_get('/stream/realsense', self.stream(self.rs))
         app.router.add_post('/whep/{cam}', self.whep)
         runner = web.AppRunner(app)
         self.loop.run_until_complete(runner.setup())

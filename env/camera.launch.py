@@ -38,7 +38,9 @@ def generate_launch_description():
             'enable_depth': True,
             'depth_module.depth_profile': '424,240,30',    # vendor's resolution
             'enable_color': True,
-            'rgb_camera.color_profile': '424,240,30',
+            # Colour is only looked at (HMI, through rs_stream.py), so it can be
+            # sharp; depth stays at the vendor's size, which Nav2 and voa expect.
+            'rgb_camera.color_profile': '1280,720,30',
             'enable_infra1': False,
             'enable_infra2': False,
             'enable_gyro': True,

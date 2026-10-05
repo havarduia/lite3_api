@@ -336,10 +336,14 @@ document.querySelectorAll('[data-talk]').forEach(b => b.addEventListener('click'
   if (b.dataset.talk !== 'look') $('talk-text').value = '';
 }));
 // Cameras play as H.264 over WebRTC (full rate, low delay). If that does not
-// connect within a few seconds, fall back to MJPEG.
+// connect within a few seconds, the front camera falls back to MJPEG.
 const rtcs = {};
 function showMjpeg(box, name) {
   box.querySelectorAll('img, video').forEach(e => e.remove());
+  if (name !== 'front') {                       // only the front camera has an MJPEG stream
+    const s = document.createElement('span'); s.className = 'off'; s.textContent = 'no video'; box.appendChild(s);
+    return;
+  }
   const img = document.createElement('img'); img.src = `/stream/${name}?${Date.now()}`; img.alt = name + ' camera'; box.appendChild(img);
 }
 async function showRtc(box, name) {
