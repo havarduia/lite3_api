@@ -6,9 +6,11 @@ It binds to this computer's Tailscale address (and localhost) only, so
 nothing on eduroam or the robot's own Wi-Fi can reach it. For HTTPS, run
 `sudo tailscale serve --bg 8080` once and open https://lite3-perception.<tailnet>.ts.net
 
-The front camera is shown over WebRTC: the page gets the robot's own H.264
-stream from mediamtx (1280x720, 30 fps) through a UDP relay here, and falls
-back to MJPEG if that does not connect. It holds one Lite3 with the heartbeat
+Both cameras are shown over WebRTC from the motion computer's mediamtx,
+through udp_relay.py: the front camera is the robot's own H.264 stream
+(1280x720, 30 fps), the RealSense colour is put there by rs_stream.py, which
+runs only while a page shows that view. The
+page falls back to MJPEG if WebRTC does not connect. It holds one Lite3 with the heartbeat
 running, so stop it before running any other script that drives the robot.
 
 Safety model:
@@ -44,6 +46,7 @@ from .protocol import Lite3Error
 
 PORT = 8080
 STATIC = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'hmi_static')
+HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # for -m robot.x
 
 DEADMAN_S = 0.3        # drive halts this long after the last stick message
 FORWARD_STOP_M = 0.6   # camera clearance (from body centre), as walk()
@@ -51,6 +54,7 @@ REAR_STOP_M = 0.5      # rear sonar reading
 DRIVE_MAX_VX = 0.5     # m/s, the page's speed slider tops out here
 DRIVE_MAX_WZ = 0.8     # rad/s
 RS_FPS = 30            # RealSense colour view; the camera itself gives 30
+RS_LINGER_S = 10.0     # rs_stream.py keeps running this long after the last viewer
 
 # basic_state values seen on this robot (see project notes)
 BASIC = {1: 'lying, ready', 6: 'standing', 8: 'not armed', 9: 'arming',
@@ -354,6 +358,9 @@ class Server:
         self.rs = Frames()
         self.robot = None
         self.log = []
+        self.rs_pages = set()       # pages showing the RealSense view
+        self.rs_proc = None         # rs_stream.py, running only while watched
+        self.rs_stop = None         # pending stop (timer handle)
 
     def emit(self, msg):
         """Thread-safe broadcast to every open page."""
@@ -412,6 +419,9 @@ class Server:
                 elif k in ('camera', 'voa'):
                     r.submit('%s %s' % (k, 'on' if c.get('on') else 'off'),
                              r.service, k, bool(c.get('on')))
+                elif k == 'watch' and c.get('cam') == 'realsense':
+                    (self.rs_pages.add if c.get('on') else self.rs_pages.discard)(ws)
+                    self.rs_update()
                 elif k == 'volume':
                     from . import talk
                     talk.VOLUME = min(1.0, max(0.0, float(c['v'])))
@@ -419,6 +429,8 @@ class Server:
                     r.talk(k, (c.get('text') or '').strip(), c.get('persona'))
         finally:
             self.pages.discard(ws)
+            self.rs_pages.discard(ws)
+            self.rs_update()
             r.drive_cmd = (0.0, 0.0, 0.0)       # a closed page never drives
         return ws
 
@@ -444,17 +456,47 @@ class Server:
             return resp
         return handler
 
+    def rs_update(self):
+        """Run rs_stream.py while some page shows the RealSense view (it costs
+        about half a core). Stopping waits RS_LINGER_S, so a page that drops
+        its websocket and reconnects keeps its video."""
+        if self.rs_pages:
+            if self.rs_stop:
+                self.rs_stop.cancel()
+                self.rs_stop = None
+            if self.rs_proc is None or self.rs_proc.poll() is not None:
+                self.rs_proc = subprocess.Popen(
+                    [sys.executable, '-m', 'robot.rs_stream'], cwd=HERE)
+        elif self.rs_proc and not self.rs_stop:
+            self.rs_stop = self.loop.call_later(RS_LINGER_S, self.rs_kill)
+
+    def rs_kill(self):
+        self.rs_stop = None
+        if self.rs_proc:
+            self.rs_proc.terminate()
+            self.rs_proc = None
+
     async def whep(self, request):
-        """WebRTC signalling for the front camera: pass the page's offer to
-        mediamtx, and point the answer's video address at udp_relay."""
+        """WebRTC signalling for a camera: pass the page's offer to mediamtx,
+        and point the answer's video address at udp_relay."""
+        url = {'front': P.CAMERA_WHEP, 'realsense': P.RS_WHEP}.get(request.match_info['cam'])
+        if not url:
+            return web.Response(status=404)
+        offer, cam = await request.read(), request.match_info['cam']
         try:
             async with ClientSession() as s:
-                async with s.post(P.CAMERA_WHEP, data=await request.read(),
-                                  headers={'Content-Type': 'application/sdp'},
-                                  timeout=5) as r:
-                    if r.status != 201:
-                        return web.Response(status=502, text='mediamtx said %d' % r.status)
-                    sdp = await r.text()
+                # rs_stream.py has only just been started by the page's
+                # 'watch': 404 until its first frames reach mediamtx (~3 s).
+                for attempt in range(20 if cam == 'realsense' else 1):
+                    async with s.post(url, data=offer,
+                                      headers={'Content-Type': 'application/sdp'},
+                                      timeout=5) as r:
+                        status, sdp = r.status, await r.text()
+                    if status != 404:
+                        break
+                    await asyncio.sleep(0.5)
+                if status != 201:
+                    return web.Response(status=502, text='mediamtx said %d' % status)
         except Exception as e:
             return web.Response(status=502, text='mediamtx unreachable: %s' % e)
         lines = [l for l in sdp.splitlines() if not l.startswith('a=candidate:')]
@@ -493,7 +535,7 @@ class Server:
         app.router.add_get('/ws', self.ws)
         app.router.add_get('/stream/front', self.stream(self.front))
         app.router.add_get('/stream/realsense', self.stream(self.rs))
-        app.router.add_post('/whep/front', self.whep)
+        app.router.add_post('/whep/{cam}', self.whep)
         runner = web.AppRunner(app)
         self.loop.run_until_complete(runner.setup())
         self.loop.run_until_complete(web.TCPSite(runner, host, PORT).start())
@@ -502,7 +544,7 @@ class Server:
         relay = subprocess.Popen(
             [sys.executable, '-m', 'robot.udp_relay', host, str(P.CAMERA_RTC_PORT),
              P.MOTION_IP, str(P.CAMERA_RTC_PORT)],
-            cwd=os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+            cwd=HERE)
         self.loop.create_task(self.ticker())
         for sig in (signal.SIGINT, signal.SIGTERM):
             self.loop.add_signal_handler(sig, self.loop.stop)
@@ -512,6 +554,7 @@ class Server:
             self.loop.run_forever()
         finally:
             relay.kill()
+            self.rs_kill()
             print('shutting down: halting and sitting ...', flush=True)
             self.robot.shutdown()
 

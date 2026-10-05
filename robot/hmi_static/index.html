@@ -231,7 +231,10 @@ function send(obj) { if (ws && ws.readyState === 1) ws.send(JSON.stringify(obj))
 
 function connect() {
   ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`);
-  ws.onopen = () => { $('conn').textContent = 'online'; $('conn').className = 'pill ok'; };
+  ws.onopen = () => {
+    $('conn').textContent = 'online'; $('conn').className = 'pill ok';
+    if ($('cam-realsense').querySelector('img, video')) send({ cmd: 'watch', cam: 'realsense', on: true });
+  };
   ws.onclose = () => {
     $('conn').textContent = 'offline'; $('conn').className = 'pill bad';
     setTimeout(connect, 1500);
@@ -332,17 +335,17 @@ document.querySelectorAll('[data-talk]').forEach(b => b.addEventListener('click'
   send({ cmd: b.dataset.talk, text: $('talk-text').value, persona: $('persona').value });
   if (b.dataset.talk !== 'look') $('talk-text').value = '';
 }));
-// Front camera: the robot's own H.264 stream over WebRTC (full rate, low
-// delay). If that does not connect within a few seconds, fall back to MJPEG.
-let rtc = null;
+// Cameras play as H.264 over WebRTC (full rate, low delay). If that does not
+// connect within a few seconds, fall back to MJPEG.
+const rtcs = {};
 function showMjpeg(box, name) {
   box.querySelectorAll('img, video').forEach(e => e.remove());
   const img = document.createElement('img'); img.src = `/stream/${name}?${Date.now()}`; img.alt = name + ' camera'; box.appendChild(img);
 }
 async function showRtc(box, name) {
-  const pc = rtc = new RTCPeerConnection();
-  const fallback = () => { if (rtc === pc) { pc.close(); rtc = null; showMjpeg(box, name); } };
-  const timer = setTimeout(fallback, 6000);
+  const pc = rtcs[name] = new RTCPeerConnection();
+  const fallback = () => { if (rtcs[name] === pc) { pc.close(); delete rtcs[name]; showMjpeg(box, name); } };
+  let timer = null;
   const v = document.createElement('video'); v.muted = v.autoplay = v.playsInline = true; box.appendChild(v);
   pc.ontrack = (e) => { v.srcObject = e.streams[0]; };
   pc.onconnectionstatechange = () => {
@@ -357,13 +360,15 @@ async function showRtc(box, name) {
     const r = await fetch(`/whep/${name}`, { method: 'POST', headers: { 'Content-Type': 'application/sdp' }, body: pc.localDescription.sdp });
     if (!r.ok) throw new Error(await r.text());
     await pc.setRemoteDescription({ type: 'answer', sdp: await r.text() });
-  } catch (e) { clearTimeout(timer); fallback(); }
+    if (pc.connectionState !== 'connected') timer = setTimeout(fallback, 6000);
+  } catch (e) { fallback(); }
 }
 document.querySelectorAll('[data-cam]').forEach(b => b.addEventListener('click', () => {
   const name = b.dataset.cam, box = $('cam-' + name), on = !box.querySelector('img, video');
   box.querySelectorAll('img, video, .off').forEach(e => e.remove());
-  if (name === 'front' && rtc) { rtc.close(); rtc = null; }
-  if (on && name === 'front' && window.RTCPeerConnection) showRtc(box, name);
+  if (rtcs[name]) { rtcs[name].close(); delete rtcs[name]; }
+  send({ cmd: 'watch', cam: name, on });       // the RealSense stream only runs while shown
+  if (on && window.RTCPeerConnection) showRtc(box, name);
   else if (on) showMjpeg(box, name);
   else { const s = document.createElement('span'); s.className = 'off'; s.textContent = 'hidden'; box.appendChild(s); }
   b.textContent = on ? 'Hide' : 'Show';

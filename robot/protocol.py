@@ -36,6 +36,9 @@ CAMERA_URL = 'rtsp://%s:8554/test' % MOTION_IP
 # The same mediamtx also serves that stream as WebRTC: signalling (WHEP) over
 # HTTP, then all the video over one UDP port.
 CAMERA_WHEP = 'http://%s:8889/test/whep' % MOTION_IP
+# rs_stream.py publishes the RealSense colour image to the same mediamtx.
+RS_RTSP = 'rtsp://%s:8554/realsense' % MOTION_IP
+RS_WHEP = 'http://%s:8889/realsense/whep' % MOTION_IP
 CAMERA_RTC_PORT = 8189
 
 
