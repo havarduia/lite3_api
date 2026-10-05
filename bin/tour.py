@@ -298,7 +298,7 @@ def main():
                     help='use the powered-on handheld instead of our own heartbeat')
     ap.add_argument('--dry-run', action='store_true', help='one comment, no movement')
     ap.add_argument('--voice', default=None)
-    ap.add_argument('--persona', default=None, help='deadpan (default), sarcastic or rocky')
+    ap.add_argument('--persona', default=None, help='deadpan (default), sarcastic, rocky or observer')
     ap.add_argument('--finale', default=None,
                     help='at the end, still standing, look and answer this '
                          'instead of the usual closing line')

@@ -846,7 +846,10 @@ class Talker:
         try:
             # Image turns go over REST: measured 2026-10-05, Live answered about a
             # frame it had plainly not read (invented a person, misread text).
-            if self.live and not jpeg:
+            # So do follow-ups, for as long as the look is still in history:
+            # Live never saw that frame or what was said about it.
+            seen = jpeg or any(h.get('image') for h in self.history)
+            if self.live and not seen:
                 try:
                     stream = self.live.ask(text)
                     first = next(stream, None)  # connection errors surface here
