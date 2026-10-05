@@ -31,6 +31,7 @@ import os
 import re
 import signal
 import subprocess
+import sys
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -116,51 +117,6 @@ class FrontCamera(threading.Thread):
                 proc.kill()
                 proc.wait()
             time.sleep(1.0)
-
-
-class UdpRelay(asyncio.DatagramProtocol):
-    """Pass WebRTC video between browsers on the tailnet and mediamtx.
-
-    mediamtx is on the motion computer, which a browser cannot reach, so the
-    page is told to send its WebRTC traffic here (see Server.whep) and this
-    forwards it, one upstream socket per browser address.
-    """
-    IDLE_S = 30.0
-
-    def __init__(self, loop, upstream):
-        self.loop, self.upstream = loop, upstream
-        self.peers = {}                         # browser addr -> [transport, last seen]
-
-    def connection_made(self, transport):
-        self.transport = transport
-
-    def datagram_received(self, data, addr):
-        peer = self.peers.get(addr)
-        if peer is None:
-            peer = self.peers[addr] = [None, 0.0]
-            self.loop.create_task(self._open(addr, data))
-        peer[1] = time.time()
-        if peer[0]:
-            peer[0].sendto(data)
-
-    async def _open(self, addr, first):
-        relay = self
-
-        class Up(asyncio.DatagramProtocol):
-            def datagram_received(self, data, _):
-                relay.transport.sendto(data, addr)
-        t, _ = await self.loop.create_datagram_endpoint(Up, remote_addr=self.upstream)
-        self.peers[addr][0] = t
-        t.sendto(first)
-
-    async def reap(self):
-        while True:
-            await asyncio.sleep(10.0)
-            for addr, (t, seen) in list(self.peers.items()):
-                if time.time() - seen > self.IDLE_S:
-                    del self.peers[addr]
-                    if t:
-                        t.close()
 
 
 class RealSenseColour:
@@ -489,7 +445,7 @@ class Server:
 
     async def whep(self, request):
         """WebRTC signalling for the front camera: pass the page's offer to
-        mediamtx, and point the answer's video address at our UdpRelay."""
+        mediamtx, and point the answer's video address at udp_relay."""
         try:
             async with ClientSession() as s:
                 async with s.post(P.CAMERA_WHEP, data=await request.read(),
@@ -542,10 +498,10 @@ class Server:
         self.loop.run_until_complete(web.TCPSite(runner, host, PORT).start())
         # localhost too, so `tailscale serve` can put HTTPS in front of it
         self.loop.run_until_complete(web.TCPSite(runner, '127.0.0.1', PORT).start())
-        relay = UdpRelay(self.loop, (P.MOTION_IP, P.CAMERA_RTC_PORT))
-        self.loop.run_until_complete(self.loop.create_datagram_endpoint(
-            lambda: relay, local_addr=(host, P.CAMERA_RTC_PORT)))
-        self.loop.create_task(relay.reap())
+        relay = subprocess.Popen(
+            [sys.executable, '-m', 'robot.udp_relay', host, str(P.CAMERA_RTC_PORT),
+             P.MOTION_IP, str(P.CAMERA_RTC_PORT)],
+            cwd=os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
         self.loop.create_task(self.ticker())
         for sig in (signal.SIGINT, signal.SIGTERM):
             self.loop.add_signal_handler(sig, self.loop.stop)
@@ -554,6 +510,7 @@ class Server:
         try:
             self.loop.run_forever()
         finally:
+            relay.kill()
             print('shutting down: halting and sitting ...', flush=True)
             self.robot.shutdown()
 
