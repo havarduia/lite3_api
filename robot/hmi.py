@@ -2,8 +2,13 @@
 
     python3 -m robot.hmi            # then open http://lite3-perception:8080
 
-It binds to this computer's Tailscale address only, so nothing on eduroam or
-the robot's own Wi-Fi can reach it. It holds one Lite3 with the heartbeat
+It binds to this computer's Tailscale address (and localhost) only, so
+nothing on eduroam or the robot's own Wi-Fi can reach it. For HTTPS, run
+`sudo tailscale serve --bg 8080` once and open https://lite3-perception.<tailnet>.ts.net
+
+The front camera is shown over WebRTC: the page gets the robot's own H.264
+stream from mediamtx (1280x720, 30 fps) through a UDP relay here, and falls
+back to MJPEG if that does not connect. It holds one Lite3 with the heartbeat
 running, so stop it before running any other script that drives the robot.
 
 Safety model:
@@ -30,7 +35,7 @@ import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 
-from aiohttp import web, WSMsgType
+from aiohttp import ClientSession, web, WSMsgType
 
 from . import protocol as P
 from .lite3 import Lite3
@@ -111,6 +116,51 @@ class FrontCamera(threading.Thread):
                 proc.kill()
                 proc.wait()
             time.sleep(1.0)
+
+
+class UdpRelay(asyncio.DatagramProtocol):
+    """Pass WebRTC video between browsers on the tailnet and mediamtx.
+
+    mediamtx is on the motion computer, which a browser cannot reach, so the
+    page is told to send its WebRTC traffic here (see Server.whep) and this
+    forwards it, one upstream socket per browser address.
+    """
+    IDLE_S = 30.0
+
+    def __init__(self, loop, upstream):
+        self.loop, self.upstream = loop, upstream
+        self.peers = {}                         # browser addr -> [transport, last seen]
+
+    def connection_made(self, transport):
+        self.transport = transport
+
+    def datagram_received(self, data, addr):
+        peer = self.peers.get(addr)
+        if peer is None:
+            peer = self.peers[addr] = [None, 0.0]
+            self.loop.create_task(self._open(addr, data))
+        peer[1] = time.time()
+        if peer[0]:
+            peer[0].sendto(data)
+
+    async def _open(self, addr, first):
+        relay = self
+
+        class Up(asyncio.DatagramProtocol):
+            def datagram_received(self, data, _):
+                relay.transport.sendto(data, addr)
+        t, _ = await self.loop.create_datagram_endpoint(Up, remote_addr=self.upstream)
+        self.peers[addr][0] = t
+        t.sendto(first)
+
+    async def reap(self):
+        while True:
+            await asyncio.sleep(10.0)
+            for addr, (t, seen) in list(self.peers.items()):
+                if time.time() - seen > self.IDLE_S:
+                    del self.peers[addr]
+                    if t:
+                        t.close()
 
 
 class RealSenseColour:
@@ -437,6 +487,26 @@ class Server:
             return resp
         return handler
 
+    async def whep(self, request):
+        """WebRTC signalling for the front camera: pass the page's offer to
+        mediamtx, and point the answer's video address at our UdpRelay."""
+        try:
+            async with ClientSession() as s:
+                async with s.post(P.CAMERA_WHEP, data=await request.read(),
+                                  headers={'Content-Type': 'application/sdp'},
+                                  timeout=5) as r:
+                    if r.status != 201:
+                        return web.Response(status=502, text='mediamtx said %d' % r.status)
+                    sdp = await r.text()
+        except Exception as e:
+            return web.Response(status=502, text='mediamtx unreachable: %s' % e)
+        lines = [l for l in sdp.splitlines() if not l.startswith('a=candidate:')]
+        at = lines.index('a=end-of-candidates') if 'a=end-of-candidates' in lines else len(lines)
+        lines.insert(at, 'a=candidate:1 1 udp 2130706431 %s %d typ host'
+                     % (self.host, P.CAMERA_RTC_PORT))
+        return web.Response(status=201, text='\r\n'.join(lines) + '\r\n',
+                            content_type='application/sdp')
+
     @staticmethod
     def _next(frames, seq):
         with frames.cond:
@@ -456,7 +526,7 @@ class Server:
             await asyncio.sleep(0.5)
 
     def main(self):
-        host = tailscale_ip()
+        host = self.host = tailscale_ip()
         self.loop = asyncio.get_event_loop()
         self.robot = Robot(self.emit)
         FrontCamera(self.front).start()
@@ -466,9 +536,16 @@ class Server:
         app.router.add_get('/ws', self.ws)
         app.router.add_get('/stream/front', self.stream(self.front))
         app.router.add_get('/stream/realsense', self.stream(self.rs))
+        app.router.add_post('/whep/front', self.whep)
         runner = web.AppRunner(app)
         self.loop.run_until_complete(runner.setup())
         self.loop.run_until_complete(web.TCPSite(runner, host, PORT).start())
+        # localhost too, so `tailscale serve` can put HTTPS in front of it
+        self.loop.run_until_complete(web.TCPSite(runner, '127.0.0.1', PORT).start())
+        relay = UdpRelay(self.loop, (P.MOTION_IP, P.CAMERA_RTC_PORT))
+        self.loop.run_until_complete(self.loop.create_datagram_endpoint(
+            lambda: relay, local_addr=(host, P.CAMERA_RTC_PORT)))
+        self.loop.create_task(relay.reap())
         self.loop.create_task(self.ticker())
         for sig in (signal.SIGINT, signal.SIGTERM):
             self.loop.add_signal_handler(sig, self.loop.stop)

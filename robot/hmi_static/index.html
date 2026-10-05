@@ -76,7 +76,7 @@ input[type=number] { width: 84px; }
 textarea { width: 100%; resize: vertical; min-height: 44px; }
 .cams { display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
 .cam { background: #000; border-radius: 8px; aspect-ratio: 16/10; display: grid; place-items: center; overflow: hidden; position: relative; }
-.cam img { width: 100%; height: 100%; object-fit: contain; }
+.cam img, .cam video { width: 100%; height: 100%; object-fit: contain; }
 .cam .off { color: #9aa3ad; font-size: 13px; }
 .cam .tag { position: absolute; left: 8px; top: 6px; font-size: 11px; color: #fff; background: rgba(0,0,0,.55); padding: 2px 6px; border-radius: 5px; }
 canvas#scan { width: 100%; height: auto; display: block; background: var(--panel-2); border-radius: 8px; }
@@ -230,7 +230,7 @@ let ws = null, lastStatus = null;
 function send(obj) { if (ws && ws.readyState === 1) ws.send(JSON.stringify(obj)); }
 
 function connect() {
-  ws = new WebSocket(`ws://${location.host}/ws`);
+  ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`);
   ws.onopen = () => { $('conn').textContent = 'online'; $('conn').className = 'pill ok'; };
   ws.onclose = () => {
     $('conn').textContent = 'offline'; $('conn').className = 'pill bad';
@@ -332,10 +332,39 @@ document.querySelectorAll('[data-talk]').forEach(b => b.addEventListener('click'
   send({ cmd: b.dataset.talk, text: $('talk-text').value, persona: $('persona').value });
   if (b.dataset.talk !== 'look') $('talk-text').value = '';
 }));
+// Front camera: the robot's own H.264 stream over WebRTC (full rate, low
+// delay). If that does not connect within a few seconds, fall back to MJPEG.
+let rtc = null;
+function showMjpeg(box, name) {
+  box.querySelectorAll('img, video').forEach(e => e.remove());
+  const img = document.createElement('img'); img.src = `/stream/${name}?${Date.now()}`; img.alt = name + ' camera'; box.appendChild(img);
+}
+async function showRtc(box, name) {
+  const pc = rtc = new RTCPeerConnection();
+  const fallback = () => { if (rtc === pc) { pc.close(); rtc = null; showMjpeg(box, name); } };
+  const timer = setTimeout(fallback, 6000);
+  const v = document.createElement('video'); v.muted = v.autoplay = v.playsInline = true; box.appendChild(v);
+  pc.ontrack = (e) => { v.srcObject = e.streams[0]; };
+  pc.onconnectionstatechange = () => {
+    if (pc.connectionState === 'connected') clearTimeout(timer);
+    else if (pc.connectionState === 'failed') fallback();
+  };
+  try {
+    pc.addTransceiver('video', { direction: 'recvonly' });
+    await pc.setLocalDescription(await pc.createOffer());
+    if (pc.iceGatheringState !== 'complete')
+      await new Promise(ok => { pc.onicegatheringstatechange = () => pc.iceGatheringState === 'complete' && ok(); setTimeout(ok, 1500); });
+    const r = await fetch(`/whep/${name}`, { method: 'POST', headers: { 'Content-Type': 'application/sdp' }, body: pc.localDescription.sdp });
+    if (!r.ok) throw new Error(await r.text());
+    await pc.setRemoteDescription({ type: 'answer', sdp: await r.text() });
+  } catch (e) { clearTimeout(timer); fallback(); }
+}
 document.querySelectorAll('[data-cam]').forEach(b => b.addEventListener('click', () => {
-  const box = $('cam-' + b.dataset.cam), on = !box.querySelector('img');
-  box.querySelectorAll('img, .off').forEach(e => e.remove());
-  if (on) { const img = document.createElement('img'); img.src = `/stream/${b.dataset.cam}?${Date.now()}`; img.alt = b.dataset.cam + ' camera'; box.appendChild(img); }
+  const name = b.dataset.cam, box = $('cam-' + name), on = !box.querySelector('img, video');
+  box.querySelectorAll('img, video, .off').forEach(e => e.remove());
+  if (name === 'front' && rtc) { rtc.close(); rtc = null; }
+  if (on && name === 'front' && window.RTCPeerConnection) showRtc(box, name);
+  else if (on) showMjpeg(box, name);
   else { const s = document.createElement('span'); s.className = 'off'; s.textContent = 'hidden'; box.appendChild(s); }
   b.textContent = on ? 'Hide' : 'Show';
 }));

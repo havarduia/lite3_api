@@ -33,6 +33,10 @@ TRACKER_ADDR = (MOTION_IP, 43901)    # track service, JSON payloads
 # jetson2app on THIS (perception) computer: the app/handheld AI switch
 APP_ADDR = ('127.0.0.1', 43899)
 CAMERA_URL = 'rtsp://%s:8554/test' % MOTION_IP
+# The same mediamtx also serves that stream as WebRTC: signalling (WHEP) over
+# HTTP, then all the video over one UDP port.
+CAMERA_WHEP = 'http://%s:8889/test/whep' % MOTION_IP
+CAMERA_RTC_PORT = 8189
 
 
 class Lite3Error(RuntimeError):
