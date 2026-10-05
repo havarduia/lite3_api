@@ -3,7 +3,7 @@
     python3 -m robot.rs_stream [topic]      # another topic, for testing
 
 Subscribes to the camera's JPEG topic (/camera/color/image_raw/compressed)
-and pipes the frames through GStreamer and the Jetson's hardware decoder and
+and pipes the frames through GStreamer and the Jetson's hardware H.264
 encoder to RS_RTSP, so the HMI page can show it over WebRTC exactly like the
 front camera. A process of its own on purpose (hmi.py starts it): encoded
 inside the HMI it stuttered, 22 fps with 150-200 ms gaps against a steady
@@ -42,7 +42,9 @@ class Stream:
             self.gst = subprocess.Popen(
                 ['gst-launch-1.0', '-q', 'fdsrc', 'fd=0', 'do-timestamp=true', '!',
                  'image/jpeg,framerate=%d/1' % FPS, '!', 'jpegparse', '!',
-                 'nvjpegdec', '!', 'video/x-raw,format=I420', '!', 'nvvidconv', '!',
+                 # jpegdec, not nvjpegdec: the hardware JPEG decoder kept handing
+                 # out its first frame, so the video was a still (2026-10-05).
+                 'jpegdec', '!', 'video/x-raw,format=I420', '!', 'nvvidconv', '!',
                  'video/x-raw(memory:NVMM),format=NV12', '!', 'nvv4l2h264enc',
                  'bitrate=%d' % BITRATE,
                  # baseline: no B-frames, which WebRTC cannot take; a keyframe
