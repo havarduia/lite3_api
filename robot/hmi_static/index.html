@@ -203,6 +203,11 @@ canvas#scan { width: 100%; height: auto; display: block; background: var(--panel
       <span class="lbl">Persona</span>
       <select id="persona" aria-label="persona"></select>
     </div>
+    <div class="row">
+      <label class="lbl" for="volume">Volume</label>
+      <input type="range" id="volume" min="0" max="100" step="5" value="100">
+      <span class="lbl" id="volume-v">100%</span>
+    </div>
     <div class="row"><textarea id="talk-text" placeholder="Text to say, or a question for him"></textarea></div>
     <div class="row">
       <button class="b" data-talk="say">Say it</button>
@@ -242,6 +247,7 @@ function connect() {
         const o = document.createElement('option'); o.value = o.textContent = p;
         if (p === m.persona) o.selected = true; sel.appendChild(o);
       }
+      $('volume').value = Math.round(m.volume * 100); $('volume-v').textContent = $('volume').value + '%';
       $('log').innerHTML = ''; $('chat').innerHTML = '';
       for (const l of m.log) (l.t === 'said' ? addChat : addLog)(l);
     }
@@ -320,6 +326,8 @@ document.querySelectorAll('[data-cmd]').forEach(b => b.addEventListener('click',
 }));
 $('goto').addEventListener('click', () => send({ cmd: 'goto', m: parseFloat($('goto-m').value), deg: parseFloat($('goto-d').value) || 0 }));
 $('estop').addEventListener('click', () => { stopDrive(); send({ cmd: 'estop' }); });
+$('volume').addEventListener('input', () => { $('volume-v').textContent = $('volume').value + '%'; });
+$('volume').addEventListener('change', () => send({ cmd: 'volume', v: $('volume').value / 100 }));
 document.querySelectorAll('[data-talk]').forEach(b => b.addEventListener('click', () => {
   send({ cmd: b.dataset.talk, text: $('talk-text').value, persona: $('persona').value });
   if (b.dataset.talk !== 'look') $('talk-text').value = '';

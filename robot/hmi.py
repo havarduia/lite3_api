@@ -372,13 +372,15 @@ class Server:
         await ws.prepare(request)
         self.pages.add(ws)
         try:
+            from . import talk
             from .talk import PERSONAS, PERSONA
             personas, persona = sorted(PERSONAS), PERSONA
         except Exception as e:                  # talking unavailable, driving is not
             personas, persona = [], None
             self.emit({'t': 'log', 'level': 'warn', 'msg': 'talk unavailable: %s' % e})
         await ws.send_str(json.dumps({'t': 'hello', 'personas': personas,
-                                      'persona': persona, 'log': self.log}))
+                                      'persona': persona, 'log': self.log,
+                                      'volume': talk.VOLUME if personas else 1.0}))
         r = self.robot
         try:
             async for m in ws:
@@ -403,6 +405,9 @@ class Server:
                 elif k in ('camera', 'voa'):
                     r.submit('%s %s' % (k, 'on' if c.get('on') else 'off'),
                              r.service, k, bool(c.get('on')))
+                elif k == 'volume':
+                    from . import talk
+                    talk.VOLUME = min(1.0, max(0.0, float(c['v'])))
                 elif k in ('say', 'ask', 'look'):
                     r.talk(k, (c.get('text') or '').strip(), c.get('persona'))
         finally:

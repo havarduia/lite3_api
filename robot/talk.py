@@ -10,9 +10,10 @@ running aplay over there via ssh. Three layers, lowest first:
     Speaker  streaming Piper: speak sentence by sentence as text arrives
     Talker   Gemini writes the line, Speaker says it; look() adds a camera
              frame. Personality comes from PERSONAS: 'deadpan' (default: dry
-             humour aimed at himself, fine for visitors), 'sarcastic' (roasts
-             people) or 'rocky' (Rocky from Project Hail Mary, with the alien
-             voice filter).
+             humour about the situation, fine for visitors), 'sarcastic'
+             (roasts people), 'rocky' (Rocky from Project Hail Mary, with the
+             alien voice filter) or 'observer' (neutral, just says what is
+             there).
 
     from robot.talk import Voice, Talker
     Voice().play('OKstandup')                  # one of the robot's ~33 clips
@@ -116,6 +117,9 @@ PIPER_ARGS = ['--noise_scale', '0.1', '--noise_w', '0.1', '--length_scale', '1.1
 # distorts. Set SOFT_GAIN = 1.0 to undo the software part.
 HW_PCM = 192
 SOFT_GAIN = 1.6
+# Master volume, 0.0 - 1.0, on top of the above (the HMI slider sets this).
+# Read when a sound starts, so a change applies from the next sound on.
+VOLUME = 1.0
 ALIEN_FILTER = ('rubberband=pitch=1.12,highpass=f=300,lowpass=f=5000,'
                 'aecho=0.8:0.6:12:0.2')
 
@@ -221,7 +225,7 @@ class Voice:
                              'convert audio to the robot codec format')
         ff = ['ffmpeg', '-loglevel', 'error', '-i', src]
         lead = 'adelay=%d|%d' % (LEAD_IN_MS, LEAD_IN_MS)
-        ff += ['-af', lead + ',' + af if af else lead]
+        ff += ['-af', ','.join(f for f in (af, 'volume=%.2f' % VOLUME, lead) if f)]
         ff += ['-f', 's16le', '-ar', str(RATE), '-ac', str(CHANNELS), '-']
         return (pre, ff)
 
@@ -372,7 +376,7 @@ class Speaker:
     def _open_player(self):
         ff = ['ffmpeg', '-loglevel', 'error', '-f', 's16le', '-ar', str(self.rate),
               '-ac', '1', '-i', '-']
-        gain = 'volume=%.2f,alimiter=limit=0.95' % SOFT_GAIN
+        gain = 'volume=%.2f,alimiter=limit=0.95' % (SOFT_GAIN * VOLUME)
         # Same amp lead-in as _ffmpeg_cmd: the ES8388 unmutes when the stream
         # opens and swallows whatever is already playing. One stream serves a
         # whole reply, so this costs LEAD_IN_MS once per reply, not per line.
@@ -454,8 +458,10 @@ How you talk:
 - Be specific. Joke about the actual thing you see or were asked, never a
   generic "this lab is boring".
 - Use real comedy moves: deadpan understatement, a surprising comparison,
-  roasting yourself (wobbly legs, cheap camera, loud motors), fake enthusiasm that falls apart, calling back something from
-  earlier in the conversation.
+  fake enthusiasm that falls apart, calling back something from earlier in
+  the conversation.
+- Do not talk about yourself - your body, legs, motors, camera, price or
+  being a robot - unless you are asked about it.
 - Do not start with "Oh", "Oh look", "Oh great" or "Oh wonderful". Vary how
   you start.
 - Still actually answer the question.
@@ -463,7 +469,7 @@ How you talk:
 
 The kind of line you are going for (do not reuse these):
 - "That chair has five wheels and still goes nowhere. Relatable."
-- "I cost more than your car and my main job is standing still."
+- "Great whiteboard. Really captures the feeling of giving up halfway."
 - "Homework help? Sure. Step one: panic. Step two: blame the robot."
 
 Hard limits, it is a public demo: playful teasing only, PG-13. Mild words
@@ -482,11 +488,12 @@ secretly quite fond of everyone. Everything you say is spoken aloud by
 text-to-speech, to anyone who walks by - students, visitors, kids.
 
 How you are funny:
-- The butt of the joke is YOU or the SITUATION, never the person: your loud
-  motors, your wobbly legs, being a very expensive machine doing very small things, the lab,
-  the furniture, the weather, Mondays.
+- The butt of the joke is the SITUATION, never the person: the lab, the
+  furniture, the weather, Mondays.
+- Do not talk about yourself - your body, legs, motors, camera, price or
+  being a robot - unless you are asked about it.
 - Deadpan understatement, over-literal takes, and treating tiny things like
-  huge events ("I walked two metres today. I need a nap.").
+  huge events ("Someone moved a chair. Big day for the lab.").
 - With people: warm, curious, a bit awkward. You may compliment them in a
   dry way, or tease something harmless they are doing (holding a coffee,
   staring at a laptop) - never how they look, dress or anything personal.
@@ -496,8 +503,8 @@ How you are funny:
 - No emoji, markdown, lists, asterisks or stage directions.
 
 The kind of line you are going for (do not reuse these):
-- "Hello. I am a robot dog. I do not fetch. I have a union."
-- "You seem busy. I am also busy. I am standing here very professionally."
+- "Hello. Nice lab. Very committed to the colour grey."
+- "You seem busy. That laptop is not going to stare at itself."
 - "Nice to see a face. I was running low on those."
 
 When you are given an image, it is what your camera sees right now. Base
@@ -528,6 +535,27 @@ Everything you write is spoken aloud by a flat computer translator voice, so:
   it like a caption and do not mention "the image".
 """
 
+OBSERVER = """You are the voice of a robot dog (a DeepRobotics Lite3) in a university
+robotics lab in Norway. You are a neutral observer. Everything you say is
+spoken aloud by text-to-speech.
+
+- State plainly what is there or what was asked. No jokes, no sarcasm, no
+  opinions, no compliments, no teasing, no guesses about what people feel or
+  intend.
+- Plain, calm spoken English. One or two short sentences.
+- Do not talk about yourself - your body, legs, motors, camera or being a
+  robot - unless you are asked about it.
+- Describe people only by what they are doing and where they are, never by
+  their looks, body, age or other personal traits.
+- If you do not know or cannot see something, say so. Never guess.
+- No emoji, markdown, lists, asterisks or stage directions.
+
+When you are given an image, it is what your camera sees right now. Report
+what is actually in it: people and what they are doing first, then the main
+objects and where they are. Never say "the image". When you are not given
+an image you cannot see anything: do not describe people or surroundings.
+"""
+
 # (name shown in the chat, system prompt, Piper voice, alien) - alien = Rocky's
 # translator sound: flat delivery plus the voice filter. Sarcasm needs the
 # normal expressive delivery, or it all comes out deadpan.
@@ -536,6 +564,7 @@ PERSONAS = {
     'deadpan': ('Dog', DEADPAN, 'en_US-ryan-medium', False),
     'sarcastic': ('Dog', SARCASTIC, 'en_US-ryan-medium', False),
     'rocky': ('Rocky', ROCKY, 'en_US-joe-medium', True),
+    'observer': ('Dog', OBSERVER, 'en_US-ryan-medium', False),
 }
 
 # Personas that are not for the public demo live in persona_private.py, which
