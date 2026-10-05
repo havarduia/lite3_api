@@ -50,6 +50,7 @@ FORWARD_STOP_M = 0.6   # camera clearance (from body centre), as walk()
 REAR_STOP_M = 0.5      # rear sonar reading
 DRIVE_MAX_VX = 0.5     # m/s, the page's speed slider tops out here
 DRIVE_MAX_WZ = 0.8     # rad/s
+RS_FPS = 30            # RealSense colour view; the camera itself gives 30
 
 # basic_state values seen on this robot (see project notes)
 BASIC = {1: 'lying, ready', 6: 'standing', 8: 'not armed', 9: 'arming',
@@ -136,7 +137,7 @@ class RealSenseColour:
         threading.Thread(target=self.ex.spin, daemon=True).start()
 
     def _cb(self, m):
-        if self.frames.viewers == 0 or time.time() - self.last < 0.12:
+        if self.frames.viewers == 0 or time.time() - self.last < 0.9 / RS_FPS:
             return
         import cv2
         import numpy as np
