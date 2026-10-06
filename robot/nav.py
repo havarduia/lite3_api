@@ -225,7 +225,7 @@ class Nav:
                     'obstacles the camera cannot currently see.' % c)
 
         handle = self.goal_send(gx, gy, gyaw)
-        result_fut = handle.get_result_async()
+        result_fut = self._goal_result
         try:
             # estop() from another thread drops the handle: Nav2 is being killed and
             # the result may never come.
@@ -277,7 +277,12 @@ class Nav:
         # Published so estop() can cancel the goal even when the SIGINT
         # handler fires somewhere else entirely.
         self._goal_handle = handle
+        self._goal_result = handle.get_result_async()
         return handle
+
+    def goal_active(self):
+        """Is Nav2 still working on the goal last sent?"""
+        return self._goal_handle is not None and not self._goal_result.done()
 
     def goto_cancel(self):
         """Ask Nav2 to drop the goal goto() is waiting on, from another

@@ -586,6 +586,7 @@ stack this process launched stays a zombie, and waiting on it cost 8 s a stop.
 Returns the action status: 4 = succeeded, 6 = aborted, 5 = cancelled.
 `goal_send(gx, gy, gyaw)` is step 4 on its own: a goal at an odom point,
 returned as soon as Nav2 accepts it, replacing any goal under way. No checks.
+`goal_active()` says whether Nav2 is still working on it.
 `person.follow_nav()` uses it to keep moving the goal.
 
 `goto_cancel()`, from another thread, ends a goal and leaves Nav2 up; `estop()`
@@ -641,31 +642,45 @@ a 12-byte header `<code, json_length, 1>` then JSON, on port 43901.
   start writing its spoken line early so it can speak the moment it arrives.
   Both take `abort=fn`: a reason returned from it ends the move at the next
   cycle, which is how the panel's Cancel and E-STOP reach them.
-- **`follow_nav()`** is `follow()` with Nav2 doing the walking, for a room
-  with furniture: `follow()` only ever steers straight at the person, so a
+- **`follow_nav()`** is a hybrid, for a room with furniture. It walks
+  straight at the person with `follow()`'s own controller (quick: a decision
+  every 50 ms, the speed asked for) while Nav2's costmap shows the line to
+  them free, and hands over to Nav2 goals while it does not. Nav2 alone was
+  tried first and was slow: about 3 s to get going after each goal and
+  0.3–0.4 m/s once moving (2026-10-06). The line is judged in the costmap,
+  not the camera, because the costmap still knows a chair he has just
+  passed. It has to be blocked for 0.3 s before Nav2 takes over and free
+  for 1 s before he walks straight again. What follows is the Nav2 part:
+  `follow()` only ever steers straight at the person, `follow()` only ever steers straight at the person, so a
   chair on that line stops him for good. Every cycle it works out where the
-  person is: bearing = `−(x − 0.5) × CAM_FOV` from the tracker's box, range =
-  the nearest depth return within 7.5° of that bearing. It keeps a Nav2 goal
+  person is: bearing = `−(x − 0.5) × CAM_FOV` from the tracker's box; range
+  from two sources. The box's height gives a rough one (`box_range()`: a
+  1.87 m person (`PERSON_HEIGHT`, set to who he follows most), picture 73°
+  top to bottom, so about 10 % off for someone 1.7 m, and nothing when the box is cut off because they are close). The
+  depth scan gives an exact one, but of the nearest thing at that bearing,
+  which among furniture is often a chair: one trace had a 1.9 m person read
+  as 0.52 m, which ended the goal (2026-10-06). So the depth return nearest
+  the box's estimate is used if one is within 35 % of it, else the box's
+  estimate itself. It keeps a Nav2 goal
   (`goal_send()`, section 7.4) 0.6 m short of them on that line, replaced
   when they have moved 0.5 m (at most once a second) or every 2 s. Where they
   are is smoothed over a few fixes: single fixes jumped by 0.5 m and more,
   and each new goal makes Nav2 plan again, which was most of his hesitation
   (five goals in 1.4 s in one trace, 2026-10-06). Nav2 plans round what is in its
   costmap. Things to know:
-  - beside him (outside the depth camera's view) they get no goal: he turns
-    to face them first, as `follow()` does. In view but with nothing in the
-    depth scan within 20° of their bearing, they are beyond its 4 m: the goal
-    is then 2 m toward them;
-  - a goal under way survives a missed depth reading. The first version
+  - beside him (more than 40° round, outside the depth camera's view) they
+    get no goal: Nav2's costmap cannot see them either, and a goal there
+    could walk him into them. A goal under way is dropped (it leads to
+    where they were) and he turns to them;
+  - a goal under way also survives a missed reading. The first version
     cancelled it on one, and stood (2026-10-06);
   - within 0.9 m (stop distance + Nav2's 0.25 m goal tolerance) he stands
-    until they are 1.1 m away, and does not turn to face them: turning at
-    every arrival was the fidgeting again;
-  - the only turning of his own is toward someone beside him, at up to
-    0.8 rad/s commanded and only until the depth camera can see them. At the
-    1.6 that `follow()` uses he overshot and lost them;
-  - he never publishes velocity while Nav2 holds a goal: two publishers on
-    `/cmd_vel` fight;
+    until they are 1.1 m away;
+  - standing with no goal, he turns to them only once they are more than 30°
+    round, at up to 1.2 rad/s commanded (0.84 delivered), and stops at 15°: enough to keep
+    them in the depth view, not a correction at every arrival. He has no goal
+    once Nav2 reports the last one finished (`goal_active()`); before that
+    was checked he never turned after arriving, stood side-on and lost them;
   - a goal cell that is LETHAL or off the map is pulled back toward him in
     0.1 m steps to the first free one (NavFn would abort otherwise): the
     person's own trail stays in the costmap for a while after they move on;
@@ -673,10 +688,10 @@ a 12-byte header `<code, json_length, 1>` then JSON, on port 43901.
     brings him to where they were last seen, then gives up after 5 s;
   - something between him and the person at the same bearing reads as the
     person: he then comes to rest beside it until he sees them clear of it;
-  - Nav2 sets the pace, not the speed argument;
+  - the speed argument is for the straight part; Nav2 sets its own pace;
   - the result's reason ends with how many goals were sent and the seconds
-    spent in each state (`goal`, `with them`, `not seen`, `goal blocked`,
-    `no depth on them`), and every change of state is written to
+    spent in each state (`straight`, `goal`, `with them`, `beside him`, `not seen`,
+    `goal blocked`, `no range on them`), and every change of state is written to
     `/tmp/follow_nav.log`. Read that first when he stands about.
 
 ---

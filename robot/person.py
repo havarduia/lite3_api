@@ -39,11 +39,18 @@ REGOAL_M = 0.5              # a new goal once they have moved this far from the 
 REGOAL_S = 2.0              # ... or after this long, in case Nav2 gave the last one up
 REGOAL_MIN_S = 1.0          # ... but never sooner than this: every new goal restarts Nav2's planning
 SMOOTH = 0.4                # share of each new fix in where he takes them to be: single fixes jump 0.5 m
-NAV_K_TURN = 2.5            # rad/s per unit of x offset, turning to get them into the depth view
-NAV_MAX_TURN = 0.8          # rad/s commanded for that: faster overshoots and loses them
-DEPTH_VIEW_DEG = 40         # inside this the depth camera would show them, if they were in range
-OPEN_HALF_DEG = 20          # nothing this far either side of their bearing: they are beyond it
-FAR_GOAL = 2.0              # m toward a person too far for the depth camera to range
+NAV_K_TURN = 3.5            # rad/s per unit of x offset, turning to face them
+NAV_MAX_TURN = 1.2          # rad/s commanded for that (0.84 delivered). 1.6 overshot and lost them
+DEPTH_VIEW_DEG = 40         # beyond this bearing the depth camera, and so Nav2's costmap, cannot see them
+FACE_DEG = 30               # standing with no goal, he turns to them when they are further round than this ...
+FACED_DEG = 15              # ... and until they are within this
+PERSON_HEIGHT = 1.87        # m: the height of whoever he follows most. Their box's height gives a second estimate of the range
+CAM_VFOV = CAM_FOV * 9 / 16  # the picture top to bottom
+BOX_MATCH = 0.35            # a depth return within this share of the box's range is them, not furniture
+# follow_nav() walks straight at them, as follow() does, while Nav2's costmap shows that line free
+LINE_FROM = 0.4             # m: the line is checked from here out (his own cells do not count) ...
+BLOCKED_S = 0.3             # ... and has to be blocked this long before Nav2 takes over
+CLEAR_S = 1.0               # and free this long before he walks straight again
 FOLLOW_LOG = '/tmp/follow_nav.log'   # every change of state in the last follow_nav()
 NAV_NEAR = 0.3              # m: a goal nearer than this is "there" to Nav2 (xy_goal_tolerance 0.25)
 
@@ -123,12 +130,13 @@ def _swing(wz, sides, sweep):
 
 
 def _controller(bot, det, stop_distance, speed, hold, near=None, near_distance=1.0,
-                abort=None):
+                abort=None, view=None):
     """The per-cycle control behind approach() and follow(): turn to keep the
     person centred (never into something inside TURN_SWEEP), walk while they
     are centred, slow over the last SLOW_ZONE metres, and turn after a person
     who left the picture to one side. hold=True stays at the
     stop distance instead of ending there. abort() returning a reason ends it.
+    view() -> (clearance, side_clear), for a caller that scans already.
     """
     from .lite3 import TURN_SWEEP         # here, not on top: lite3 needs ROS
     state = {'lost_since': None, 'near_done': near is None, 'off': 0.0,
@@ -138,7 +146,7 @@ def _controller(bot, det, stop_distance, speed, hold, near=None, near_distance=1
         bins = bot.scan()                       # one scan for both checks
         return bot.clearance(bins=bins), bot.side_clear(bins)
 
-    view = sampled(read)
+    view = view or sampled(read)
 
     def control():
         now = time.time()
@@ -206,20 +214,37 @@ def follow(bot, det, seconds, stop_distance=0.6, speed=0.3, abort=None):
                      limit=seconds)
 
 
-def person_range(bins, bearing_deg, half=PERSON_HALF_DEG):
-    """Metres to the nearest thing the depth scan `bins` shows within `half`
-    degrees of that bearing, None if it shows nothing there."""
-    near = [r for b, r in bins if r is not None and abs(b - bearing_deg) <= half]
-    return min(near) if near else None
+def box_range(p):
+    """Metres to a person from how tall their box is in the picture, None if
+    the box runs off the top or bottom (they are close) so its height is not
+    theirs. Good to about PERSON_HEIGHT's error: 10-15 %."""
+    h = p['bottom'] - p['top']
+    if p['top'] < 0.02 or p['bottom'] > 0.98 or h < 0.05:
+        return None
+    return PERSON_HEIGHT / 2 / math.tan(h * CAM_VFOV / 2)
 
 
-def follow_nav(bot, det, seconds, stop_distance=0.6, speed=None, abort=None):
-    """follow(), but Nav2 does the walking, so he goes round what is between
-    him and the person. Needs Nav2 running. speed is ignored: Nav2 sets the
-    pace. Returns a result like steer()'s, plus 'spent': seconds in each
-    state, which is also traced to FOLLOW_LOG. README.md section 8.
+def person_range(bins, bearing_deg, guess=None):
+    """Metres to the person at that bearing. The depth scan `bins` is exact
+    but shows the nearest thing, which is often a chair; `guess` (box_range)
+    is rough but is them. So: the depth return nearest the guess if one is
+    within BOX_MATCH of it, else the guess. With no guess, the nearest depth
+    return, or None."""
+    near = [r for b, r in bins if r is not None and abs(b - bearing_deg) <= PERSON_HALF_DEG]
+    if guess is None:
+        return min(near) if near else None
+    best = min(near, key=lambda r: abs(r - guess), default=None)
+    return best if best is not None and abs(best - guess) <= BOX_MATCH * guess else guess
+
+
+def follow_nav(bot, det, seconds, stop_distance=0.6, speed=0.3, abort=None):
+    """follow() while the straight line to the person is free, and Nav2 goals
+    round whatever is on it while it is not. Needs Nav2 running. speed is for
+    the straight part; Nav2 sets its own pace. Returns a result like
+    steer()'s, plus 'spent': seconds in each state, which is also traced to
+    FOLLOW_LOG. README.md section 8.
     """
-    from .lite3 import HARD_TIMEOUT, TURN_SWEEP
+    from .lite3 import HARD_TIMEOUT, MAX_SPEED, MAX_YAW_RATE, TURN_SWEEP
     if not bot.nav_running:
         raise Lite3Error('nav2 is not running - call nav_start() first')
     # His own time limit, a second inside _loop's: _loop ends with a halt, and
@@ -228,7 +253,10 @@ def follow_nav(bot, det, seconds, stop_distance=0.6, speed=None, abort=None):
     view = sampled(bot.scan)
     state = {'lost_since': None, 'off': 0.0, 'arrived': False,
              'goal': None, 'label': None, 'since': time.time(), 'sent': 0, 'began': None,
-             'them': None}
+             'them': None, 'facing': False, 'via_nav': False, 'changed': None, 'bins': None}
+    # the straight part: follow()'s own controller, on the scan taken here
+    straight = _controller(bot, det, stop_distance, speed, True, view=lambda: (
+        bot.clearance(bins=state['bins']), bot.side_clear(state['bins'])))
     spent = {}
     trace = open(FOLLOW_LOG, 'w')
 
@@ -264,6 +292,18 @@ def follow_nav(bot, det, seconds, stop_distance=0.6, speed=None, abort=None):
             d -= 0.1
         return None
 
+    def line_free(x, y, heading, upto):
+        """Does the costmap show nothing between him and a point `upto` metres
+        out? The costmap, not the camera: it still knows the chair he has
+        just passed. Off the map counts as free: nothing is known there."""
+        d = LINE_FROM
+        while d <= upto:
+            c = bot.cost_at(x + d * math.cos(heading), y + d * math.sin(heading))
+            if c is not None and c >= LETHAL:
+                return False
+            d += 0.1
+        return True
+
     def step():
         now = time.time()
         state['began'] = state['began'] or now
@@ -272,11 +312,39 @@ def follow_nav(bot, det, seconds, stop_distance=0.6, speed=None, abort=None):
         if why:
             return why
         try:
-            bins = view()
+            bins = state['bins'] = view()
         except Lite3Error:
             return 'lost the depth stream - stopped rather than walking blind'
         wz = 0.0
+        if state['goal'] and not bot.goal_active():
+            state['goal'] = None                      # Nav2 has finished with it, one way or the other
         p = det.person()
+        if p is not None:
+            # Straight or by Nav2? Only judged while he sees them: a goal
+            # under way when they vanish leads to where they went.
+            off = p['x'] - 0.5
+            bearing = -off * CAM_FOV
+            r = person_range(bins, math.degrees(bearing), box_range(p))
+            x, y, yaw = bot.pose
+            blocked = (r is not None and abs(math.degrees(bearing)) <= DEPTH_VIEW_DEG
+                       and not line_free(x, y, yaw + bearing, r - stop_distance))
+            if blocked == state['via_nav']:
+                state['changed'] = None
+            else:
+                state['changed'] = state['changed'] or now
+                if now - state['changed'] >= (BLOCKED_S if blocked else CLEAR_S):
+                    state['via_nav'], state['changed'] = blocked, None
+                    state['arrived'], state['them'] = False, None
+                    if not blocked and state['goal']:
+                        drop()
+        if not state['via_nav']:
+            out = straight()
+            if isinstance(out, str):
+                return out
+            note('straight')
+            bot._drive(clamp(out[0], MAX_SPEED), 0.0, clamp(out[1], MAX_YAW_RATE))
+            time.sleep(0.05)
+            return None
         if p is None:
             state['lost_since'] = state['lost_since'] or now
             if now - state['lost_since'] > GIVE_UP:
@@ -290,29 +358,37 @@ def follow_nav(bot, det, seconds, stop_distance=0.6, speed=None, abort=None):
             off = state['off'] = p['x'] - 0.5         # +ve = person to the right
             bearing = -off * CAM_FOV                  # +ve = left, as the depth bins
             deg = math.degrees(bearing)
-            r = person_range(bins, deg)
-            if r is not None and r <= stop_distance + (RESUME if state['arrived'] else NAV_NEAR):
-                # With them he stands and does not re-aim: he need not face
-                # them, only have them where the depth camera can see them.
-                note('with them', '%.2f m' % r)
+            guess = box_range(p)
+            r = person_range(bins, deg, guess)
+            said = 'them %s (box %s) at %+.0f deg' % (
+                '-' if r is None else '%.2f m' % r, '-' if guess is None else '%.2f m' % guess, deg)
+            if abs(deg) > DEPTH_VIEW_DEG:
+                # Beside him: the depth camera cannot see them, so neither can
+                # Nav2, and a goal there could walk him into them. The goal he
+                # had leads to where they no longer are: drop it and turn.
+                note('beside him', said)
+                if state['goal']:
+                    drop()
+            elif r is not None and r <= stop_distance + (RESUME if state['arrived'] else NAV_NEAR):
+                # With them he stands. He need not point at them exactly, only
+                # keep them where the depth camera sees them (FACE_DEG).
+                note('with them', said)
                 if state['goal']:
                     drop()
                 state['arrived'], state['them'] = True, None
+            elif r is None:
+                note('no range on them', said)
             else:
                 state['arrived'] = False
-                if r is None and abs(deg) <= DEPTH_VIEW_DEG and person_range(bins, deg, OPEN_HALF_DEG) is None:
-                    r = FAR_GOAL + stop_distance      # in view, nothing there: beyond the depth range
                 x, y, yaw = bot.pose
-                at = None
-                if r is not None:
-                    fix = (x + r * math.cos(yaw + bearing), y + r * math.sin(yaw + bearing))
-                    was = state['them']
-                    them = state['them'] = fix if was is None else (
-                        was[0] + SMOOTH * (fix[0] - was[0]), was[1] + SMOOTH * (fix[1] - was[1]))
-                    heading = math.atan2(them[1] - y, them[0] - x)
-                    at = free_goal(x, y, heading, dist((x, y), them) - stop_distance)
+                fix = (x + r * math.cos(yaw + bearing), y + r * math.sin(yaw + bearing))
+                was = state['them']
+                them = state['them'] = fix if was is None else (
+                    was[0] + SMOOTH * (fix[0] - was[0]), was[1] + SMOOTH * (fix[1] - was[1]))
+                heading = math.atan2(them[1] - y, them[0] - x)
+                at = free_goal(x, y, heading, dist((x, y), them) - stop_distance)
                 if at:
-                    note('goal', 'them %.2f m at %+.0f deg' % (r, deg))
+                    note('goal', said)
                     g = state['goal']
                     if g is None or now - g[2] > REGOAL_S or (
                             dist(g, at) > REGOAL_M and now - g[2] > REGOAL_MIN_S):
@@ -320,15 +396,14 @@ def follow_nav(bot, det, seconds, stop_distance=0.6, speed=None, abort=None):
                         state['goal'] = (at[0], at[1], now)
                         state['sent'] += 1
                         trace.write('%.2f   sent (%.2f, %.2f), he is at (%.2f, %.2f)\n' % (now, at[0], at[1], x, y))
-                elif r is not None:
-                    note('goal blocked', 'no free cell on the line to them, %+.0f deg' % deg)
                 else:
-                    # Beside him, where the depth camera cannot range them. A goal
-                    # under way stays (one missed reading must not end it); with
-                    # none he turns, gently, only until they are in its view.
-                    note('no depth on them', '%+.0f deg' % deg)
-                    if not state['goal']:
-                        wz = clamp(-NAV_K_TURN * off, NAV_MAX_TURN)
+                    note('goal blocked', said)
+            if not state['goal']:
+                # Standing with no goal: turn to them once they are well round
+                # to one side, and stop well before they are dead ahead.
+                state['facing'] = abs(deg) > (FACED_DEG if state['facing'] else FACE_DEG)
+                if state['facing']:
+                    wz = clamp(-NAV_K_TURN * off, NAV_MAX_TURN)
         if not state['goal']:
             # Only with no goal: Nav2's controller owns cmd_vel while it has one.
             bot._drive(0.0, 0.0, _swing(wz, bot.side_clear(bins), TURN_SWEEP))
