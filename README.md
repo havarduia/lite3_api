@@ -647,21 +647,30 @@ a 12-byte header `<code, json_length, 1>` then JSON, on port 43901.
   person is: bearing = `−(x − 0.5) × CAM_FOV` from the tracker's box, range =
   the nearest depth return within 7.5° of that bearing. It keeps a Nav2 goal
   (`goal_send()`, section 7.4) 0.6 m short of them on that line, replaced
-  when they have moved 0.3 m or every 3 s. Nav2 plans round what is in its
+  when they have moved 0.3 m or every 2 s. Nav2 plans round what is in its
   costmap. Things to know:
-  - the person must be inside the depth camera's ±45° and 4 m to get a goal.
-    Beside him, he turns to face them first, as `follow()` does;
+  - beside him (outside the depth camera's view) they get no goal: he turns
+    to face them first, as `follow()` does. In view but with nothing in the
+    depth scan within 20° of their bearing, they are beyond its 4 m: the goal
+    is then 2 m toward them;
+  - a goal under way survives a missed depth reading. The first version
+    cancelled it on one, and stood (2026-10-06);
   - within 0.9 m (stop distance + Nav2's 0.25 m goal tolerance) he stands,
     with the same margins as `follow()` before moving again;
   - he never publishes velocity while Nav2 holds a goal: two publishers on
     `/cmd_vel` fight;
-  - a goal cell that is LETHAL or off the map is not sent (NavFn would abort);
-    the last goal stays;
+  - a goal cell that is LETHAL or off the map is pulled back toward him in
+    0.1 m steps to the first free one (NavFn would abort otherwise): the
+    person's own trail stays in the costmap for a while after they move on;
   - if the person is lost while a goal is under way he finishes it, which
     brings him to where they were last seen, then gives up after 5 s;
   - something between him and the person at the same bearing reads as the
     person: he then comes to rest beside it until he sees them clear of it;
-  - Nav2 sets the pace, not the speed argument.
+  - Nav2 sets the pace, not the speed argument;
+  - the result's reason ends with how many goals were sent and the seconds
+    spent in each state (`goal`, `with them`, `not seen`, `goal blocked`,
+    `no depth on them`), and every change of state is written to
+    `/tmp/follow_nav.log`. Read that first when he stands about.
 
 ---
 
