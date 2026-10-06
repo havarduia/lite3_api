@@ -97,11 +97,12 @@ class PersonDetector(threading.Thread):
         self._halt.set()
 
 
-def _controller(bot, det, stop_distance, speed, hold, near=None, near_distance=1.0):
+def _controller(bot, det, stop_distance, speed, hold, near=None, near_distance=1.0,
+                abort=None):
     """The per-cycle control behind approach() and follow(): turn to keep the
     person centred (never into something inside TURN_SWEEP), walk while they
     are centred, slow over the last SLOW_ZONE metres. hold=True stays at the
-    stop distance instead of ending there.
+    stop distance instead of ending there. abort() returning a reason ends it.
     """
     from .lite3 import TURN_SWEEP         # here, not on top: lite3 needs ROS
     state = {'lost_since': None, 'near_done': near is None}
@@ -114,6 +115,9 @@ def _controller(bot, det, stop_distance, speed, hold, near=None, near_distance=1
 
     def control():
         now = time.time()
+        why = abort and abort()
+        if why:
+            return why
         if det.error:
             return 'detector failed: %s' % det.error
         p = det.person()
@@ -140,28 +144,29 @@ def _controller(bot, det, stop_distance, speed, hold, near=None, near_distance=1
                 return 'reached: %.2f m from body centre' % clear
             return 0.0, wz
         ramp = (clear - stop_distance) / SLOW_ZONE
-        vx = max(MIN_SPEED, speed * min(1.0, ramp)) if abs(off) < CENTRED else 0.0
+        # The ramp's floor never lifts him above the speed that was asked for.
+        vx = max(min(MIN_SPEED, speed), speed * min(1.0, ramp)) if abs(off) < CENTRED else 0.0
         return vx, wz
 
     return control
 
 
 def approach(bot, det, stop_distance=0.6, speed=0.3, limit=30.0,
-             near=None, near_distance=1.0):
+             near=None, near_distance=1.0, abort=None):
     """Turn to and walk up to the detected person, stopping stop_distance (from
     the body centre) short. near(), if given, is called once from the control
     loop when he is within near_distance of that. Returns steer()'s result.
     """
     return bot.steer(_controller(bot, det, stop_distance, speed, False,
-                                 near, near_distance), limit=limit)
+                                 near, near_distance, abort), limit=limit)
 
 
-def follow(bot, det, seconds, stop_distance=0.6, speed=0.3):
+def follow(bot, det, seconds, stop_distance=0.6, speed=0.3, abort=None):
     """Follow the person for `seconds` (at most lite3's 30 s HARD_TIMEOUT),
     keeping stop_distance; ends early if they are lost for GIVE_UP seconds.
     Returns lite3.steer()'s result dict ('time limit' = followed the full time).
     """
-    return bot.steer(_controller(bot, det, stop_distance, speed, True),
+    return bot.steer(_controller(bot, det, stop_distance, speed, True, abort=abort),
                      limit=seconds)
 
 

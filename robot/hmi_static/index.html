@@ -274,18 +274,23 @@ textarea { display: block; width: 100%; min-height: 76px; margin: 12px 0; resize
         <output id="speed-v" for="speed">0.20 m/s</output>
       </div>
     </div>
-    <p class="note">He moves only while you hold. Backing up stops when the rear sonar reads under 0.5 m.</p>
+    <p class="note">He moves only while you hold. Top speed also sets how fast he walks up to or follows a person; a Go is at Nav2's own speed. Backing up stops when the rear sonar reads under 0.5 m.</p>
   </section>
 
   <section id="nav">
-    <div class="head"><h2>Navigate</h2></div>
+    <div class="head"><h2>Navigate</h2><button class="key" id="cancel" hidden>Cancel</button></div>
     <div class="line">
       Walk <span class="unit"><input id="goto-m" type="number" step="0.1" value="1.5" aria-label="metres ahead"> m</span> ahead, then turn
       <span class="unit"><input id="goto-d" type="number" step="15" value="0" aria-label="final turn in degrees, left is positive"> °</span>
       <button class="key go" id="goto">Go</button>
-      <button class="key" id="cancel" hidden>Cancel</button>
     </div>
     <p class="note">Nav2 plans a path around obstacles, and is started if it is off. A positive turn is to the left. Cancel stops him and leaves Nav2 running.</p>
+    <div class="line">
+      To the person he sees
+      <button class="key go" data-cmd="approach" data-speed>Walk up</button>
+      <button class="key" data-cmd="follow" data-speed>Follow</button>
+    </div>
+    <p class="note">Walk up stops 0.6 m short of them. Follow keeps that distance for <span id="follow-s">30</span> s, then press it again. Both go at the top speed set under Drive as it is when pressed, turn person detection on, stop for anything the depth camera sees in the way, and give up when he has not seen anyone for 5 s.</p>
   </section>
 
   <section id="sys">
@@ -300,7 +305,7 @@ textarea { display: block; width: 100%; min-height: 76px; margin: 12px 0; resize
       <div>Obstacle avoider (VOA) <span class="sel">
         <button class="key" data-cmd="voa" data-on="0" id="k-voa-0">Off</button>
         <button class="key" data-cmd="voa" data-on="1" id="k-voa-1">On</button></span></div>
-      <div title="His built-in detector. It only looks: he does not walk to anyone from here">Person detection <span id="s-who" class="lamp off">–</span> <span class="sel">
+      <div title="His built-in detector. This switch only looks: Walk up and Follow are under Navigate">Person detection <span id="s-who" class="lamp off">–</span> <span class="sel">
         <button class="key" data-cmd="person" data-on="0" id="k-person-0">Off</button>
         <button class="key" data-cmd="person" data-on="1" id="k-person-1">On</button></span></div>
       <div title="While it is on he obeys this panel with no handheld switched on">Heartbeat <span id="s-hb" class="lamp off">–</span></div>
@@ -351,7 +356,7 @@ textarea { display: block; width: 100%; min-height: 76px; margin: 12px 0; resize
 const $ = (id) => document.getElementById(id);
 let ws = null, lastStatus = null, lostOnce = false;
 // The robot's own numbers, sent with every status (hmi.py LIMITS); these stand in until the first one.
-const LIM = { vx: 0.5, wz: 0.8, stop: 0.6, rear: 0.5, refuse: 20, warn: 30, lying: [1, 8, 98], gone: 3 };
+const LIM = { vx: 0.5, wz: 0.8, stop: 0.6, rear: 0.5, refuse: 20, warn: 30, lying: [1, 8, 98], gone: 3, follow: 30 };
 
 function send(obj) { if (ws && ws.readyState === 1) ws.send(JSON.stringify(obj)); }
 
@@ -417,7 +422,8 @@ function renderStatus(s) {
   $('busy').textContent = s.busy ? 'Busy with ' + s.busy : 'Idle';
   $('busy').className = 'lamp ' + (s.busy ? 'busy' : 'off');
   document.body.classList.toggle('estopped', !!s.estopped);
-  $('cancel').hidden = !(s.busy && s.busy.startsWith('goto'));
+  $('cancel').hidden = !(s.busy && /^(goto|approach|follow)/.test(s.busy));
+  $('follow-s').textContent = LIM.follow;
 
   lit('k-stand', s.standing); lit('k-sit', LIM.lying.includes(s.basic));   // neither while he is in between
   for (const k of ['nav', 'camera', 'voa']) { lit(`k-${k}-1`, s[k] === true); lit(`k-${k}-0`, s[k] === false); }
@@ -518,6 +524,7 @@ document.fonts.ready.then(redraw);
 document.querySelectorAll('[data-cmd]').forEach(b => b.addEventListener('click', () => {
   const msg = { cmd: b.dataset.cmd };
   if (b.dataset.on !== undefined) msg.on = b.dataset.on === '1';
+  if (b.dataset.speed !== undefined) msg.speed = parseFloat($('speed').value);
   send(msg);
 }));
 $('goto').addEventListener('click', () => send({ cmd: 'goto', m: parseFloat($('goto-m').value), deg: parseFloat($('goto-d').value) || 0 }));

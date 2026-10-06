@@ -24,9 +24,9 @@ from aiohttp import ClientSession, web, WSMsgType
 
 from . import protocol as P
 from .depth import sampled
-from .lite3 import BATTERY_REFUSE, BATTERY_WARN, LYING, Lite3
+from . import person
+from .lite3 import BATTERY_REFUSE, BATTERY_WARN, HARD_TIMEOUT, LYING, Lite3
 from .nav import REPO, clamp, status_text
-from .person import PersonDetector
 from .protocol import Lite3Error
 
 PORT = 8080
@@ -40,12 +40,13 @@ DRIVE_MAX_WZ = 0.8     # rad/s
 RS_LINGER_S = 10.0     # rs_stream.py keeps running this long after the last viewer
 GONE_S = 3.0           # no page for this long: a Go is cancelled. The page reconnects in 1.5 s
 LET_GO_S = 2.0         # Nav2 gets this long to act on that cancel before it is an E-STOP
+FOLLOW_S = HARD_TIMEOUT  # one press of Follow lasts this long: the ceiling on any one move
 PING_S = 5.0           # a page that has gone silent is noticed within about 1.5 x this
 
 # What the page needs to know to draw and warn with the same numbers as here.
 LIMITS = {'vx': DRIVE_MAX_VX, 'wz': DRIVE_MAX_WZ, 'stop': FORWARD_STOP_M,
           'rear': REAR_STOP_M, 'refuse': BATTERY_REFUSE, 'warn': BATTERY_WARN,
-          'lying': LYING, 'gone': GONE_S}
+          'lying': LYING, 'gone': GONE_S, 'follow': FOLLOW_S}
 
 # basic_state values seen on this robot (see project notes)
 BASIC = {1: 'lying, ready', 6: 'standing', 8: 'not armed', 9: 'arming',
@@ -133,6 +134,7 @@ class Robot:
         self.talker = None
         self.persona = None
         self.det = None                         # PersonDetector while detection is on
+        self.stop_asked = False                 # Cancel, for a walk to or after a person
 
     # --- commands --------------------------------------------------------
     def log(self, msg, level=None):
@@ -181,15 +183,18 @@ class Robot:
             self.log('E-STOP error: %s' % e, 'error')
 
     def cancel(self, why='from the panel'):
-        """End a Go that is under way. Nav2 stays up, unlike E-STOP."""
+        """End a Go, an approach or a follow that is under way. Nav2 stays up,
+        unlike E-STOP."""
         going = self.bot.goto_cancel()
+        if self.busy in ('approach', 'follow'):
+            self.stop_asked = going = True
         if going:
-            self.log('Go cancelled ' + why, 'warn')
+            self.log('cancelled ' + why, 'warn')
         return going
 
     def abandoned(self):
-        """No page is open, so nobody can press E-STOP: a Go must not carry on
-        alone. (Driving stops by itself already, DEADMAN_S.)"""
+        """No page is open, so nobody can press E-STOP: a Go, an approach or a
+        follow must not carry on alone. (Driving stops by itself, DEADMAN_S.)"""
         if self.cancel('- no panel connected'):
             time.sleep(LET_GO_S)
             if self.bot.goto_cancel():          # still there: Nav2 has not let go
@@ -207,14 +212,27 @@ class Robot:
         return '%s %s' % (which, 'up' if self.services[which] else 'down')
 
     def detect(self, on):
-        """Person detection on or off. It only looks: nothing here moves him."""
+        """Person detection on or off. On its own it only looks."""
         if self.det:
             self.det.stop()
             self.det = None
         if on:
-            self.det = PersonDetector()
+            self.det = person.PersonDetector()
             self.det.start()
         self.log('person detection ' + ('on' if on else 'off'))
+
+    def to_person(self, move, **kw):
+        """person.approach or person.follow, ended by Cancel and E-STOP as
+        well. Switches detection on if it is off, and leaves it on."""
+        if not self.det:
+            self.detect(True)
+        det = self.det
+        det.ready.wait(6)
+        if det.error:
+            raise Lite3Error('detector failed: %s' % det.error)
+        self.stop_asked = False
+        return move(self.bot, det, stop_distance=FORWARD_STOP_M, abort=lambda: (
+            'E-STOP' if self.estopped else 'cancelled' if self.stop_asked else None), **kw)
 
     # --- hold-to-drive ---------------------------------------------------
     def drive(self, vx, wz):
@@ -424,6 +442,12 @@ class Server:
         elif k in ('camera', 'voa'):
             r.submit('%s %s' % (k, 'on' if c.get('on') else 'off'),
                      r.service, k, bool(c.get('on')))
+        elif k in ('approach', 'follow'):
+            # the page's speed slider; without it, person.py's own default
+            kw = {'speed': clamp(abs(float(c['speed'])), DRIVE_MAX_VX)} if c.get('speed') else {}
+            if k == 'follow':
+                kw['seconds'] = FOLLOW_S
+            r.submit(k, lambda: r.to_person(getattr(person, k), **kw))
         elif k == 'person':
             r.detect(bool(c.get('on')))
         elif k == 'watch' and c.get('cam') == 'realsense':

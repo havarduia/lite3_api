@@ -620,6 +620,8 @@ a 12-byte header `<code, json_length, 1>` then JSON, on port 43901.
   keeps turning to face the person, and walks again when they move away.
   `approach(near=fn)` calls `fn` ~1 m before arrival, which the tour uses to
   start writing its spoken line early so it can speak the moment it arrives.
+  Both take `abort=fn`: a reason returned from it ends the move at the next
+  cycle, which is how the panel's Cancel and E-STOP reach them.
 
 ---
 
@@ -763,7 +765,14 @@ CDN: even its typeface, B612, is embedded) with:
 - **person detection** on/off (Systems): the built-in tracker of section 8,
   looking only. The row says whether someone is in view and on which side,
   and the box is drawn on the front camera view, which is the camera the
-  tracker looks through. Nothing here walks him to anyone;
+  tracker looks through. The switch itself only looks;
+- **Walk up** and **Follow** (Navigate): `person.approach()` and
+  `person.follow()` of section 8, stopping 0.6 m short. They switch detection
+  on if it is off, and walk at the Drive section's top-speed slider as it is
+  when pressed (a Go does not: Nav2's speed is in its own config). One press
+  of Follow lasts 30 s, the ceiling on any single
+  move. Cancel and E-STOP end either within one 50 ms cycle (the `abort`
+  argument of both functions), and so does the page going away, as for a Go;
 - say / ask / look with a persona picker, all three in that persona's voice;
 - an always-visible **E-STOP** (also the space bar) that bypasses the command
   queue and calls `Lite3.estop()` directly;
