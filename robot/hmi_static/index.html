@@ -193,6 +193,8 @@ output { min-width: 4.6em; font-weight: 700; text-align: right; }
 .cam:not(.on) { display: none; }
 .cam img, .cam video { display: block; width: 100%; height: 100%; object-fit: contain; }
 .cam .off { color: var(--trace); font-size: 13px; }
+.cam { position: relative; }
+#who { position: absolute; border: 2px solid var(--yellow); pointer-events: none; }
 
 /* --- talk and log ---------------------------------------------------------- */
 textarea { display: block; width: 100%; min-height: 76px; margin: 12px 0; resize: vertical; }
@@ -298,6 +300,9 @@ textarea { display: block; width: 100%; min-height: 76px; margin: 12px 0; resize
       <div>Obstacle avoider (VOA) <span class="sel">
         <button class="key" data-cmd="voa" data-on="0" id="k-voa-0">Off</button>
         <button class="key" data-cmd="voa" data-on="1" id="k-voa-1">On</button></span></div>
+      <div title="His built-in detector. It only looks: he does not walk to anyone from here">Person detection <span id="s-who" class="lamp off">–</span> <span class="sel">
+        <button class="key" data-cmd="person" data-on="0" id="k-person-0">Off</button>
+        <button class="key" data-cmd="person" data-on="1" id="k-person-1">On</button></span></div>
       <div title="While it is on he obeys this panel with no handheld switched on">Heartbeat <span id="s-hb" class="lamp off">–</span></div>
     </div>
   </section>
@@ -307,7 +312,7 @@ textarea { display: block; width: 100%; min-height: 76px; margin: 12px 0; resize
     <div class="monitors">
       <div class="monitor glass">
         <div class="bar">Front wide-angle <button class="key" data-cam="front">Show</button></div>
-        <div class="cam" id="cam-front"></div>
+        <div class="cam" id="cam-front"><div id="who" hidden></div></div>
       </div>
       <div class="monitor glass">
         <div class="bar">RealSense colour <button class="key" data-cam="realsense">Show</button></div>
@@ -432,6 +437,14 @@ function renderStatus(s) {
   ds.textContent = s.blocked ? 'Held back: ' + s.blocked : s.driving ? 'Driving'
     : s.nav ? 'Nav2 is running. Turn it off to drive by hand.' : 'Hold and drag, or use WASD or the arrow keys.';
   ds.className = s.blocked ? 'warn' : s.driving ? 'on' : '';
+  // The detector looks through the front camera, so its box sits on that picture.
+  const p = s.person, who = $('who');
+  lit('k-person-1', s.detect); lit('k-person-0', !s.detect);
+  $('s-who').textContent = !s.detect ? 'Off' : !p ? 'Nobody'
+    : (p[0] + p[2]) / 2 < 0.4 ? 'Left' : (p[0] + p[2]) / 2 > 0.6 ? 'Right' : 'Ahead';
+  $('s-who').className = 'lamp' + (p ? '' : ' off');
+  who.hidden = !p;
+  if (p) Object.assign(who.style, { left: p[0] * 100 + '%', top: p[1] * 100 + '%', width: (p[2] - p[0]) * 100 + '%', height: (p[3] - p[1]) * 100 + '%' });
   notice();
   drawScan(s.scan);
 }

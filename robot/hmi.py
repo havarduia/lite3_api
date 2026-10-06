@@ -26,6 +26,7 @@ from . import protocol as P
 from .depth import sampled
 from .lite3 import BATTERY_REFUSE, BATTERY_WARN, LYING, Lite3
 from .nav import REPO, clamp, status_text
+from .person import PersonDetector
 from .protocol import Lite3Error
 
 PORT = 8080
@@ -131,6 +132,7 @@ class Robot:
         self._warned = {}                       # msg -> time, to stop log spam
         self.talker = None
         self.persona = None
+        self.det = None                         # PersonDetector while detection is on
 
     # --- commands --------------------------------------------------------
     def log(self, msg, level=None):
@@ -203,6 +205,16 @@ class Robot:
     def service(self, which, on):
         self.services[which] = getattr(P, which)(on)
         return '%s %s' % (which, 'up' if self.services[which] else 'down')
+
+    def detect(self, on):
+        """Person detection on or off. It only looks: nothing here moves him."""
+        if self.det:
+            self.det.stop()
+            self.det = None
+        if on:
+            self.det = PersonDetector()
+            self.det.start()
+        self.log('person detection ' + ('on' if on else 'off'))
 
     # --- hold-to-drive ---------------------------------------------------
     def drive(self, vx, wz):
@@ -281,6 +293,11 @@ class Robot:
         s = b.state
         p = b.pose
         f, r = b.ultrasound
+        det = self.det
+        if det and det.error:
+            self.log('person detection failed: %s' % det.error, 'error')
+            self.det = det = None
+        who = det and det.person()
         return {
             't': 'status',
             'basic': s.get('basic'), 'basic_text': BASIC.get(s.get('basic'), '?'),
@@ -291,6 +308,9 @@ class Robot:
             'camera': self.services['camera'], 'voa': self.services['voa'],
             'busy': self.busy, 'driving': self.driving, 'blocked': self.blocked,
             'estopped': self.estopped, 'scan': self.scan,
+            # the box is left, top, right, bottom as fractions of the front camera's picture
+            'detect': det is not None,
+            'person': [round(who[k], 3) for k in ('left', 'top', 'right', 'bottom')] if who else None,
             'limits': LIMITS,
         }
 
@@ -311,6 +331,9 @@ class Robot:
                 self.bot.estop()
                 self.bot.sit()
         finally:
+            if self.det:
+                self.det.stop()
+                self.det.join(2)                # it switches the tracker's detection off on the way out
             if self.talker:
                 self.talker.close()
             self.bot.close()
@@ -401,6 +424,8 @@ class Server:
         elif k in ('camera', 'voa'):
             r.submit('%s %s' % (k, 'on' if c.get('on') else 'off'),
                      r.service, k, bool(c.get('on')))
+        elif k == 'person':
+            r.detect(bool(c.get('on')))
         elif k == 'watch' and c.get('cam') == 'realsense':
             (self.rs_pages.add if c.get('on') else self.rs_pages.discard)(ws)
             self.rs_update()

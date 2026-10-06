@@ -91,7 +91,8 @@ ACTIONS = {
 TRK_DETECT = 0x21013302     # {"enabled":0|1}  person detection
 # TRK_FOLLOW = 0x21013303     # {"targetID":n,"enabled":0|1}  built-in follow
 TRK_TARGETS = 0x21013304    # <- {"targets":[{"id","following","bbox"}]} ~27/s
-# TRK_QUERY = 0x21013305      # {} -> 0x21013306 {"modes":{...}}
+TRK_QUERY = 0x21013305      # {} -> TRK_MODES
+TRK_MODES = 0x21013306      # <- {"modes":{"streaming","tracking","following"}}
 
 
 def send(code, value=0):

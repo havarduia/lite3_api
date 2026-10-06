@@ -602,7 +602,10 @@ a 12-byte header `<code, json_length, 1>` then JSON, on port 43901.
   ~27 target lists/s: `{"targets":[{"id", "bbox":[x1,y1,x2,y2]}]}` in
   1280×720 pixels. It locks onto the **largest box's track id** (usually the
   nearest person) and keeps following that id, re-locking only if it vanishes
-  for over a second. Detections older than 0.7 s are ignored.
+  for over a second. Detections older than 0.7 s are ignored. With nobody in
+  view the tracker sends nothing at all (measured 2026-10-06), so the detector
+  also sends a state query (`0x21013305`) and takes its answer as proof the
+  tracker is there; only no answer of either kind in 5 s is an error.
 - We **don't use the built-in follow**: it drives at up to 1.0 m/s with no
   depth check. Driving goes through `bot.steer()` instead.
 - **The controller** (`_controller`), every 50 ms:
@@ -757,6 +760,10 @@ CDN: even its typeface, B612, is embedded) with:
   "dead-man" switch: released, tab closed, Wi-Fi lost → stop). Forward stops
   at camera clearance ≤ 0.6 m, backward at rear sonar < 0.5 m. Driving is
   refused while Nav2 runs;
+- **person detection** on/off (Systems): the built-in tracker of section 8,
+  looking only. The row says whether someone is in view and on which side,
+  and the box is drawn on the front camera view, which is the camera the
+  tracker looks through. Nothing here walks him to anyone;
 - say / ask / look with a persona picker, all three in that persona's voice;
 - an always-visible **E-STOP** (also the space bar) that bypasses the command
   queue and calls `Lite3.estop()` directly;

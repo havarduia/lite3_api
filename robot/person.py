@@ -16,7 +16,8 @@ import time
 
 from .depth import sampled
 from .nav import clamp
-from .protocol import TRACKER_ADDR, TRK_DETECT, TRK_TARGETS, Lite3Error, tracker_packet
+from .protocol import (TRACKER_ADDR, TRK_DETECT, TRK_MODES, TRK_QUERY, TRK_TARGETS,
+                       Lite3Error, tracker_packet)
 
 WIDTH, HEIGHT = 1280.0, 720.0       # bbox pixel space
 FRESH = 0.7                 # s: a detection older than this is not trusted
@@ -35,7 +36,7 @@ class PersonDetector(threading.Thread):
 
     def __init__(self):
         super().__init__(daemon=True)
-        self.latest = None      # dict(t, x, top, bottom, id) - x, top, bottom in 0..1
+        self.latest = None      # dict(t, x, left, right, top, bottom, id), all in 0..1
         self.ready = threading.Event()
         self.error = None
         self._halt = threading.Event()
@@ -47,6 +48,9 @@ class PersonDetector(threading.Thread):
     def run(self):
         try:
             self._sock.sendto(tracker_packet(TRK_DETECT, enabled=1), TRACKER_ADDR)
+            # With nobody in view he sends no targets at all: the answer to
+            # this is what shows the tracker is there.
+            self._sock.sendto(tracker_packet(TRK_QUERY), TRACKER_ADDR)
             deadline = time.time() + 5
             while not self._halt.is_set():
                 r, _, _ = select.select([self._sock], [], [], 0.5)
@@ -56,8 +60,10 @@ class PersonDetector(threading.Thread):
                                            % TRACKER_ADDR)
                     continue
                 d, _ = self._sock.recvfrom(8192)
-                if len(d) > 12 and struct.unpack('<i', d[:4])[0] == TRK_TARGETS:
+                code = struct.unpack('<i', d[:4])[0] if len(d) > 12 else None
+                if code == TRK_TARGETS:
                     self._update(json.loads(d[12:]).get('targets', []))
+                if code in (TRK_TARGETS, TRK_MODES):
                     self.ready.set()
         except Exception as e:
             self.error = e
@@ -70,7 +76,8 @@ class PersonDetector(threading.Thread):
         people = []
         for tg in targets:
             x1, y1, x2, y2 = tg['bbox']
-            people.append(dict(t=now, x=(x1 + x2) / 2 / WIDTH, top=y1 / HEIGHT,
+            people.append(dict(t=now, x=(x1 + x2) / 2 / WIDTH, left=x1 / WIDTH,
+                               right=x2 / WIDTH, top=y1 / HEIGHT,
                                bottom=y2 / HEIGHT, area=(x2 - x1) * (y2 - y1),
                                id=tg.get('id')))
         pick = next((p for p in people if p['id'] == self._target), None)
