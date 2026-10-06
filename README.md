@@ -391,7 +391,9 @@ invisible to the turn guard.
 
 **`steer(control)`**: the closed-loop version. `control()` is called every
 cycle and returns `(vx, wz)` to keep going or a string to stop. Same guards,
-same clamping to `MAX_SPEED = 0.6 m/s` and `MAX_YAW_RATE = 0.8 rad/s`, same
+same clamping to `MAX_SPEED = 0.6 m/s` and `MAX_YAW_RATE = 1.6 rad/s` (a
+commanded rate: he delivers 0.7 of it, section 12; it was 0.8 until that was
+measured), same
 guaranteed halt. Person following, teleop and the web joystick are all
 built on `steer()`.
 
@@ -609,22 +611,24 @@ a 12-byte header `<code, json_length, 1>` then JSON, on port 43901.
 - We **don't use the built-in follow**: it drives at up to 1.0 m/s with no
   depth check. Driving goes through `bot.steer()` instead.
 - **The controller** (`_controller`), every 50 ms:
-  - turn rate = `−4.0 × (x − 0.5)`, clamped to 0.8 rad/s (a proportional
-    controller keeping the person centred in the image). It was 2.4 and 0.6
-    until 2026-10-06, which was far too slow to keep up with someone walking
-    past;
+  - turn rate = `−5.0 × (x − 0.5)`, clamped to 1.6 rad/s commanded, which
+    is about 1.1 rad/s (64°/s) delivered (a proportional controller keeping
+    the person centred in the image). It was 2.4 and 0.6 until 2026-10-06:
+    0.6 commanded is 24°/s, far too slow to keep up with someone walking past;
   - but don't turn toward a side with something inside `TURN_SWEEP`;
-  - walk forward only when the person is roughly centred (`|x − 0.5| < 0.12`);
+  - walk forward while the person is within the middle half of the picture
+    (`|x − 0.5| < 0.25`), turning as he goes. It was 0.12, which had him stop
+    to re-aim at every sidestep; the job is keeping up, not pointing;
   - slow down linearly over the last 0.8 m before `stop_distance` (clearance
     is only sampled at 4 Hz, so full speed would overshoot), min 0.12 m/s;
-  - no turning at all for an offset under 0.05: a small velocity is still a
+  - no turning at all for an offset under 0.10: a small velocity is still a
     velocity, and any velocity keeps him stepping;
   - standing in front of the person in `follow()`, he stays put until they
-    are 0.25 m beyond the stop distance or 0.12 off-centre, and once he turns
-    he turns until they are within 0.05 again. Without those margins he
+    are 0.5 m beyond the stop distance or 0.25 off-centre, and once he turns
+    he turns until they are within 0.10 again. Without those margins he
     shuffled on the spot, chasing depth and detection noise (2026-10-06);
   - if the person is lost: when they were last seen off-centre they walked
-    out of the picture on that side, so turn that way at 0.6 rad/s (half a
+    out of the picture on that side, so turn that way at 1.0 rad/s commanded (half a
     turn in the 5 s below); lost near the middle, stand and wait;
   - stop if the person is lost for 5 s, or the depth stream is lost.
 - `approach()` ends at the stop distance; `follow()` holds position there,
@@ -909,6 +913,7 @@ reason beside each constant.
 |---|---|---|
 | Leg odometry under-count | ×1.15 (1.712 m by odometry = 1.960 m by tape) | Jetson2Motion patch |
 | Turn coast after stop | 0.17 s (3.5–4.5° overshoot at 0.4 rad/s) | `TURN_COAST_S` |
+| Turn rate delivered | 0.7 × commanded, the same by odometry and gyro: 0.4→0.28, 0.8→0.56, 1.2→0.84, 1.6→1.12 rad/s. Starts ~0.25 s after the command, coasts 2°, 5°, 8°, 11° after the stop, body tilt under 2° throughout (2026-10-06, turning in place for 2 s each way) | `MAX_YAW_RATE`, `person.MAX_TURN` |
 | Stand-up odometry jump | ~1.3 m in one step | `nav_start()` settle check |
 | Toggle reaction time | ~25 ms; arming transition ~2 s | `ARM_GRACE` |
 | Camera pitch | 20° nose down | `depth.CAM_PITCH` |

@@ -22,12 +22,13 @@ from .protocol import (TRACKER_ADDR, TRK_DETECT, TRK_MODES, TRK_QUERY, TRK_TARGE
 WIDTH, HEIGHT = 1280.0, 720.0       # bbox pixel space
 FRESH = 0.7                 # s: a detection older than this is not trusted
 GIVE_UP = 5.0               # s without the person before approach() stops
-CENTRED = 0.12              # |x - 0.5| under which he may walk forward
-K_TURN = 4.0                # rad/s per unit of x offset
-MAX_TURN = 0.8              # rad/s, lite3's own ceiling
-SEARCH_TURN = 0.6           # rad/s toward the side a person left the picture on: half a turn in GIVE_UP
-AIM = 0.05                  # |x - 0.5| he calls facing them: no turning for less
-RESUME = 0.25               # m past the stop distance before he walks again, once stopped there
+CENTRED = 0.25              # |x - 0.5| under which he may walk forward: keeping up, not pointing
+# Turn rates are what is commanded; he delivers about 0.7 of it.
+K_TURN = 5.0                # rad/s per unit of x offset
+MAX_TURN = 1.6              # rad/s, the fastest tried (lite3.MAX_YAW_RATE)
+SEARCH_TURN = 1.0           # rad/s toward the side a person left the picture on: half a turn in GIVE_UP
+AIM = 0.10                  # |x - 0.5| he calls facing them: no turning for less
+RESUME = 0.5                # m past the stop distance before he walks again, once stopped there
 SLOW_ZONE = 0.8             # m before the stop distance over which he slows down
 MIN_SPEED = 0.12            # m/s at the end of that ramp
 

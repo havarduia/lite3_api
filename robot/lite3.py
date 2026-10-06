@@ -62,7 +62,7 @@ BATTERY_WARN = 30
 
 # --- limits ----------------------------------------------------------------
 MAX_SPEED = 0.6          # m/s
-MAX_YAW_RATE = 0.8       # rad/s
+MAX_YAW_RATE = 1.6       # rad/s COMMANDED: he turns at about 0.7 of what is asked
 HARD_TIMEOUT = 30.0      # s, ceiling on any single motion call
 
 # Nearest thing on the side a turn in place allows: the body corner sweeps ~0.36 m.
