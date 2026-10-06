@@ -26,7 +26,8 @@ os.environ.setdefault('RMW_IMPLEMENTATION', 'rmw_cyclonedds_cpp')
 import rclpy                                           # noqa: E402
 from geometry_msgs.msg import Twist                    # noqa: E402
 from nav_msgs.msg import OccupancyGrid, Odometry       # noqa: E402
-from rclpy.executors import SingleThreadedExecutor     # noqa: E402
+from rclpy.executors import (ShutdownException,        # noqa: E402
+                             SingleThreadedExecutor, TimeoutException)
 from rclpy.node import Node                            # noqa: E402
 from rclpy.qos import (DurabilityPolicy, QoSProfile,   # noqa: E402
                        ReliabilityPolicy)
@@ -40,6 +41,13 @@ from .protocol import ACTIONS, Lite3Error              # noqa: E402,F401
 
 MAX_TILT_DEG = 14.0      # STICK_PITCH full scale, see protocol.py
 HEARTBEAT_HZ = 2.0
+# The robot's topics come 160 times a second each. Taking every message cost
+# most of a core, so each queue keeps only the newest and is read this often.
+SPIN_HZ = 25.0           # pose, tilt and state are at most 40 ms old; the motion loop runs at 20 Hz
+SPIN_BURST = 12          # at most this many callbacks per read: one per subscription and a few to spare
+# The point cloud is megabytes a frame and unpacking it is what costs: 30 a
+# second took half a core. The depth checks look 4 times a second.
+CLOUD_HZ = 10.0
 
 # --- /robot_state_debug ---
 # error and charging come from our Jetson2Motion patch; an older build omits them.
@@ -79,6 +87,18 @@ TILT_LIMIT_DEG = 30.0
 HANDHELD_DEADBAND = 0.1
 
 
+def take_ready(executor, most=SPIN_BURST):
+    """Run the callbacks that are ready now, at most `most`, and return. Not
+    spin_once(timeout_sec=0) in a loop: each of those that finds nothing
+    still pays for a whole wait, and the waits are what cost."""
+    for _ in range(most):
+        try:
+            handler, _, _ = executor.wait_for_ready_callbacks(timeout_sec=0)
+        except (TimeoutException, ShutdownException):
+            return
+        handler()
+
+
 def _set_sigint(handler):
     """Install a SIGINT handler and return the one it replaced - or None off
     the main thread, where signals cannot be set."""
@@ -93,8 +113,6 @@ class _Node(Node):
         super().__init__('lite3_api')
         best = QoSProfile(depth=1)
         best.reliability = ReliabilityPolicy.BEST_EFFORT
-        cloud_qos = QoSProfile(depth=2)
-        cloud_qos.reliability = ReliabilityPolicy.BEST_EFFORT
         latched = QoSProfile(depth=1)
         latched.reliability = ReliabilityPolicy.RELIABLE
         latched.durability = DurabilityPolicy.TRANSIENT_LOCAL
@@ -108,19 +126,21 @@ class _Node(Node):
         self.tilt = None            # (roll, pitch) in degrees
         self.stick_time = 0.0       # last time a handheld stick was pushed
         self.create_subscription(Int32MultiArray, '/robot_state_debug',
-                                 self._state_cb, 10)
-        self.create_subscription(Odometry, 'leg_odom2', self._odom_cb, 10)
-        self.create_subscription(PointCloud2, '/camera/depth/color/points',
-                                 lambda m: setattr(self, 'cloud', m), cloud_qos)
+                                 self._state_cb, 1)
+        self.create_subscription(Odometry, 'leg_odom2', self._odom_cb, 1)
+        # On a node of its own so it can be read at its own, slower, rate.
+        self.cloud_node = Node('lite3_api_cloud')
+        self.cloud_node.create_subscription(PointCloud2, '/camera/depth/color/points',
+                                            lambda m: setattr(self, 'cloud', m), best)
         self.create_subscription(OccupancyGrid, '/global_costmap/costmap',
                                  lambda m: setattr(self, 'grid', m), latched)
         # The rear one bottoms out at 0.28 m, which lying down also means "no echo":
         # a reading, not a guard.
         self.create_subscription(Float64, '/us_publisher/ultrasound_distance',
-                                 lambda m: setattr(self, 'us_rear', m.data), 10)
+                                 lambda m: setattr(self, 'us_rear', m.data), 1)
         self.create_subscription(Float64, '/us_publisher/ultrasound_front',
-                                 lambda m: setattr(self, 'us_front', m.data), 10)
-        self.create_subscription(Imu, '/imu/data', self._imu_cb, 10)
+                                 lambda m: setattr(self, 'us_front', m.data), 1)
+        self.create_subscription(Imu, '/imu/data', self._imu_cb, 1)
         self.create_subscription(Twist, '/handle_state', self._handle_cb, best)
 
     def _state_cb(self, m):
@@ -153,6 +173,8 @@ class Lite3(Nav, Depth):
         self._node = _Node()
         self._exec = SingleThreadedExecutor()
         self._exec.add_node(self._node)
+        self._cloud_exec = SingleThreadedExecutor()
+        self._cloud_exec.add_node(self._node.cloud_node)
         self._stop_spin = threading.Event()
         self._thread = threading.Thread(target=self._spin, daemon=True)
         self._thread.start()
@@ -207,8 +229,14 @@ class Lite3(Nav, Depth):
 
     # --- plumbing ----------------------------------------------------------
     def _spin(self):
+        cloud_due = 0.0
         while not self._stop_spin.is_set():
-            self._exec.spin_once(timeout_sec=0.05)
+            tick = time.time()
+            take_ready(self._exec)
+            if tick >= cloud_due:
+                cloud_due = tick + 1.0 / CLOUD_HZ
+                take_ready(self._cloud_exec, 1)
+            self._stop_spin.wait(max(0.0, 1.0 / SPIN_HZ - (time.time() - tick)))
 
     @staticmethod
     def _wait(pred, timeout, period=0.05):
@@ -245,6 +273,8 @@ class Lite3(Nav, Depth):
         try:
             self._exec.shutdown(timeout_sec=2.0)
             self._exec.remove_node(self._node)
+            self._cloud_exec.shutdown(timeout_sec=2.0)
+            self._node.cloud_node.destroy_node()
             self._node.destroy_node()
         except Exception:
             pass

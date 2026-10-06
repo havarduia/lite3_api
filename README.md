@@ -647,7 +647,10 @@ a 12-byte header `<code, json_length, 1>` then JSON, on port 43901.
   person is: bearing = `−(x − 0.5) × CAM_FOV` from the tracker's box, range =
   the nearest depth return within 7.5° of that bearing. It keeps a Nav2 goal
   (`goal_send()`, section 7.4) 0.6 m short of them on that line, replaced
-  when they have moved 0.3 m or every 2 s. Nav2 plans round what is in its
+  when they have moved 0.5 m (at most once a second) or every 2 s. Where they
+  are is smoothed over a few fixes: single fixes jumped by 0.5 m and more,
+  and each new goal makes Nav2 plan again, which was most of his hesitation
+  (five goals in 1.4 s in one trace, 2026-10-06). Nav2 plans round what is in its
   costmap. Things to know:
   - beside him (outside the depth camera's view) they get no goal: he turns
     to face them first, as `follow()` does. In view but with nothing in the
@@ -655,8 +658,12 @@ a 12-byte header `<code, json_length, 1>` then JSON, on port 43901.
     is then 2 m toward them;
   - a goal under way survives a missed depth reading. The first version
     cancelled it on one, and stood (2026-10-06);
-  - within 0.9 m (stop distance + Nav2's 0.25 m goal tolerance) he stands,
-    with the same margins as `follow()` before moving again;
+  - within 0.9 m (stop distance + Nav2's 0.25 m goal tolerance) he stands
+    until they are 1.1 m away, and does not turn to face them: turning at
+    every arrival was the fidgeting again;
+  - the only turning of his own is toward someone beside him, at up to
+    0.8 rad/s commanded and only until the depth camera can see them. At the
+    1.6 that `follow()` uses he overshot and lost them;
   - he never publishes velocity while Nav2 holds a goal: two publishers on
     `/cmd_vel` fight;
   - a goal cell that is LETHAL or off the map is pulled back toward him in
@@ -911,8 +918,8 @@ diffs against the vendor originals.
 
 | Patch | What it changes | Why |
 |---|---|---|
-| `transfer-jetson2motion.patch` | the UDP↔ROS bridge | publishes the **front** sonar (stock published only the rear); adds **battery**, error, charging to the state array (a flat battery used to be invisible: the robot just silently refused to stand); scales leg odometry x/y by **1.15**; fixes a race where every velocity reached the robot **twice** (raw and obstacle-corrected), so the obstacle avoider could never veto anything |
-| `voa-lite3.patch` | vendor obstacle avoider | the idle handheld publishes zeros at ~160 Hz, which overwrote every ROS velocity; now ignored. A dead sender's last command times out after 500 ms. The config file named a node that doesn't exist, so **every parameter was silently ignored**: fixed |
+| `transfer-jetson2motion.patch` | the UDP↔ROS bridge | **caps what it republishes**: odometry, sonars, state and handheld at 50 Hz, joint states at 10 Hz, instead of every one of the ~160 packets a second (parameters `state_hz`, `handle_hz`, `joint_hz`; 0 = every packet; the IMU stays at 160 Hz because VOA pairs it with each point cloud). Each subscriber pays per message and together they had the Jetson at 3% idle (section 12); publishes the **front** sonar (stock published only the rear); adds **battery**, error, charging to the state array (a flat battery used to be invisible: the robot just silently refused to stand); scales leg odometry x/y by **1.15**; fixes a race where every velocity reached the robot **twice** (raw and obstacle-corrected), so the obstacle avoider could never veto anything |
+| `voa-lite3.patch` | vendor obstacle avoider | odometry averaging window 10 → 3 samples, the same ~60 ms now that odometry comes at 50 Hz; the idle handheld publishes zeros at ~160 Hz, which overwrote every ROS velocity; now ignored. A dead sender's last command times out after 500 ms. The config file named a node that doesn't exist, so **every parameter was silently ignored**: fixed |
 | `nav2-mapless-lite3.patch` | Nav2 config | range layer for the sonars, voxel decay 2→15 s, inflation 0.30→0.45 m, footprint padding 0.10→0.05, yaw tolerance "any" |
 | `realsense-ros-4.58.3-lite3.patch` | camera driver | re-adds the vendor's two cloud changes to the newer driver: steady-clock timestamps (so TF lookups work) and a 5 cm PCL voxel filter |
 
@@ -948,6 +955,7 @@ reason beside each constant.
 |---|---|---|
 | Leg odometry under-count | ×1.15 (1.712 m by odometry = 1.960 m by tape) | Jetson2Motion patch |
 | Turn coast after stop | 0.17 s (3.5–4.5° overshoot at 0.4 rad/s) | `TURN_COAST_S` |
+| CPU of our ROS nodes | Jetson2Motion publishes odometry, IMU, state, both sonars and the handheld at 160 Hz each. Taking every message in rclpy cost `sonar_range` 68% of a core and a bare `Lite3` 35–46%. With queues of 1 read at a fixed rate: `sonar_range` 14% (20 Hz), `Lite3` 35% at 50 Hz, 25% at 25 Hz, 20% at 15 Hz. An empty `spin_once(timeout_sec=0)` costs as much as a full one, hence `take_ready()` (2026-10-06, Nav2 and the panel running, machine at 3–10% idle) | `lite3.SPIN_HZ`, `CLOUD_HZ`, `sonar_range.RATE_HZ` |
 | Turn rate delivered | 0.7 × commanded, the same by odometry and gyro: 0.4→0.28, 0.8→0.56, 1.2→0.84, 1.6→1.12 rad/s. Starts ~0.25 s after the command, coasts 2°, 5°, 8°, 11° after the stop, body tilt under 2° throughout (2026-10-06, turning in place for 2 s each way) | `MAX_YAW_RATE`, `person.MAX_TURN` |
 | Stand-up odometry jump | ~1.3 m in one step | `nav_start()` settle check |
 | Toggle reaction time | ~25 ms; arming transition ~2 s | `ARM_GRACE` |

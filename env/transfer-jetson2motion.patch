@@ -21,7 +21,27 @@
  class MotionReceiver : public rclcpp::Node{
  public:
      MotionReceiver()
-@@ -63,6 +70,10 @@
+@@ -43,6 +50,19 @@
+         get_parameter("local_port", local_port);
+         RCLCPP_INFO(get_logger(),"local_port:  %d ",local_port);
+ 
++        /// Lite3: jy_exe sends about 160 packets a second of each kind and
++        /// every one was republished. Each subscriber pays per message, and
++        /// between them they ran the Jetson out of CPU (2026-10-06). These
++        /// cap the rate per packet kind; 0 republishes every packet again.
++        /// The IMU packet is left alone: VOA matches it to each point cloud.
++        declare_parameter("state_hz", 50.0);    ///< odometry, both sonars, robot state
++        declare_parameter("handle_hz", 50.0);   ///< handheld sticks
++        declare_parameter("joint_hz", 10.0);    ///< joint states: nothing reads them
++        get_parameter("state_hz", state_hz_);
++        get_parameter("handle_hz", handle_hz_);
++        get_parameter("joint_hz", joint_hz_);
++        RCLCPP_INFO(get_logger(),"state_hz: %.0f  handle_hz: %.0f  joint_hz: %.0f", state_hz_, handle_hz_, joint_hz_);
++
+         socket_fd_ = socket(AF_INET, SOCK_DGRAM, 0);
+         if(socket_fd_ < 0){
+             perror("socket");
+@@ -63,6 +83,10 @@
          // imu_pub_100_ = create_publisher<sensor_msgs::msg::Imu>("/imu/data", 10);
          imu_pub_200_ = create_publisher<sensor_msgs::msg::Imu>("/imu/data", 10);        
          ultrasound_pub_ = create_publisher<std_msgs::msg::Float64>("/us_publisher/ultrasound_distance", 10);
@@ -32,7 +52,35 @@
          robot_state_pub_ = create_publisher<std_msgs::msg::Int32MultiArray>("/robot_state_debug", 10);
  
          tf_broadcaster_ = std::make_unique<tf2_ros::TransformBroadcaster>(*this);
-@@ -139,16 +150,16 @@
+@@ -101,6 +125,18 @@
+         }
+     }
+ 
++    /// Lite3: is a topic capped at hz due again? Counts a packet that is up
++    /// to half a packet interval early as due, so 50 gives every third
++    /// packet (53 Hz), not every fourth (40 Hz).
++    bool Due(std::chrono::steady_clock::time_point &last, double hz){
++        auto now = std::chrono::steady_clock::now();
++        if(hz > 0 && std::chrono::duration<double>(now - last).count() < 1.0 / hz - 0.003){
++            return false;
++        }
++        last = now;
++        return true;
++    }
++
+     void ParseFrame(){
+         switch(recv_num_)
+         {
+@@ -130,7 +166,7 @@
+         QNX2ROSProtocol::RobotStateReceived *dr = (QNX2ROSProtocol::RobotStateReceived *)(receive_buffer_);
+         QNX2ROSProtocol::RobotState *robot_state = &dr->data;
+ 
+-        if (dr->code == 2305) 
++        if (dr->code == 2305 && Due(last_state_, state_hz_))
+         {
+             tf2::Quaternion q;
+ 
+@@ -139,16 +175,16 @@
              leg_odom_data.header.stamp = rclcpp::Clock(RCL_STEADY_TIME).now();
              q.setRPY(0, 0, robot_state->rpy[2] / 180 * PI);
              leg_odom_data.pose.pose.orientation = tf2::toMsg(q);
@@ -53,7 +101,7 @@
              leg_odom_data2.twist.twist.angular.z = robot_state->rpy_vel[2];
              leg_odom_pub2_->publish(leg_odom_data2);
              
-@@ -182,6 +193,9 @@
+@@ -182,6 +218,9 @@
              std_msgs::msg::Float64 ultrasound_distance;
              ultrasound_distance.data = robot_state->ultrasound[1];
              ultrasound_pub_->publish(ultrasound_distance);
@@ -63,7 +111,7 @@
  
              std_msgs::msg::Int32MultiArray robot_state_debug;
              robot_state_debug.data = {
-@@ -191,7 +205,17 @@
+@@ -191,7 +230,17 @@
                  robot_state->robot_motion_state,
                  robot_state->task_state,
                  robot_state->is_robot_need_move ? 1 : 0,
@@ -82,7 +130,34 @@
              };
              robot_state_pub_->publish(robot_state_debug);
  
-@@ -308,6 +332,7 @@
+@@ -210,7 +259,7 @@
+     void ParseJointStateFrame(){
+         QNX2ROSProtocol::JointStateReceived *dr = (QNX2ROSProtocol::JointStateReceived *)(receive_buffer_);
+         QNX2ROSProtocol::JointState *joint_state = &dr->data;
+-        if (dr->code == 2306)
++        if (dr->code == 2306 && Due(last_joint_, joint_hz_))
+         {
+             sensor_msgs::msg::JointState joint_state_data;
+             joint_state_data.header.stamp = rclcpp::Clock(RCL_STEADY_TIME).now();
+@@ -251,7 +300,7 @@
+     void ParseHandleStateFrame(){
+         QNX2ROSProtocol::HandleStateReceived *dr = (QNX2ROSProtocol::HandleStateReceived *)(receive_buffer_);
+         QNX2ROSProtocol::HandleState *handle_state = &dr->data;
+-        if (dr->code == 2309) 
++        if (dr->code == 2309 && Due(last_handle_, handle_hz_))
+         {
+             geometry_msgs::msg::Twist handle_state_msg;
+             handle_state_msg.linear.x = handle_state->left_axis_forward;
+@@ -300,6 +349,8 @@
+     uint8_t receive_buffer_[512];
+     int times_=0;
+     std::thread recv_thread_;
++    double state_hz_ = 50.0, handle_hz_ = 50.0, joint_hz_ = 10.0;
++    std::chrono::steady_clock::time_point last_state_{}, last_handle_{}, last_joint_{};
+ 
+     rclcpp::Publisher<geometry_msgs::msg::PoseWithCovarianceStamped>::SharedPtr leg_odom_pub_;
+     rclcpp::Publisher<nav_msgs::msg::Odometry>::SharedPtr leg_odom_pub2_;
+@@ -308,6 +359,7 @@
      rclcpp::Publisher<sensor_msgs::msg::Imu>::SharedPtr imu_pub_200_;    
      rclcpp::Publisher<geometry_msgs::msg::Twist>::SharedPtr handle_pub_;
      rclcpp::Publisher<std_msgs::msg::Float64>::SharedPtr ultrasound_pub_;
@@ -90,7 +165,7 @@
      rclcpp::Publisher<std_msgs::msg::Int32MultiArray>::SharedPtr robot_state_pub_;
      std::unique_ptr<tf2_ros::TransformBroadcaster> tf_broadcaster_;
  };
-@@ -357,7 +382,7 @@
+@@ -357,7 +409,7 @@
              std::bind(&MotionSender::CmdVelCallback, this, std::placeholders::_1));
          cmd_vel_corrected_sub_ = create_subscription<geometry_msgs::msg::Twist>(
              "cmd_vel_corrected", best_effort_qos,
@@ -99,7 +174,7 @@
          simplecmd_sub = create_subscription<transfer_interfaces::msg::MotionSimpleCMD>(
              "simple_cmd", 10, 
              std::bind(&MotionSender::SimpleCMDCallback, this, std::placeholders::_1));
-@@ -366,7 +391,27 @@
+@@ -366,7 +418,27 @@
              std::bind(&MotionSender::ComplexCMDCallback, this, std::placeholders::_1));
      };
  
@@ -127,7 +202,7 @@
          RCLCPP_INFO(get_logger(),"recevied cmd_vel #############");
          complex_cmd_.cmd_code = 320;
          complex_cmd_.size = 8;
-@@ -432,6 +477,7 @@
+@@ -432,6 +504,7 @@
      struct sockaddr_in remote_addr_;
      rclcpp::Subscription<geometry_msgs::msg::Twist>::SharedPtr cmd_vel_sub_;
      rclcpp::Subscription<geometry_msgs::msg::Twist>::SharedPtr cmd_vel_corrected_sub_;

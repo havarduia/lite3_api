@@ -58,3 +58,12 @@
    ros__parameters:
      timeout_s_pc: 3.000
      pass_x_min: 0.0
+@@ -19,7 +21,7 @@
+     erode_kernel_size: 3
+ 
+     timeout_s_sc: 3.000
+-    kMaxOdomBufferLength: 10
++    kMaxOdomBufferLength: 3    # Lite3: was 10 at 160 Hz odometry; 3 at 50 Hz keeps the same ~60 ms window
+     kMaxPredictTimes: 5
+     kPredictDtS: 1.0
+     kSafetyDtS: 0.3

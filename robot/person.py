@@ -35,8 +35,12 @@ MIN_SPEED = 0.12            # m/s at the end of that ramp
 # follow_nav(): where the person is, to give Nav2 a goal beside them
 CAM_FOV = math.radians(130)  # the front camera's picture, edge to edge: its rated angle, not measured here
 PERSON_HALF_DEG = 7.5       # the depth bins this far either side of their bearing are them
-REGOAL_M = 0.3              # a new goal once they have moved this far from the last one ...
+REGOAL_M = 0.5              # a new goal once they have moved this far from the last one ...
 REGOAL_S = 2.0              # ... or after this long, in case Nav2 gave the last one up
+REGOAL_MIN_S = 1.0          # ... but never sooner than this: every new goal restarts Nav2's planning
+SMOOTH = 0.4                # share of each new fix in where he takes them to be: single fixes jump 0.5 m
+NAV_K_TURN = 2.5            # rad/s per unit of x offset, turning to get them into the depth view
+NAV_MAX_TURN = 0.8          # rad/s commanded for that: faster overshoots and loses them
 DEPTH_VIEW_DEG = 40         # inside this the depth camera would show them, if they were in range
 OPEN_HALF_DEG = 20          # nothing this far either side of their bearing: they are beyond it
 FAR_GOAL = 2.0              # m toward a person too far for the depth camera to range
@@ -222,8 +226,9 @@ def follow_nav(bot, det, seconds, stop_distance=0.6, speed=None, abort=None):
     # the goal has to be gone before that.
     seconds = min(seconds, HARD_TIMEOUT - 1.0)
     view = sampled(bot.scan)
-    state = {'lost_since': None, 'off': 0.0, 'arrived': False, 'aimed': False,
-             'goal': None, 'label': None, 'since': time.time(), 'sent': 0, 'began': None}
+    state = {'lost_since': None, 'off': 0.0, 'arrived': False,
+             'goal': None, 'label': None, 'since': time.time(), 'sent': 0, 'began': None,
+             'them': None}
     spent = {}
     trace = open(FOLLOW_LOG, 'w')
 
@@ -286,40 +291,44 @@ def follow_nav(bot, det, seconds, stop_distance=0.6, speed=None, abort=None):
             bearing = -off * CAM_FOV                  # +ve = left, as the depth bins
             deg = math.degrees(bearing)
             r = person_range(bins, deg)
-            turn = clamp(-K_TURN * off, MAX_TURN) if abs(off) >= AIM else 0.0
             if r is not None and r <= stop_distance + (RESUME if state['arrived'] else NAV_NEAR):
+                # With them he stands and does not re-aim: he need not face
+                # them, only have them where the depth camera can see them.
                 note('with them', '%.2f m' % r)
                 if state['goal']:
-                    drop()                            # stand, as follow() does
-                state['arrived'] = True
-                state['aimed'] = abs(off) < (CENTRED if state['aimed'] else AIM)
-                wz = 0.0 if state['aimed'] else turn
+                    drop()
+                state['arrived'], state['them'] = True, None
             else:
-                state['arrived'] = state['aimed'] = False
-                if r is not None:
-                    d = r - stop_distance
-                elif abs(deg) <= DEPTH_VIEW_DEG and person_range(bins, deg, OPEN_HALF_DEG) is None:
-                    d = FAR_GOAL                      # in view, nothing there: beyond the depth range
-                else:
-                    d = None
+                state['arrived'] = False
+                if r is None and abs(deg) <= DEPTH_VIEW_DEG and person_range(bins, deg, OPEN_HALF_DEG) is None:
+                    r = FAR_GOAL + stop_distance      # in view, nothing there: beyond the depth range
                 x, y, yaw = bot.pose
-                at = d and free_goal(x, y, yaw + bearing, d)
+                at = None
+                if r is not None:
+                    fix = (x + r * math.cos(yaw + bearing), y + r * math.sin(yaw + bearing))
+                    was = state['them']
+                    them = state['them'] = fix if was is None else (
+                        was[0] + SMOOTH * (fix[0] - was[0]), was[1] + SMOOTH * (fix[1] - was[1]))
+                    heading = math.atan2(them[1] - y, them[0] - x)
+                    at = free_goal(x, y, heading, dist((x, y), them) - stop_distance)
                 if at:
-                    note('goal', 'them %s at %+.0f deg' % ('%.2f m' % r if r else 'far', deg))
+                    note('goal', 'them %.2f m at %+.0f deg' % (r, deg))
                     g = state['goal']
-                    if g is None or dist(g, at) > REGOAL_M or now - g[2] > REGOAL_S:
-                        bot.goal_send(at[0], at[1], yaw + bearing)
+                    if g is None or now - g[2] > REGOAL_S or (
+                            dist(g, at) > REGOAL_M and now - g[2] > REGOAL_MIN_S):
+                        bot.goal_send(at[0], at[1], heading)
                         state['goal'] = (at[0], at[1], now)
                         state['sent'] += 1
                         trace.write('%.2f   sent (%.2f, %.2f), he is at (%.2f, %.2f)\n' % (now, at[0], at[1], x, y))
-                elif d:
+                elif r is not None:
                     note('goal blocked', 'no free cell on the line to them, %+.0f deg' % deg)
                 else:
-                    # One missed depth reading must not end a goal: it stays, and
-                    # only without one does he turn to get them into the depth view.
+                    # Beside him, where the depth camera cannot range them. A goal
+                    # under way stays (one missed reading must not end it); with
+                    # none he turns, gently, only until they are in its view.
                     note('no depth on them', '%+.0f deg' % deg)
                     if not state['goal']:
-                        wz = turn
+                        wz = clamp(-NAV_K_TURN * off, NAV_MAX_TURN)
         if not state['goal']:
             # Only with no goal: Nav2's controller owns cmd_vel while it has one.
             bot._drive(0.0, 0.0, _swing(wz, bot.side_clear(bins), TURN_SWEEP))

@@ -7,14 +7,18 @@ env/start_nav2_mapless.sh, in its process group. README.md section 6.2.
     python3 -m robot.sonar_range
 """
 import math
+import time
 
 import rclpy
+from rclpy.executors import SingleThreadedExecutor
 from rclpy.node import Node
 from geometry_msgs.msg import TransformStamped
 from nav_msgs.msg import Odometry
 from sensor_msgs.msg import Range
 from std_msgs.msg import Float64
 from tf2_ros import StaticTransformBroadcaster
+
+from .lite3 import take_ready
 
 # name: (input topic, x in base_link, yaw, max range). A reading at or past
 # max goes out AS max, which the range layer reads as "nothing there". The
@@ -42,12 +46,14 @@ class SonarRange(Node):
         self._last = {}
         self._pubs = {}
         self._ready = False
-        self.create_subscription(Odometry, 'leg_odom2', self._odom, 10)
+        # depth 1, read RATE_HZ times a second in main(): these come at 160 Hz
+        # and taking every message cost most of a core
+        self.create_subscription(Odometry, 'leg_odom2', self._odom, 1)
         tfs = []
         for name, (topic, x, yaw, _) in SONARS.items():
             self._pubs[name] = self.create_publisher(Range, '/sonar/' + name, 10)
             self.create_subscription(
-                Float64, topic, lambda m, n=name: self._last.__setitem__(n, m.data), 10)
+                Float64, topic, lambda m, n=name: self._last.__setitem__(n, m.data), 1)
             t = TransformStamped()
             t.header.frame_id = 'base_link'
             t.child_frame_id = 'sonar_' + name
@@ -57,7 +63,6 @@ class SonarRange(Node):
             tfs.append(t)
         self._static = StaticTransformBroadcaster(self)
         self._static.sendTransform(tfs)
-        self.create_timer(1.0 / RATE_HZ, self._publish)
 
     def _odom(self, msg):
         # odom -> base_link is stamped with this (steady clock, via
@@ -84,8 +89,14 @@ class SonarRange(Node):
 
 def main():
     rclpy.init()
+    node = SonarRange()
+    ex = SingleThreadedExecutor()
+    ex.add_node(node)
     try:
-        rclpy.spin(SonarRange())
+        while rclpy.ok():
+            take_ready(ex, 6)               # the three subscriptions, and a few to spare
+            node._publish()
+            time.sleep(1.0 / RATE_HZ)
     except KeyboardInterrupt:
         pass
 
