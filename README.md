@@ -644,13 +644,16 @@ a 12-byte header `<code, json_length, 1>` then JSON, on port 43901.
   cycle, which is how the panel's Cancel and E-STOP reach them.
 - **`follow_nav()`** is a hybrid, for a room with furniture. It walks
   straight at the person with `follow()`'s own controller (quick: a decision
-  every 50 ms, the speed asked for) while Nav2's costmap shows the line to
+  every 50 ms, the speed asked for) while the depth camera shows the way to
   them free, and hands over to Nav2 goals while it does not. Nav2 alone was
   tried first and was slow: about 3 s to get going after each goal and
-  0.3–0.4 m/s once moving (2026-10-06). The line is judged in the costmap,
-  not the camera, because the costmap still knows a chair he has just
-  passed. It has to be blocked for 0.3 s before Nav2 takes over and free
-  for 1 s before he walks straight again. What follows is the Nav2 part:
+  0.3–0.4 m/s once moving (2026-10-06). "Free" means nothing more than 0.5 m
+  nearer than the person, either straight ahead of him or within 0.3 m of
+  the line to them. The costmap was tried for this and called a free line
+  blocked at once and kept flipping near the person: it holds their own
+  trail and their inflated outline. The way has to be blocked for 0.3 s
+  before Nav2 takes over and free for 1 s before he walks straight again.
+  What follows is the Nav2 part:
   `follow()` only ever steers straight at the person, `follow()` only ever steers straight at the person, so a
   chair on that line stops him for good. Every cycle it works out where the
   person is: bearing = `−(x − 0.5) × CAM_FOV` from the tracker's box; range

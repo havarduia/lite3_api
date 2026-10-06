@@ -47,9 +47,10 @@ FACED_DEG = 15              # ... and until they are within this
 PERSON_HEIGHT = 1.87        # m: the height of whoever he follows most. Their box's height gives a second estimate of the range
 CAM_VFOV = CAM_FOV * 9 / 16  # the picture top to bottom
 BOX_MATCH = 0.35            # a depth return within this share of the box's range is them, not furniture
-# follow_nav() walks straight at them, as follow() does, while Nav2's costmap shows that line free
-LINE_FROM = 0.4             # m: the line is checked from here out (his own cells do not count) ...
-BLOCKED_S = 0.3             # ... and has to be blocked this long before Nav2 takes over
+# follow_nav() walks straight at them, as follow() does, while the depth camera shows the way free
+LINE_HALF = 0.3             # m either side of the line to them that has to be empty
+BLOCK_MARGIN = 0.5          # m: something this much nearer than they are is in the way, not them
+BLOCKED_S = 0.3             # the way has to be blocked this long before Nav2 takes over
 CLEAR_S = 1.0               # and free this long before he walks straight again
 FOLLOW_LOG = '/tmp/follow_nav.log'   # every change of state in the last follow_nav()
 NAV_NEAR = 0.3              # m: a goal nearer than this is "there" to Nav2 (xy_goal_tolerance 0.25)
@@ -292,17 +293,14 @@ def follow_nav(bot, det, seconds, stop_distance=0.6, speed=0.3, abort=None):
             d -= 0.1
         return None
 
-    def line_free(x, y, heading, upto):
-        """Does the costmap show nothing between him and a point `upto` metres
-        out? The costmap, not the camera: it still knows the chair he has
-        just passed. Off the map counts as free: nothing is known there."""
-        d = LINE_FROM
-        while d <= upto:
-            c = bot.cost_at(x + d * math.cos(heading), y + d * math.sin(heading))
-            if c is not None and c >= LETHAL:
-                return False
-            d += 0.1
-        return True
+    def way_clear(bins, deg):
+        """Metres the depth scan shows free toward them: the nearer of what is
+        straight ahead of him (where the straight controller walks) and what
+        is on the line to them. The camera, not the costmap: the costmap
+        keeps their own trail and called a free line blocked."""
+        on_line = [r * math.cos(math.radians(b - deg)) for b, r in bins if r is not None
+                   and abs(r * math.sin(math.radians(b - deg))) <= LINE_HALF and abs(b - deg) < 90]
+        return min([bot.clearance(bins=bins)] + on_line)
 
     def step():
         now = time.time()
@@ -325,9 +323,12 @@ def follow_nav(bot, det, seconds, stop_distance=0.6, speed=0.3, abort=None):
             off = p['x'] - 0.5
             bearing = -off * CAM_FOV
             r = person_range(bins, math.degrees(bearing), box_range(p))
-            x, y, yaw = bot.pose
-            blocked = (r is not None and abs(math.degrees(bearing)) <= DEPTH_VIEW_DEG
-                       and not line_free(x, y, yaw + bearing, r - stop_distance))
+            deg = math.degrees(bearing)
+            free = way_clear(bins, deg)
+            blocked = r is not None and abs(deg) <= DEPTH_VIEW_DEG and free < r - BLOCK_MARGIN
+            if blocked != state['via_nav'] and state['changed'] is None:
+                trace.write('%.2f   way %s: %.2f m free, them %.2f m at %+.0f deg\n' % (
+                    now, 'blocked' if blocked else 'clear', free, r or -1, deg))
             if blocked == state['via_nav']:
                 state['changed'] = None
             else:
