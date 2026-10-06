@@ -8,6 +8,7 @@ with the depth-camera stop. README.md section 8.
     from robot.person import PersonDetector, approach
 """
 import json
+import math
 import select
 import socket
 import struct
@@ -15,7 +16,7 @@ import threading
 import time
 
 from .depth import sampled
-from .nav import clamp
+from .nav import LETHAL, clamp, dist
 from .protocol import (TRACKER_ADDR, TRK_DETECT, TRK_MODES, TRK_QUERY, TRK_TARGETS,
                        Lite3Error, tracker_packet)
 
@@ -31,6 +32,12 @@ AIM = 0.10                  # |x - 0.5| he calls facing them: no turning for les
 RESUME = 0.5                # m past the stop distance before he walks again, once stopped there
 SLOW_ZONE = 0.8             # m before the stop distance over which he slows down
 MIN_SPEED = 0.12            # m/s at the end of that ramp
+# follow_nav(): where the person is, to give Nav2 a goal beside them
+CAM_FOV = math.radians(130)  # the front camera's picture, edge to edge: its rated angle, not measured here
+PERSON_HALF_DEG = 7.5       # the depth bins this far either side of their bearing are them
+REGOAL_M = 0.3              # a new goal once they have moved this far from the last one ...
+REGOAL_S = 3.0              # ... or after this long, in case Nav2 gave the last one up
+NAV_NEAR = 0.3              # m: a goal nearer than this is "there" to Nav2 (xy_goal_tolerance 0.25)
 
 
 class PersonDetector(threading.Thread):
@@ -101,6 +108,12 @@ class PersonDetector(threading.Thread):
         self._halt.set()
 
 
+def _swing(wz, sides, sweep):
+    """wz, unless it would swing the body into something on that side."""
+    left, right = sides
+    return 0.0 if (wz > 0 and left < sweep) or (wz < 0 and right < sweep) else wz
+
+
 def _controller(bot, det, stop_distance, speed, hold, near=None, near_distance=1.0,
                 abort=None):
     """The per-cycle control behind approach() and follow(): turn to keep the
@@ -127,13 +140,12 @@ def _controller(bot, det, stop_distance, speed, hold, near=None, near_distance=1
         if det.error:
             return 'detector failed: %s' % det.error
         try:
-            clear, (left, right) = view()
+            clear, sides = view()
         except Lite3Error:
             return 'lost the depth stream - stopped rather than walking blind'
 
         def swing(wz):
-            """wz, unless it would swing the body into something on that side."""
-            return 0.0 if (wz > 0 and left < TURN_SWEEP) or (wz < 0 and right < TURN_SWEEP) else wz
+            return _swing(wz, sides, TURN_SWEEP)
 
         p = det.person()
         if p is None:
@@ -184,6 +196,95 @@ def follow(bot, det, seconds, stop_distance=0.6, speed=0.3, abort=None):
     """
     return bot.steer(_controller(bot, det, stop_distance, speed, True, abort=abort),
                      limit=seconds)
+
+
+def person_range(bins, bearing_deg):
+    """Metres to the nearest thing the depth scan `bins` shows at that bearing,
+    None if it shows nothing there (too far, or outside its +-45 degrees)."""
+    near = [r for b, r in bins if r is not None and abs(b - bearing_deg) <= PERSON_HALF_DEG]
+    return min(near) if near else None
+
+
+def follow_nav(bot, det, seconds, stop_distance=0.6, speed=None, abort=None):
+    """follow(), but Nav2 does the walking, so he goes round what is between
+    him and the person. Needs Nav2 running, and the person inside the depth
+    camera's view to be given a goal. speed is ignored: Nav2 sets the pace.
+    Returns a result like steer()'s. README.md section 8.
+    """
+    from .lite3 import TURN_SWEEP
+    if not bot.nav_running:
+        raise Lite3Error('nav2 is not running - call nav_start() first')
+    view = sampled(bot.scan)
+    state = {'lost_since': None, 'off': 0.0, 'arrived': False, 'aimed': False, 'goal': None}
+
+    def drop():
+        bot.goto_cancel()
+        bot._goal_handle = None             # as goto() leaves it: nothing of ours to cancel later
+        state['goal'] = None
+
+    def cycle(start):
+        why = step()
+        if why:
+            drop()                          # before _loop's halt: Nav2 must not drive against it
+        return why
+
+    def step():
+        now = time.time()
+        why = (abort and abort()) or (det.error and 'detector failed: %s' % det.error)
+        if why:
+            return why
+        try:
+            bins = view()
+        except Lite3Error:
+            return 'lost the depth stream - stopped rather than walking blind'
+        wz = 0.0
+        p = det.person()
+        if p is None:
+            state['lost_since'] = state['lost_since'] or now
+            if now - state['lost_since'] > GIVE_UP:
+                return 'lost the person for %.0f s' % GIVE_UP
+            # A goal under way stays: it leads to where they were last seen.
+            if not state['goal'] and abs(state['off']) >= CENTRED:
+                wz = -SEARCH_TURN if state['off'] > 0 else SEARCH_TURN
+        else:
+            state['lost_since'] = None
+            off = state['off'] = p['x'] - 0.5         # +ve = person to the right
+            bearing = -off * CAM_FOV                  # +ve = left, as the depth bins
+            r = person_range(bins, math.degrees(bearing))
+            turn = clamp(-K_TURN * off, MAX_TURN) if abs(off) >= AIM else 0.0
+            if r is None:                             # beside him, or too far: face them first
+                if state['goal']:
+                    drop()
+                wz = turn
+            elif r <= stop_distance + (RESUME if state['arrived'] else NAV_NEAR):
+                if state['goal']:
+                    drop()                            # with them: stand, as follow() does
+                state['arrived'] = True
+                state['aimed'] = abs(off) < (CENTRED if state['aimed'] else AIM)
+                wz = 0.0 if state['aimed'] else turn
+            else:
+                state['arrived'] = state['aimed'] = False
+                x, y, yaw = bot.pose
+                d = r - stop_distance
+                gx, gy = x + d * math.cos(yaw + bearing), y + d * math.sin(yaw + bearing)
+                g = state['goal']
+                if g is None or dist(g, (gx, gy)) > REGOAL_M or now - g[2] > REGOAL_S:
+                    c = bot.cost_at(gx, gy)
+                    if c is not None and c < LETHAL:  # else keep the last goal: NavFn would abort
+                        bot.goal_send(gx, gy, yaw + bearing)
+                        state['goal'] = (gx, gy, now)
+        if not state['goal']:
+            # Only with no goal: Nav2's controller owns cmd_vel while it has one.
+            bot._drive(0.0, 0.0, _swing(wz, bot.side_clear(bins), TURN_SWEEP))
+        time.sleep(0.05)
+
+    try:
+        r = bot._loop(cycle, seconds, False)
+    finally:
+        drop()
+        bot.halt()
+    r['moved'] = dist(r['start'], r['end'])
+    return r
 
 
 if __name__ == '__main__':

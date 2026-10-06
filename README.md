@@ -584,6 +584,10 @@ stack this process launched stays a zombie, and waiting on it cost 8 s a stop.
 5. If it succeeded and a heading was requested, corrects it with `turn()`.
 
 Returns the action status: 4 = succeeded, 6 = aborted, 5 = cancelled.
+`goal_send(gx, gy, gyaw)` is step 4 on its own: a goal at an odom point,
+returned as soon as Nav2 accepts it, replacing any goal under way. No checks.
+`person.follow_nav()` uses it to keep moving the goal.
+
 `goto_cancel()`, from another thread, ends a goal and leaves Nav2 up; `estop()`
 ends it and kills Nav2. Either way `goto()` returns 5 and he ends halted.
 
@@ -637,6 +641,27 @@ a 12-byte header `<code, json_length, 1>` then JSON, on port 43901.
   start writing its spoken line early so it can speak the moment it arrives.
   Both take `abort=fn`: a reason returned from it ends the move at the next
   cycle, which is how the panel's Cancel and E-STOP reach them.
+- **`follow_nav()`** is `follow()` with Nav2 doing the walking, for a room
+  with furniture: `follow()` only ever steers straight at the person, so a
+  chair on that line stops him for good. Every cycle it works out where the
+  person is: bearing = `−(x − 0.5) × CAM_FOV` from the tracker's box, range =
+  the nearest depth return within 7.5° of that bearing. It keeps a Nav2 goal
+  (`goal_send()`, section 7.4) 0.6 m short of them on that line, replaced
+  when they have moved 0.3 m or every 3 s. Nav2 plans round what is in its
+  costmap. Things to know:
+  - the person must be inside the depth camera's ±45° and 4 m to get a goal.
+    Beside him, he turns to face them first, as `follow()` does;
+  - within 0.9 m (stop distance + Nav2's 0.25 m goal tolerance) he stands,
+    with the same margins as `follow()` before moving again;
+  - he never publishes velocity while Nav2 holds a goal: two publishers on
+    `/cmd_vel` fight;
+  - a goal cell that is LETHAL or off the map is not sent (NavFn would abort);
+    the last goal stays;
+  - if the person is lost while a goal is under way he finishes it, which
+    brings him to where they were last seen, then gives up after 5 s;
+  - something between him and the person at the same bearing reads as the
+    person: he then comes to rest beside it until he sees them clear of it;
+  - Nav2 sets the pace, not the speed argument.
 
 ---
 
@@ -783,7 +808,8 @@ CDN: even its typeface, B612, is embedded) with:
   tracker looks through. The switch itself only looks;
 - **Walk up** and **Follow** (Navigate): `person.approach()` and
   `person.follow()` of section 8, stopping 0.6 m short. They switch detection
-  on if it is off, and walk at the Drive section's top-speed slider as it is
+  on if it is off (with Nav2 on, Follow is `follow_nav()` and goes round
+  obstacles), and walk at the Drive section's top-speed slider as it is
   when pressed (a Go does not: Nav2's speed is in its own config). One press
   of Follow lasts 30 s, the ceiling on any single
   move. Cancel and E-STOP end either within one 50 ms cycle (the `abort`

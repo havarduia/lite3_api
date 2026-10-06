@@ -200,10 +200,6 @@ class Nav:
         done with turn() after arrival; Nav2 itself only gets him to the spot.
         Refuses a LETHAL goal cell, and a goal under 0.2 m (use turn_deg()).
         """
-        from nav2_msgs.action import NavigateToPose
-        from geometry_msgs.msg import PoseStamped
-        from rclpy.action import ActionClient
-
         self._require_standing()
         self._require_battery()
         if not self.nav_running:
@@ -227,6 +223,35 @@ class Nav:
                     'and would abort with status 6. Pick a goal from '
                     'cost_ahead(), not from scan(): the costmap knows about '
                     'obstacles the camera cannot currently see.' % c)
+
+        handle = self.goal_send(gx, gy, gyaw)
+        result_fut = handle.get_result_async()
+        try:
+            # estop() from another thread drops the handle: Nav2 is being killed and
+            # the result may never come.
+            if not self._wait(lambda: result_fut.done() or self._goal_handle is None, timeout):
+                handle.cancel_goal_async()
+                self.halt()
+                raise Lite3Error('goal timed out after %.0fs; cancelled' % timeout)
+        finally:
+            self._goal_handle = None
+        status = result_fut.result().status if result_fut.done() else CANCELED
+        if status != SUCCEEDED:
+            self.halt()                     # whoever ended it, he ends stopped
+        if status == SUCCEEDED and heading_deg is not None:
+            err = wrap(gyaw - self.wait_pose()[2])
+            if abs(err) > math.radians(5):
+                self.turn(err)
+        return status
+
+    def goal_send(self, gx, gy, gyaw=0.0):
+        """Hand Nav2 a goal at an odom-frame point and return once it is
+        accepted, not when he arrives. A goal sent while another is under way
+        replaces it. goto_cancel() and estop() end it. No checks: goto() is
+        the one that refuses a bad goal."""
+        from nav2_msgs.action import NavigateToPose
+        from geometry_msgs.msg import PoseStamped
+        from rclpy.action import ActionClient
 
         if self._nav_client is None:        # one for the life of the node, not one per goal
             self._nav_client = ActionClient(self._node, NavigateToPose, 'navigate_to_pose')
@@ -252,24 +277,7 @@ class Nav:
         # Published so estop() can cancel the goal even when the SIGINT
         # handler fires somewhere else entirely.
         self._goal_handle = handle
-        result_fut = handle.get_result_async()
-        try:
-            # estop() from another thread drops the handle: Nav2 is being killed and
-            # the result may never come.
-            if not self._wait(lambda: result_fut.done() or self._goal_handle is None, timeout):
-                handle.cancel_goal_async()
-                self.halt()
-                raise Lite3Error('goal timed out after %.0fs; cancelled' % timeout)
-        finally:
-            self._goal_handle = None
-        status = result_fut.result().status if result_fut.done() else CANCELED
-        if status != SUCCEEDED:
-            self.halt()                     # whoever ended it, he ends stopped
-        if status == SUCCEEDED and heading_deg is not None:
-            err = wrap(gyaw - self.wait_pose()[2])
-            if abs(err) > math.radians(5):
-                self.turn(err)
-        return status
+        return handle
 
     def goto_cancel(self):
         """Ask Nav2 to drop the goal goto() is waiting on, from another

@@ -447,7 +447,9 @@ class Server:
             kw = {'speed': clamp(abs(float(c['speed'])), DRIVE_MAX_VX)} if c.get('speed') else {}
             if k == 'follow':
                 kw['seconds'] = FOLLOW_S
-            r.submit(k, lambda: r.to_person(getattr(person, k), **kw))
+            # With Nav2 up, a follow goes round what is in the way.
+            via_nav = k == 'follow' and r.bot.nav_running
+            r.submit(k, lambda: r.to_person(person.follow_nav if via_nav else getattr(person, k), **kw))
         elif k == 'person':
             r.detect(bool(c.get('on')))
         elif k == 'watch' and c.get('cam') == 'realsense':

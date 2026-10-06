@@ -290,7 +290,7 @@ textarea { display: block; width: 100%; min-height: 76px; margin: 12px 0; resize
       <button class="key go" data-cmd="approach" data-speed>Walk up</button>
       <button class="key" data-cmd="follow" data-speed>Follow</button>
     </div>
-    <p class="note">Walk up stops 0.6 m short of them. Follow keeps that distance for <span id="follow-s">30</span> s, then press it again. Both go at the top speed set under Drive as it is when pressed, turn person detection on, stop for anything the depth camera sees in the way, turn after someone who walks out of his view to one side, and give up when he has not seen anyone for 5 s.</p>
+    <p class="note">Walk up stops 0.6 m short of them. With Nav2 on, Follow goes round what is between you, at Nav2's pace; with it off he comes straight at you and stops for anything in the way. Follow keeps that distance for <span id="follow-s">30</span> s, then press it again. Both go at the top speed set under Drive as it is when pressed, turn person detection on, stop for anything the depth camera sees in the way, turn after someone who walks out of his view to one side, and give up when he has not seen anyone for 5 s.</p>
   </section>
 
   <section id="sys">
