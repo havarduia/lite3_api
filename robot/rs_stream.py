@@ -2,19 +2,9 @@
 
     python3 -m robot.rs_stream [topic]      # another topic, for testing
 
-Subscribes to the camera's JPEG topic (/camera/color/image_raw/compressed)
-and pipes the frames through GStreamer and the Jetson's hardware H.264
-encoder to RS_RTSP, so the HMI page can show it over WebRTC exactly like the
-front camera. A process of its own on purpose (hmi.py starts it): encoded
-inside the HMI it stuttered, 22 fps with 150-200 ms gaps against a steady
-29 fps here. Exits when the process that started it does.
-
-Why JPEG and hardware (all measured 2026-10-05, at 1280x720):
-  - raw frames do not get through ROS into Python fast enough: a subscriber
-    that does nothing received 8 of 30 a second. JPEG frames are ~20x smaller.
-    The topic needs ros-foxy-compressed-image-transport installed.
-  - software H.264 cannot keep up: libx264 ultrafast managed 23 fps on 1.5
-    cores.
+Pipes the camera's JPEG topic through GStreamer and the Jetson's hardware
+encoder to RS_RTSP. A process of its own (hmi.py starts it); exits when
+that one does. Why JPEG, hardware and a separate process: README.md 10.3.
 """
 import os
 import subprocess

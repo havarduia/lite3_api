@@ -14,12 +14,13 @@ Before any moving lesson: clear a few metres in front of him, and have a stop
 ready - either the handheld powered on, or the terminal running the heartbeat.
 """
 import math
+import os
 import sys
 import time
 
-import os, sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from robot.lite3 import Lite3, Lite3Error
+from robot.nav import LETHAL, goal_ahead, status_text
 
 
 # ---------------------------------------------------------------- lesson 1
@@ -57,8 +58,9 @@ def lesson2_state():
             time.sleep(1)
 
         # basic_state is the one that gates everything:
-        #   1 or 8 or 98 = lying/ready   6 = standing   8 = no controller
-        print('  basic_state:', bot.state.get('basic'))
+        #   6 = standing   1 = lying, armed   8 = lying, no controller holds
+        #   the interlock   98 = lying, fresh boot   anything else = in between
+        print('  basic_state:', bot.basic)
 
 
 # ---------------------------------------------------------------- lesson 3
@@ -163,19 +165,22 @@ def lesson7_navigation():
         try:
             # ALWAYS pick the goal from the costmap, never from scan().
             # The costmap remembers obstacles the camera cannot currently see.
-            profile = bot.cost_ahead(out_to=3.0)
+            # settle: it starts out empty and unseen cells read as free, so
+            # wait until two readings a second apart agree.
+            profile = bot.cost_ahead(out_to=3.0, settle=10)
             for d, c in profile:
-                mark = ' LETHAL' if c is not None and c >= 99 else ''
+                mark = ' LETHAL' if c is not None and c >= LETHAL else ''
                 print('    +%4.2f m  cost %s%s' % (d, c, mark))
 
-            free = [d for d, c in profile if c is not None and c < 50 and d >= 0.75]
-            if not free:
-                print('  no free cell beyond 0.75 m - not sending a goal')
+            # 0.25 m short of the first cell goto() would refuse.
+            goal = goal_ahead(profile)
+            if goal is None:
+                print('  under 0.75 m of free floor ahead - not sending a goal')
                 return
-            goal = min(1.75, max(free) - 0.25)
+            goal = min(1.75, goal)
 
             status = bot.goto(goal)          # 4 = SUCCEEDED, 6 = ABORTED
-            print('  goto(%.2f) -> status %s' % (goal, status))
+            print('  goto(%.2f) -> %s' % (goal, status_text(status)))
         finally:
             bot.nav_stop()                   # always tear the stack down
             bot.sit()
@@ -242,36 +247,27 @@ def lesson10_no_controller():
         # Read that twice: while this runs, the handheld is NOT your stop.
         # This terminal is. Ctrl-C stops the keepalive and the robot goes deaf
         # to every network command.
-            # NOT instant: basic_state runs 8 -> 9 -> 1 over about two seconds,
-            # and a command sent inside that window is ignored, then times out
-            # complaining about the handheld. So wait for it.
-        if not bot.wait_ready():
-            print('  interlock never came up - is transfer_ros2 running?')
-            return
-        print('  interlock now held by us, basic_state =',
-                bot.state.get('basic'))
-
-        try:
-            bot.heartbeat_start()
-            time.sleep(2)
-            bot.stand()
+        #
+        # upright() is the whole routine: heartbeat_start(), then wait_ready()
+        # - NOT instant, basic_state runs 8 -> 9 -> 1 over about two seconds
+        # and a command sent inside that window is ignored - then stand(), and
+        # sit() on the way out. The heartbeat is dropped by close(), after it.
+        with bot.upright():
+            print('  interlock held by us, basic_state =', bot.basic)
             bot.turn_deg(180)
-            
-            
-        finally:
-            bot.heartbeat_stop()
+
 
 LESSONS = [
-    (1, 'connect          ', lesson1_connect,     False),
-    (2, 'live state       ', lesson2_state,       False),
-    (3, 'perception       ', lesson3_perception,  False),
-    (4, 'guard rails      ', lesson4_guards,      False),
-    (5, 'stand and sit    ', lesson5_posture,     True),
-    (6, 'walk and turn    ', lesson6_motion,      True),
-    (7, 'nav2 goals       ', lesson7_navigation,  True),
-    (8, 'emergency stop   ', lesson8_estop,       False),
-    (9, 'a real behaviour ', lesson9_behaviour,   True),
-    (10, 'no handheld     ', lesson10_no_controller, True),
+    (1, 'connect', lesson1_connect, False),
+    (2, 'live state', lesson2_state, False),
+    (3, 'perception', lesson3_perception, False),
+    (4, 'guard rails', lesson4_guards, False),
+    (5, 'stand and sit', lesson5_posture, True),
+    (6, 'walk and turn', lesson6_motion, True),
+    (7, 'nav2 goals', lesson7_navigation, True),
+    (8, 'emergency stop', lesson8_estop, False),
+    (9, 'a real behaviour', lesson9_behaviour, True),
+    (10, 'no handheld', lesson10_no_controller, True),
 ]
 
 
@@ -284,7 +280,7 @@ def main():
         print(__doc__)
         print('lessons:')
         for n, name, fn, moves in LESSONS:
-            print('  %d  %s %s' % (n, name, '[MOVES THE ROBOT]' if moves else ''))
+            print('  %d  %-17s %s' % (n, name, '[MOVES THE ROBOT]' if moves else ''))
         return
 
     if args[0] == 'read':
@@ -297,9 +293,9 @@ def main():
 
     for n, name, fn, moves in chosen:
         if moves and not move_ok:
-            print('\n=== lesson %d: %s SKIPPED (needs --move) ===' % (n, name.strip()))
+            print('\n=== lesson %d: %s SKIPPED (needs --move) ===' % (n, name))
             continue
-        print('\n=== lesson %d: %s ===' % (n, name.strip()))
+        print('\n=== lesson %d: %s ===' % (n, name))
         print('    %s' % (fn.__doc__ or '').strip().splitlines()[0])
         try:
             fn()

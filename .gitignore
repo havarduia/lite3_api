@@ -5,8 +5,7 @@ __pycache__/
 .gemini_key
 *.key
 
-# Stray backups at the top level only - archive/ is tracked on purpose,
-# since those .bak files are the project's only pre-git history.
+# Stray backups. The pre-git ones lived in archive/ up to commit c4cfb84.
 /*.bak
 /*.orig
 robot/persona_private.py

@@ -1,21 +1,8 @@
 #!/usr/bin/env python3
 """Find a person with the robot's built-in tracker and walk up to them.
 
-The detector is the `track` service on the MOTION computer (RK3588 NPU,
-YOLOv5s + tracker, always running, the one behind the app's follow button).
-It speaks UDP on 192.168.1.120:43901: a 12-byte header <code, json_len, 1>
-then JSON. Decoded from a capture of the phone app (2026-09-18):
-
-    0x21013301  {"enabled":0|1}                  video streaming
-    0x21013302  {"enabled":0|1}                  person detection
-    0x21013303  {"targetID":n,"enabled":0|1}     built-in follow - NOT used here
-    0x21013304  <- {"targets":[{"id","following","bbox":[x1,y1,x2,y2]}]}
-                   ~27/s while detection is on, bbox in 1280x720 pixels
-    0x21013305  {}  state query  ->  0x21013306 {"modes":{...}}
-
-Replies go to the sender's own address and port. Only detection is used:
-the built-in follow drives at up to 1.0 m/s with no depth check, so driving
-goes through lite3.steer() instead, with the depth-camera stop.
+Only the tracker's detection is used; driving goes through lite3.steer()
+with the depth-camera stop. README.md section 8.
 
     python3 -m robot.person      # print where the person is, no movement
     from robot.person import PersonDetector, approach
@@ -27,8 +14,10 @@ import struct
 import threading
 import time
 
-from .protocol import TRACKER_ADDR as TRACKER, TRK_DETECT as DETECT, \
-    TRK_TARGETS as TARGETS, tracker_packet as _msg
+from .depth import sampled
+from .nav import clamp
+from .protocol import TRACKER_ADDR, TRK_DETECT, TRK_TARGETS, Lite3Error, tracker_packet
+
 WIDTH, HEIGHT = 1280.0, 720.0       # bbox pixel space
 FRESH = 0.7                 # s: a detection older than this is not trusted
 GIVE_UP = 5.0               # s without the person before approach() stops
@@ -40,11 +29,8 @@ MIN_SPEED = 0.12            # m/s at the end of that ramp
 
 
 class PersonDetector(threading.Thread):
-    """Switches the built-in detection on and keeps .latest up to date.
-
-    Locks onto the largest (usually nearest) person's track id and follows
-    that id; if it vanishes for over a second, re-locks on the largest.
-    stop() switches detection off again.
+    """Switches the built-in detection on and keeps .latest up to date, locked
+    onto the largest person's track id. stop() switches detection off.
     """
 
     def __init__(self):
@@ -60,24 +46,24 @@ class PersonDetector(threading.Thread):
 
     def run(self):
         try:
-            self._sock.sendto(_msg(DETECT, enabled=1), TRACKER)
+            self._sock.sendto(tracker_packet(TRK_DETECT, enabled=1), TRACKER_ADDR)
             deadline = time.time() + 5
             while not self._halt.is_set():
                 r, _, _ = select.select([self._sock], [], [], 0.5)
                 if not r:
                     if not self.ready.is_set() and time.time() > deadline:
                         raise RuntimeError('no reply from the tracker at %s:%d in 5 s'
-                                           % TRACKER)
+                                           % TRACKER_ADDR)
                     continue
                 d, _ = self._sock.recvfrom(8192)
-                if len(d) > 12 and struct.unpack('<i', d[:4])[0] == TARGETS:
+                if len(d) > 12 and struct.unpack('<i', d[:4])[0] == TRK_TARGETS:
                     self._update(json.loads(d[12:]).get('targets', []))
                     self.ready.set()
         except Exception as e:
             self.error = e
             self.ready.set()
         finally:
-            self._sock.sendto(_msg(DETECT, enabled=0), TRACKER)
+            self._sock.sendto(tracker_packet(TRK_DETECT, enabled=0), TRACKER_ADDR)
 
     def _update(self, targets):
         now = time.time()
@@ -105,18 +91,19 @@ class PersonDetector(threading.Thread):
 
 
 def _controller(bot, det, stop_distance, speed, hold, near=None, near_distance=1.0):
-    """The shared per-cycle control for approach() and follow().
-
-    Turns to keep the person centred and walks only while they are roughly
-    centred - but never turns toward a side with something inside the
-    turning sweep (lite3.TURN_SWEEP). Slows linearly over the last SLOW_ZONE metres: clearance is only
-    sampled at 4 Hz, so at full speed he would coast past the stop distance.
-    At the stop distance, approach() ends; follow() (hold=True) stays put,
-    still turning to face them, and walks again when they move away.
+    """The per-cycle control behind approach() and follow(): turn to keep the
+    person centred (never into something inside TURN_SWEEP), walk while they
+    are centred, slow over the last SLOW_ZONE metres. hold=True stays at the
+    stop distance instead of ending there.
     """
-    from .lite3 import Lite3Error, TURN_SWEEP
-    state = {'lost_since': None, 'last_clear': 0.0, 'clear': float('inf'),
-             'sides': (float('inf'), float('inf')), 'near_done': near is None}
+    from .lite3 import TURN_SWEEP         # here, not on top: lite3 needs ROS
+    state = {'lost_since': None, 'near_done': near is None}
+
+    def read():
+        bins = bot.scan()                       # one scan for both checks
+        return bot.clearance(bins=bins), bot.side_clear(bins)
+
+    view = sampled(read)
 
     def control():
         now = time.time()
@@ -129,28 +116,23 @@ def _controller(bot, det, stop_distance, speed, hold, near=None, near_distance=1
                 return 'lost the person for %.0f s' % GIVE_UP
             return 0.0, 0.0
         state['lost_since'] = None
-        if now - state['last_clear'] > 0.25:     # scan() walks the cloud
-            state['last_clear'] = now
-            try:
-                bins = bot.scan()
-                state['clear'] = bot.clearance(bins=bins)
-                state['sides'] = bot.side_clear(bins)
-            except Lite3Error:
-                return 'lost the depth stream - stopped rather than walking blind'
-        if not state['near_done'] and state['clear'] <= stop_distance + near_distance:
+        try:
+            clear, (left, right) = view()
+        except Lite3Error:
+            return 'lost the depth stream - stopped rather than walking blind'
+        if not state['near_done'] and clear <= stop_distance + near_distance:
             state['near_done'] = True
             near()
         off = p['x'] - 0.5                        # +ve = person to the right
-        wz = max(-MAX_TURN, min(MAX_TURN, -K_TURN * off))
+        wz = clamp(-K_TURN * off, MAX_TURN)
         # Don't swing the body into something on the side he'd turn toward.
-        left, right = state['sides']
         if (wz > 0 and left < TURN_SWEEP) or (wz < 0 and right < TURN_SWEEP):
             wz = 0.0
-        if state['clear'] <= stop_distance:
+        if clear <= stop_distance:
             if not hold:
-                return 'reached: %.2f m from body centre' % state['clear']
+                return 'reached: %.2f m from body centre' % clear
             return 0.0, wz
-        ramp = (state['clear'] - stop_distance) / SLOW_ZONE
+        ramp = (clear - stop_distance) / SLOW_ZONE
         vx = max(MIN_SPEED, speed * min(1.0, ramp)) if abs(off) < CENTRED else 0.0
         return vx, wz
 
@@ -159,13 +141,9 @@ def _controller(bot, det, stop_distance, speed, hold, near=None, near_distance=1
 
 def approach(bot, det, stop_distance=0.6, speed=0.3, limit=30.0,
              near=None, near_distance=1.0):
-    """Turn to and walk up to the detected person; stop at the depth guard.
-
-    stop_distance is from the BODY CENTRE like walk()'s (nose ~0.33 m ahead).
-    near(), if given, is called once (from the control loop - keep it quick,
-    e.g. start a thread) when he gets within near_distance metres of the stop
-    point, so a reaction can be prepared before he arrives.
-    Returns lite3.steer()'s result dict.
+    """Turn to and walk up to the detected person, stopping stop_distance (from
+    the body centre) short. near(), if given, is called once from the control
+    loop when he is within near_distance of that. Returns steer()'s result.
     """
     return bot.steer(_controller(bot, det, stop_distance, speed, False,
                                  near, near_distance), limit=limit)

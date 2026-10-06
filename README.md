@@ -194,7 +194,10 @@ the project: the terminal (Ctrl-C) becomes your stop button.
 
 Even with the heartbeat, a freshly powered robot is "settled but not armed":
 the **first real command is swallowed** by `jy_exe`'s own arming sequence.
-`stand()` detects this and re-sends the toggle (see §5.3).
+`stand()` detects this and re-sends the toggle (see §5.3). Measured
+2026-09-21: the heartbeat alone does not arm him, and neither do mode
+commands; he sits at 98 indefinitely until a real command arrives, so no
+amount of waiting after `heartbeat_start()` helps.
 
 ---
 
@@ -202,16 +205,17 @@ the **first real command is swallowed** by `jy_exe`'s own arming sequence.
 
 ```
 robot/                 the library: `from robot.lite3 import Lite3`
-  lite3.py             THE API: state, heartbeat, posture, tricks, motion, e-stop (929 lines)
+  lite3.py             THE API: state, heartbeat, posture, tricks, motion, e-stop
   nav.py               Nav2 start/stop, costmap reading, goto()      (mixed into Lite3)
   depth.py             point cloud → obstacle ranges                 (mixed into Lite3)
   protocol.py          every UDP code and address; no ROS; also a raw-code CLI
   sonar_range.py       ROS node: sonars → sensor_msgs/Range for Nav2
   person.py            person detection (built-in tracker) and following
   talk.py              speaker, Piper TTS, YouTube audio, Gemini chat, personas
-  run_robot.py         Mission: run a scripted sequence with logging and cleanup
   hmi.py               web control panel server (aiohttp)
   hmi_static/index.html  the control panel page
+  rs_stream.py         RealSense colour → H.264 on mediamtx  (started by hmi.py)
+  udp_relay.py         WebRTC video between the tailnet and mediamtx (started by hmi.py)
 bin/                   things you run
   tour.py              walk / navigate a route, stop, look, talk
   teleop.py            drive from the keyboard over SSH
@@ -219,6 +223,7 @@ demos/                 teaching and regression scripts
   demo.py              guided tour of the API in 10 lessons
   shake.py             end-to-end regression test          (MOVES THE ROBOT)
   estop_nav.py         proves e-stop works under Nav2      (MOVES THE ROBOT)
+  check_motion.py      the motion loop's promises against a fake robot (no robot needed)
 env/                   environment, launchers, and patches to vendor code
   lite3_env.sh         source this first: ROS workspaces, CycloneDDS, PYTHONPATH
   start_nav2_mapless.sh   launches sonar node + Nav2 (called by nav_start())
@@ -226,7 +231,6 @@ env/                   environment, launchers, and patches to vendor code
   start_realsense_v4.sh   starts it (the realsense_ros2 systemd unit calls this)
   *.patch              our changes to vendor code (see §11)
   sudoers-lite3-camera, voa_ros2-override.conf   system config
-archive/               pre-git history: old .bak files and superseded scripts
 ```
 
 The package deliberately has no re-exports in `robot/__init__.py`: importing
@@ -253,8 +257,8 @@ When you create a `Lite3()`:
    imported**. (With the default FastRTPS the node discovers nothing and hangs
    with no error.)
 2. `rclpy.init()`, then an internal node `_Node` subscribes to everything
-   interesting: state, odometry, point cloud, global costmap, both sonars, IMU,
-   handheld sticks, and TF.
+   interesting: state, odometry, point cloud, global costmap, both sonars, IMU
+   and handheld sticks.
 3. A **background thread spins the node** (`spin_once` every 50 ms). This is
    the key usability trick: callbacks just store the latest message, so
    `bot.battery`, `bot.pose`, `bot.standing` are always-current attributes.
@@ -309,6 +313,11 @@ the code only toggles from a *settled* lying state (`LYING = (1, 8, 98)`), and
   swallowed by arming, so it sends it **once more**. That retry is the fix
   for "the first stand after boot does nothing".
 - **`sit()`**: halt, toggle, wait for a lying state. Idempotent.
+- **`upright(heartbeat=True)`** is a context manager for the whole routine:
+  start the heartbeat (unless a handheld holds the interlock), wait for
+  ready, stand, and sit on the way out whatever happens. The heartbeat is
+  left to `close()`, so he always sits first and is disarmed second.
+  `bin/tour.py`, `bin/teleop.py` and lesson 10 use it.
 - **`tilt(pitch_deg)`** is a context manager that pitches the body nose-up
   while standing still (used so the front camera sees a face, not knees). It
   enters posture mode, re-sends the pitch stick at 10 Hz like the phone app
@@ -321,11 +330,12 @@ the code only toggles from a *settled* lying state (`LYING = (1, 8, 98)`), and
   verified on this robot.
 - **`auto()`** sends "leave posture mode" and then "auto mode". Leaving
   posture mode first matters: a robot left in it reports standing but ignores
-  every velocity.
+  every velocity (seen 2026-09-18, probably after the app's posture control).
 
 ### 5.4 Motion: `walk()`, `turn()`, `strafe()`, `steer()`
 
-All motion goes through one loop, `_run(vx, vy, wz, done, limit, force, abort)`:
+All motion goes through one loop, `_loop()`. `_run(vx, vy, wz, done, limit,
+force, abort)` feeds it a fixed velocity; `steer()` one recomputed every cycle:
 
 ```
 pre-checks:  battery ≥ 20%  →  standing  →  auto mode  →  have a pose
@@ -345,6 +355,11 @@ the last thing published is zero velocity. The returned `reason` tells the
 caller *why* it stopped (`'target reached'`, `'obstacle at 0.58 m'`,
 `'handheld took over - stopped'`, …), because a walk that stopped short is
 normal, not an error.
+
+The tilt limit is 30° (`TILT_LIMIT_DEG`). Walking on the flat stays within a
+few degrees; the robot is rated for 40° slopes, so raise it before trying one.
+A non-finite velocity (NaN) is sent as zero: Python's `max`/`min` would
+otherwise pass it through as the full limit.
 
 **`walk(distance, speed=0.15, stop_distance=0.6)`**
 - Distance is measured from odometry (straight-line from the start pose).
@@ -369,6 +384,10 @@ normal, not an error.
   `TURN_SWEEP = 0.43 m` on that side stops the turn.
 
 **`strafe(distance)`**: sideways, positive = left. No obstacle guard.
+
+All four share one 4 Hz sampler for the depth checks (`depth.sampled`), and
+the camera only sees ±45°: something directly beside or behind him is
+invisible to the turn guard.
 
 **`steer(control)`**: the closed-loop version. `control()` is called every
 cycle and returns `(vx, wz)` to keep going or a string to stop. Same guards,
@@ -453,6 +472,18 @@ them as bare numbers (`Float64`) at ~160 Hz; Nav2's range layer needs
 - stamps each `Range` with the latest odometry timestamp, because the robot's
   TF uses the steady clock and a mismatched stamp makes the transform fail;
 - clamps readings: the front is cut to **0.8 m max**, the rear keeps 4.0 m.
+  A reading at or past the maximum is published *as* the maximum, which the
+  range layer reads as "nothing there".
+
+Measured 2026-09-27/28 with tape and the depth camera: readings are good to
+~2 cm; 0.28 m is the minimum ("something within ~0.3 m") and, seen lying
+down, also "no echo", which is why `Lite3` exposes the rear reading without
+using it as a guard; 4.5 (sometimes ~4.7) means no echo; a tilted surface can
+deflect the pulse and read far. Objects ~1 m away at ±34° are caught
+intermittently and at 27–32° steadily, hence the ±33° beam. The front sonar's
+position comes from the camera-sonar offset; the rear is not measured and is
+placed at the back of the body (nose 0.274 m ahead of `base_link`, body
+0.61 m long).
 
 Why cut the front? The beam was measured at ~±33° wide. Nav2's range layer
 spreads a reading over the whole cone, so a chair 30° off to the side at 1 m
@@ -515,6 +546,12 @@ misses them; widening the pattern hits `static_transform_publisher`, which
 the camera and transfer services also use, and ROS launch then takes *those*
 services down. So: find process groups containing a Nav2 marker, exclude any
 group containing a system-service process (`NAV_NEVER`), kill the rest.
+`NAV_NEVER` matches executables, not words, and launch arguments (`foo:=bar`)
+are dropped before matching: the Nav2 launch line itself contains
+`launch_realsense:=false`, and a bare "realsense" once made the guard exclude
+the very group it was meant to kill. A
+group counts as gone once only zombies are left in it: the dead leader of a
+stack this process launched stays a zombie, and waiting on it cost 8 s a stop.
 
 ### 7.3 Reading the costmap and choosing goals
 
@@ -522,18 +559,31 @@ group containing a system-service process (`NAV_NEVER`), kill the rest.
 - `cost_ahead(out_to, step, settle)`: costs along the current heading. With
   `settle=N` it re-reads until two profiles a second apart agree. This is
   needed because the costmap starts empty and, with `track_unknown_space`
-  off, **unseen cells read as free**: an immediate read says "clear forever".
+  off, **unseen cells read as free**: an immediate read says "clear forever",
+  you pick the furthest cell, and `goto()` then refuses it as LETHAL once
+  real observations land. The giveaway is cost 0 at distance 0, the robot's
+  own cell, which is never really free on a populated map.
+- `nav.free_ahead(profile)`: how far such a profile stays plannable, i.e. the
+  last distance before the first cell `goto()` would refuse. Free means below
+  LETHAL, not "low": 50 was tried first and wrongly refused open floor between
+  two tables, whose inflation spreads 50–90 over the whole gap.
+  `nav.goal_ahead(profile)` is that distance minus a margin, or `None` when
+  too little is left; the demos and the tour's `approach` pick goals with it.
 
 ### 7.4 `goto(forward, heading_deg=None)`
 
-1. Checks standing, battery, Nav2 running, goal ≥ 0.2 m away.
+1. Checks standing, battery, Nav2 running, goal ≥ 0.2 m away (a goal at his
+   own position gives the planner nothing to plan and aborts; use
+   `turn_deg()` to rotate in place).
 2. Computes the goal `forward` metres along the current heading.
 3. **Refuses a LETHAL goal cell**: NavFn cannot plan into one and would abort.
 4. Sends a `NavigateToPose` action goal, stores the handle so `estop()` can
    cancel it, waits for the result.
 5. If it succeeded and a heading was requested, corrects it with `turn()`.
 
-Returns the action status: 4 = succeeded, 6 = aborted.
+Returns the action status: 4 = succeeded, 6 = aborted, 5 = cancelled.
+`goto_cancel()`, from another thread, ends a goal and leaves Nav2 up; `estop()`
+ends it and kills Nav2. Either way `goto()` returns 5 and he ends halted.
 
 `bin/tour.py` adds a smarter goal chooser: if the requested spot is inside an
 obstacle, pick the *closest free distance* on that line (Nav2 then routes
@@ -585,7 +635,8 @@ text ─► Piper TTS ─► ffmpeg (to raw S16LE 48 kHz stereo, + 800 ms silenc
 
 - `play('OKstandup')`: one of the robot's ~33 built-in clips; plays entirely
   on the robot.
-- `say(text)`: Piper (neural TTS on the Jetson), fallback espeak-ng.
+- `say(text)`: Piper (neural TTS on the Jetson), through `Speaker` below, so
+  it sounds like a persona's reply. No Piper, no speech: there is no fallback.
 - `play_file(path)`, `play_url(youtube_url)` (via `yt-dlp`).
 
 Details that were learned the hard way:
@@ -596,6 +647,19 @@ Details that were learned the hard way:
   moments, so 800 ms of silence is prepended (`LEAD_IN_MS`). A 1.1 s clip was
   completely inaudible without it.
 - Raw samples, not WAV, go down the pipe, so there is no header to misread.
+- Loudness (2026-09-18): the codec's PCM volume is set to max (192 = 0 dB,
+  was 180 = −6 dB) each time the speaker opens, and speech gets a software
+  gain of 1.6 with a limiter. Pushing the amp itself past 0 dB distorts on
+  this small speaker.
+
+What it needs: passwordless SSH from the Jetson to the motion computer; `ysc`
+in the `audio` group there (done 2026-09-15); `ffmpeg` on the Jetson; Piper in
+`~/piper` (the standalone aarch64 release, voices as `~/piper/<name>.onnx`);
+for `play_url`, standalone `yt-dlp` and `deno` binaries in `~/.local/bin`;
+for Gemini, a key in `~/.gemini_key`, `websockets` 13.1 (the last release for
+Python 3.8) and internet. The robot has its own internet (eduroam via the
+motion computer). If it ever has none, run an HTTP CONNECT proxy on the
+laptop, forward its port over SSH and set `TALK_PROXY=http://localhost:3128`.
 
 ### 9.2 `Speaker`: streaming, sentence by sentence
 
@@ -614,7 +678,14 @@ It adds software gain with a limiter and sets the codec volume to max.
   starts within 6 s it reconnects once.
 - **REST** (`generateContent`) is the fallback if Live fails. It keeps the
   last 20 messages and re-sends the most recent camera frame so follow-ups
-  like "what did you just see?" work.
+  like "what did you just see?" work. **Image turns always go over REST**,
+  and so do follow-ups while the look is still in the history: measured
+  2026-10-05, Live answered about a frame it had plainly not read (invented a
+  person, misread text). The free tier sometimes stalls or 503s while an
+  immediate retry answers in ~1 s, so requests time out at 12 s and retry
+  three times. The model name is an alias (`gemini-flash-lite-latest`) so a
+  retired version cannot break it, and "thinking" is turned down: it adds
+  seconds a spoken one-liner does not need.
 - `sentences()` regroups streamed text chunks into whole sentences so
   speaking starts before the reply is complete.
 - `look(question)` grabs one 1280-px frame from the front camera (RTSP via
@@ -648,7 +719,16 @@ standing still; the motors are too loud while walking) → stop Nav2 → sit →
 drop heartbeat. A failed step is reported and skipped. `--finale "..."` ends
 with a custom line, optionally tilting the body up (`--look-up 12`) so the
 camera sees a face. An `Odometer` thread sums the actual path length for the
-closing sentence.
+closing sentence (summing start-to-end per step counted a 14 m follow as
+7.2 m).
+
+`walk` steps add half a second of travel to `--stop`, because `walk()` samples
+the depth camera at 4 Hz and has no slow-down ramp. When the last step is
+`person`, the finale line is written during the last metre so he can speak on
+arrival (frame grab plus Gemini take 3–4 s), but only without `--look-up`:
+that frame is taken before the tilt and shows knees and shoes, so with
+`--look-up` the finale is done live after tilting, at the cost of ~3 s of
+silence.
 
 ### 10.2 `bin/teleop.py`: keyboard driving over SSH
 
@@ -663,37 +743,67 @@ python3 -m robot.hmi     # then open http://lite3-perception:8080
 ```
 
 An `aiohttp` server bound **only to the Tailscale VPN address**, so nothing on
-the public Wi-Fi can reach it. One page (phone or laptop) with:
+the public Wi-Fi can reach it. One self-contained page (phone or laptop, no
+CDN: even its typeface, B612, is embedded) with:
 
 - live status (battery, posture, Nav2, camera, heartbeat, sonars, tilt, pose)
   pushed over a WebSocket twice per second, and the depth scan drawn as a
   top-down fan;
-- two MJPEG camera streams (front wide-angle, RealSense colour), encoded
-  **only while someone is watching**;
+- two camera views (front wide-angle, RealSense colour) as H.264 over WebRTC,
+  running **only while someone is watching** (see "Cameras" below);
 - stand/sit, Nav2 on/off, camera/voa on/off, "goto N m";
 - a **hold-to-drive** joystick (and WASD) built on `steer()`: the page sends
   the stick ~10×/s and the robot halts 0.3 s after the last message (a
   "dead-man" switch: released, tab closed, Wi-Fi lost → stop). Forward stops
   at camera clearance ≤ 0.6 m, backward at rear sonar < 0.5 m. Driving is
   refused while Nav2 runs;
-- say / ask / look with a persona picker;
+- say / ask / look with a persona picker, all three in that persona's voice;
 - an always-visible **E-STOP** (also the space bar) that bypasses the command
-  queue and calls `Lite3.estop()` directly.
+  queue and calls `Lite3.estop()` directly;
+- **Cancel**, shown while a Go is under way: ends it and leaves Nav2 running.
+  A Go does not outlive its operator either: 3 s after the last page went
+  away it is cancelled, and if Nav2 will not let go, e-stopped.
 
 Robot commands run in a single-worker thread pool so only one thing moves the
 robot at a time; talking has its own pool so it can happen alongside. On
 shutdown it sits the robot down before dropping the heartbeat.
 
-### 10.4 `robot/run_robot.py`: `Mission`
+The timings: the drive halts 0.3 s after the last stick message (`DEADMAN_S`);
+a silent page is noticed within about 7.5 s (`PING_S` × 1.5); a Go is cancelled
+3 s after the last page went (`GONE_S`, the page itself reconnects in 1.5 s)
+and becomes an E-STOP if Nav2 has not let go 2 s later (`LET_GO_S`). A
+malformed message from a page is logged and ignored. A browser button is not
+a hardware stop: keep the handheld at hand. For HTTPS, run
+`sudo tailscale serve --bg 8080` once and open
+`https://lite3-perception.<tailnet>.ts.net`; the server also listens on
+localhost for that.
 
-A thin wrapper for scripted runs that adds three things scripts kept getting
-wrong: (1) **restore what you found**: if the robot was lying when you started
-it is lying when you finish, and a Nav2 stack you didn't start is left alone;
-(2) **fail fast**: a failed step skips the rest; (3) a **log** of what each step
-actually did (walks stop short, turns overshoot). An unexpected exception (a
-bug, not a `Lite3Error` refusal) triggers an e-stop.
+**Cameras.** Both views come from the motion computer's mediamtx as WebRTC.
+The front camera is the robot's own H.264 stream (1280×720, 30 fps). The
+RealSense colour image is put there by `robot/rs_stream.py`, which runs only
+while a page shows that view and for 10 s after. A browser cannot reach the
+motion computer, so `hmi.py` rewrites the WebRTC answer to point at
+`robot/udp_relay.py` on the Jetson, which forwards the video. If WebRTC does
+not connect, the front camera falls back to MJPEG (ffmpeg, 640 px, 8 fps); the
+RealSense view has no fallback.
 
-### 10.5 `demos/`
+Why they are built this way (all measured 2026-10-05, at 1280×720):
+
+- `rs_stream.py` reads the camera's **JPEG** topic (needs
+  `ros-foxy-compressed-image-transport`): raw frames do not get through ROS
+  into Python fast enough, a subscriber that did nothing received 8 of 30 a
+  second.
+- It uses the Jetson's **hardware** H.264 encoder: libx264 ultrafast managed
+  23 fps on 1.5 cores. But it decodes with `jpegdec`, not `nvjpegdec`: the
+  hardware JPEG decoder kept handing out its first frame, so the video was a
+  still. Baseline profile (WebRTC cannot take B-frames) with a keyframe a
+  second, so a new viewer starts at once.
+- Both are **processes of their own**. Encoding inside the HMI stuttered
+  (22 fps with 150–200 ms gaps against a steady 29 fps). The relay inside the
+  HMI shared the interpreter with the ROS threads, was starved and dropped
+  packets (its receive queue was full).
+
+### 10.4 `demos/`
 
 - `demo.py`: ten lessons from "connect" to "run with no handheld". Lessons
   that move the robot need `--move`. Lesson 4 is worth showing: it tries unsafe
@@ -702,8 +812,12 @@ bug, not a `Lite3Error` refusal) triggers an e-stop.
   summary table.
 - `estop_nav.py`: sends a real SIGINT 6 s into a Nav2 goal and measures the
   coast.
+- `check_motion.py`: what the motion code promises (a halt on every way out,
+  clamping, the time ceiling, handheld takeover, the ways a Go ends, a quick
+  `nav_stop()`) against a fake robot and a pretend Nav2. Sends nothing, so it
+  runs anywhere; run it after changing the motion code.
 
-### 10.6 `robot/protocol.py` as a CLI
+### 10.5 `robot/protocol.py` as a CLI
 
 `python3 -m robot.protocol stand_toggle`, `... dance`, `... 0x21010300`,
 `... camera on`, `... voa off`. Sends a raw code with **no checks**; for
@@ -741,8 +855,13 @@ diffs against the vendor originals.
 `env/camera.launch.py` runs the newer realsense-ros 4.58.3 (with a patched
 kernel USB video module) as a drop-in for the vendor's old 3.2.3 fork, with
 the same topic names. It also streams colour and the camera's IMU; depth +
-colour at 30 fps no longer crashes the USB bus. Depth is clipped at 5 m so the
-voxel filter doesn't overflow.
+colour at 30 fps no longer crashes the USB bus (verified 2026-09-24). Depth
+stays at the vendor's 424×240, which Nav2 and voa expect; colour is 1280×720,
+since it is only looked at and never crosses the Wi-Fi raw. Depth is clipped
+at 5 m before the voxel grid: far points make PCL's 5 cm grid overflow its
+index, and it then silently passes the whole raw cloud through. The cloud's
+steady-clock stamp and the voxel filter are our patch to
+`pointcloud_filter.cpp`; stock 4.58.3 ignores those two parameters.
 
 ### 11.4 Services
 
@@ -755,8 +874,9 @@ camera: voa on brings the camera up; camera off takes voa down.
 
 ## 12. Measured numbers and calibration
 
-Everything here was measured on the robot; the comments in the code say how
-and when.
+Everything here was measured on the robot. How and when is recorded in this
+README, next to the feature it belongs to; the code keeps only a one-line
+reason beside each constant.
 
 | Quantity | Value | Where it's used |
 |---|---|---|
@@ -789,7 +909,8 @@ These are the ideas behind the code; useful if asked "why is it built like this?
    calls the refusals "the docs".
 2. **Guarantee the stop.** Every motion call ends in `finally: halt()`. The
    e-stop kills the *other* publisher (Nav2), not just our own. Remote driving
-   uses dead-man timeouts. Shutdown order is always "stop moving, then
+   uses dead-man timeouts, and a Go from the web panel is cancelled when no
+   page is left to stop it. Shutdown order is always "stop moving, then
    disarm".
 3. **State as attributes, not callbacks.** A background spin thread keeps the
    latest message of each topic, so behaviours read like ordinary sequential
@@ -798,7 +919,7 @@ These are the ideas behind the code; useful if asked "why is it built like this?
    actually moved and why it stopped, because stopping short for an obstacle
    is normal operation.
 5. **Measure, don't guess.** Constants come from tape measures, camera checks
-   and logs, and the comment records the measurement and date.
+   and logs; this README records the measurement and date.
 6. **Keep ROS optional where possible.** `protocol.py` and `talk.py` don't
    import `rclpy`; `lite3.py` imports `talk` lazily.
 7. **Change vendor code minimally, and keep the diff.** Every vendor change is
@@ -886,8 +1007,7 @@ resolved relative to the repo, so it can be cloned anywhere.
 - **`shake.py` and `estop_nav.py` move the robot.** `demo.py` needs `--move`
   for lessons 5 and up.
 - Below **~0.2 m/s** the gait shuffles and drifts sideways.
-- The perception computer's clock is skewed; file timestamps are meaningless
-  (see `archive/backups/README.md`).
+- The perception computer's clock is skewed; file timestamps are meaningless.
 
 ---
 
@@ -923,8 +1043,9 @@ target, and uses the depth camera for the actual stopping distance.
 
 **What happens if the program crashes or Wi-Fi drops?**
 Motion calls always publish zero velocity on exit. Remote driving (teleop,
-web) uses dead-man timeouts of 0.3–0.5 s. Beyond that, the robot's own
-failsafe stops it ~1.5 s after velocity commands stop arriving.
+web) uses dead-man timeouts of 0.3–0.5 s, and a Go started from the web panel
+is cancelled 3 s after its last page disconnects. Beyond that, the robot's
+own failsafe stops it ~1.5 s after velocity commands stop arriving.
 
 **Why does the robot talk only when standing still?**
 The motors are too loud to hear the speaker while walking.
@@ -954,8 +1075,9 @@ useless, and one where its configuration was silently never loaded.
 | 2026-09-27 | Camera independent of voa; Nav2 config tuned and recorded as a patch |
 | 2026-09-28 | Odometry ×1.15; turn coast fix; sonars in Nav2; web HMI |
 
-`archive/` keeps the pre-git history: every `.bak` file is the state of a
-script immediately before a named change (see `archive/backups/README.md`).
+The pre-git history (`.bak` files and the superseded loose scripts) was kept
+in `archive/` until commit `c4cfb84`, and `robot/run_robot.py` (`Mission`, a
+scripted-run wrapper nothing used) with it: `git show c4cfb84:archive/backups/README.md`.
 
 ---
 

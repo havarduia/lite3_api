@@ -1,15 +1,10 @@
 """udp_relay - pass WebRTC video between browsers on the tailnet and mediamtx.
 
-mediamtx is on the motion computer, which a browser cannot reach, so the HMI
-tells the page to send its WebRTC traffic here (see hmi.Server.whep) and this
-forwards it, one upstream socket per browser address.
-
     python3 -m robot.udp_relay <listen ip> <port> <upstream ip> <port>
 
-A process of its own on purpose (hmi.py starts it): inside the HMI it shared
-the interpreter with the ROS threads, was starved, and dropped packets
-(measured 2026-10-05: its socket's receive queue full, video stuttering).
-Exits when the process that started it does.
+mediamtx is on the motion computer, which a browser cannot reach, so the
+page sends its WebRTC traffic here (see hmi.Server.whep). A process of its
+own (hmi.py starts it): inside the HMI it was starved and dropped packets.
 """
 import os
 import select

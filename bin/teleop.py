@@ -79,21 +79,18 @@ def main():
             state['v'] = (0.0, 0.0)
         return state['v']
 
-    bot = Lite3()
     fd = sys.stdin.fileno()
     saved = termios.tcgetattr(fd)
-    try:
-        if not args.handheld:
-            bot.heartbeat_start()
-            bot.wait_ready()
-        bot.stand()
-        print('w/s drive  a/d turn  space stop  +/- speed  q quit')
-        tty.setcbreak(fd)
-        while not state['quit']:
-            bot.steer(control, limit=STEER_LIMIT, force=args.force)
-    finally:
-        termios.tcsetattr(fd, termios.TCSADRAIN, saved)
-        bot.sit()
+    # with Lite3: close() is the final halt, the disarm and the ordered rclpy
+    # teardown, on every way out.
+    with Lite3() as bot, bot.upright(heartbeat=not args.handheld):
+        try:
+            print('w/s drive  a/d turn  space stop  +/- speed  q quit')
+            tty.setcbreak(fd)
+            while not state['quit']:
+                bot.steer(control, limit=STEER_LIMIT, force=args.force)
+        finally:
+            termios.tcsetattr(fd, termios.TCSADRAIN, saved)
 
 
 if __name__ == '__main__':

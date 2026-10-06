@@ -9,35 +9,86 @@ import time
 
 from .protocol import Lite3Error
 
-# --- nav2 ------------------------------------------------------------------
-# Launched by env/start_nav2_mapless.sh.
-# Nav2's children do not carry the launch file's name, so killing by name
-# either misses them or, if you widen the pattern, reaches outside the stack.
-# static_transform_publisher in particular is used by transfer and realsense
-# too - pkill'ing it takes THOSE services down with it, because ros2 launch
-# tears down a whole unit when one of its children dies. So the stack is
-# launched via setsid into its own process group and killed by that group.
-NAV_PGID_FILE = '/tmp/lite3_nav2.pgid'
+# --- nav2 ---
+# The stack runs in its own process group (setsid) and is killed by that
+# group: killing by name misses its children, or reaches the
+# static_transform_publisher the services use. README.md section 7.2.
 NAV_MARKERS = ('dr_nav2_mapless', 'bt_navigator', 'planner_server',
                'controller_server', 'robot.sonar_range')
-# Never kill a group containing one of these - they belong to the services.
-# Match executables, not words: the nav2 launch line itself contains
-# "launch_realsense:=false", and a bare 'realsense' here made the guard
-# exclude the very group it was meant to kill.
+# Never kill a group holding one of these. Executables, not words: the
+# launch line itself says launch_realsense:=false.
 NAV_NEVER = ('jetson2motion', 'transfer_ros2', 'start_transfer',
              'realsense2_camera', 'realsense_ros2', 'voa_composition',
              'voa_ros2')
 
 LETHAL = 99
+SUCCEEDED, CANCELED, ABORTED = 4, 5, 6      # NavigateToPose result status, as goto() returns it
+REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))   # the scripts in env/ move with the code
 
 
-def _repo(*parts):
-    """A path inside this repo, wherever it happens to be checked out.
+def status_text(status):
+    """A goto() status in words."""
+    return {SUCCEEDED: 'arrived', CANCELED: 'cancelled',
+            ABORTED: 'aborted - no path'}.get(status, 'status %s' % status)
 
-    Beats hardcoding ~/... : the scripts in env/ move with the code.
+
+def clamp(v, limit):
+    """v held within +-limit. Anything not finite becomes 0: max/min pass a
+    NaN through as +limit, which is full speed, not a stop."""
+    return max(-limit, min(limit, v)) if math.isfinite(v) else 0.0
+
+
+def dist(a, b):
+    """Metres between two poses."""
+    return math.hypot(b[0] - a[0], b[1] - a[1])
+
+
+def wrap(angle):
+    """An angle in radians brought into -pi..pi."""
+    return math.atan2(math.sin(angle), math.cos(angle))
+
+
+def free_ahead(profile):
+    """Metres a cost_ahead() profile stays plannable from the robot outwards:
+    the last distance before the first LETHAL or off-map cell.
     """
-    here = os.path.dirname(os.path.abspath(__file__))
-    return os.path.join(os.path.dirname(here), *parts)
+    far = 0.0
+    for d, c in profile:
+        if c is None or c >= LETHAL:
+            break
+        far = d
+    return far
+
+
+def goal_ahead(profile, margin=0.25, minimum=0.5):
+    """A goto() distance `margin` short of the first cell goto() would refuse,
+    or None when that is under `minimum`: xy_goal_tolerance is 0.25, so a
+    nearer goal "arrives" at once."""
+    goal = free_ahead(profile) - margin
+    return goal if goal >= minimum else None
+
+
+def _alive(pgid):
+    """Is any process of that group still running?"""
+    try:
+        os.killpg(pgid, 0)
+    except ProcessLookupError:
+        return False
+    # A dead leader stays on as a zombie until reaped; zombies do not count.
+    ps = subprocess.run(['ps', '-eo', 'pgid=,stat='], capture_output=True, text=True)
+    states = [f[1] for f in map(str.split, ps.stdout.splitlines()) if f[:1] == [str(pgid)]]
+    return ps.returncode != 0 or any(not s.startswith('Z') for s in states)
+
+
+def _kill_group(pgid, timeout, wait):
+    """SIGINT, then SIGTERM, then SIGKILL, each given timeout/3 s to empty the group."""
+    for sig in (signal.SIGINT, signal.SIGTERM, signal.SIGKILL):
+        try:
+            os.killpg(pgid, sig)
+        except ProcessLookupError:
+            return
+        if wait(lambda: not _alive(pgid), timeout / 3.0, 0.2):
+            return
 
 
 class Nav:
@@ -50,11 +101,8 @@ class Nav:
 
     @staticmethod
     def _nav_groups():
-        """Process groups that belong to a nav2 stack and nothing else.
-
-        Returns {pgid: [command lines]}. A group holding any NAV_NEVER process
-        is excluded - that is the guard that stops a cleanup from taking
-        transfer_ros2 or realsense_ros2 down with it.
+        """{pgid: [command lines]} of the groups that are a nav2 stack and hold no
+        NAV_NEVER process.
         """
         out = subprocess.run(['ps', '-eo', 'pgid=,args='],
                              capture_output=True, text=True).stdout
@@ -80,24 +128,8 @@ class Nav:
         """Stop the nav2 stack by process group. Returns the number killed."""
         killed = 0
         for pgid in self._nav_groups():
-            for sig in (signal.SIGINT, signal.SIGTERM, signal.SIGKILL):
-                try:
-                    os.killpg(pgid, sig)
-                except ProcessLookupError:
-                    break
-                end = time.time() + timeout / 3.0
-                while time.time() < end:
-                    try:
-                        os.killpg(pgid, 0)
-                    except ProcessLookupError:
-                        break
-                    time.sleep(0.2)
-                else:
-                    continue
-                break
+            _kill_group(pgid, timeout, self._wait)
             killed += 1
-        if os.path.exists(NAV_PGID_FILE):
-            os.remove(NAV_PGID_FILE)
         self._node.grid = None
         time.sleep(1.0)
         return killed
@@ -112,14 +144,11 @@ class Nav:
                 'pose is still moving; refusing to build a costmap around it. '
                 'Wait for the robot to settle after standing.')
         self.nav_stop()
-        proc = subprocess.Popen(
-            ['setsid', _repo('env', 'start_nav2_mapless.sh')],
-            stdout=open('/tmp/nav2.log', 'w'), stderr=subprocess.STDOUT,
-            stdin=subprocess.DEVNULL)
-        # setsid makes the child a session and process-group leader, so its
-        # pid is the pgid of the whole stack.
-        with open(NAV_PGID_FILE, 'w') as f:
-            f.write(str(proc.pid))
+        # setsid: a session and process group of its own, for nav_stop().
+        with open('/tmp/nav2.log', 'w') as log:
+            subprocess.Popen(['setsid', os.path.join(REPO, 'env', 'start_nav2_mapless.sh')],
+                             stdout=log, stderr=subprocess.STDOUT,
+                             stdin=subprocess.DEVNULL)
         if not self._wait(lambda: self.nav_running, timeout):
             raise Lite3Error('nav2 did not come up; see /tmp/nav2.log')
         if not self._wait(lambda: self._node.grid is not None, timeout):
@@ -144,17 +173,9 @@ class Nav:
         return g.data[cy * i.width + cx]
 
     def cost_ahead(self, out_to=3.5, step=0.25, settle=0):
-        """[(distance, cost), ...] along the robot's heading.
-
-        settle: re-read until two profiles a second apart agree, giving up
-        after this many tries (0 = read once, the old behaviour).
-
-        USE IT AFTER nav_start(). The costmap starts empty, and because
-        `track_unknown_space` is False every unobserved cell reads FREE (0) -
-        so an immediate profile says "clear" all the way out, you pick the
-        furthest cell, and goto() then refuses that same cell as LETHAL once
-        real observations land. The giveaway is cost 0 at distance 0, the
-        robot's own cell, which is never really free on a populated map.
+        """[(distance, cost), ...] along the robot's heading. settle: re-read until
+        two profiles a second apart agree, at most this many times. Use it after
+        nav_start(): the costmap starts empty and unseen cells read as free.
         """
         def profile():
             x, y, yaw = self.wait_pose()
@@ -172,23 +193,12 @@ class Nav:
         return prev if prev is not None else profile()
 
     def goto(self, forward, heading_deg=None, timeout=60.0, check=True):
-        """Navigate `forward` metres ahead, routing around obstacles.
+        """Navigate `forward` metres ahead, routing around obstacles. Returns the
+        action status (SUCCEEDED, CANCELED or ABORTED).
 
-        Nav2 only gets him to the SPOT (yaw_goal_tolerance is 3.14 in
-        lite_nav2_mapless.yaml): making Nav2 rotate him at the goal had the
-        legged base stepping and drifting round it instead of stopping. So by
-        default he stops facing however he arrived.
-
-        heading_deg, if given, is the final heading relative to the heading
-        at the call - positive is left, as turn_deg(). It is done after
-        arrival with turn(), which is odometry-accurate.
-
-        Returns the action status: 4 = SUCCEEDED, 6 = ABORTED.
-        Checks the goal cell first - NavFn cannot plan into a LETHAL cell and
-        the goal tolerance will not escape one.
-
-        For an in-place turn use turn_deg() - a goal at the robot's own
-        position gives the planner nothing to plan and aborts.
+        heading_deg: final heading relative to the one at the call (+ve left),
+        done with turn() after arrival; Nav2 itself only gets him to the spot.
+        Refuses a LETHAL goal cell, and a goal under 0.2 m (use turn_deg()).
         """
         from nav2_msgs.action import NavigateToPose
         from geometry_msgs.msg import PoseStamped
@@ -218,8 +228,9 @@ class Nav:
                     'cost_ahead(), not from scan(): the costmap knows about '
                     'obstacles the camera cannot currently see.' % c)
 
-        client = ActionClient(self._node, NavigateToPose, 'navigate_to_pose')
-        self._clients.append(client)
+        if self._nav_client is None:        # one for the life of the node, not one per goal
+            self._nav_client = ActionClient(self._node, NavigateToPose, 'navigate_to_pose')
+        client = self._nav_client
         if not client.wait_for_server(timeout_sec=10.0):
             raise Lite3Error('navigate_to_pose action server not available')
 
@@ -243,19 +254,29 @@ class Nav:
         self._goal_handle = handle
         result_fut = handle.get_result_async()
         try:
-            if not self._wait(result_fut.done, timeout):
+            # estop() from another thread drops the handle: Nav2 is being killed and
+            # the result may never come.
+            if not self._wait(lambda: result_fut.done() or self._goal_handle is None, timeout):
                 handle.cancel_goal_async()
                 self.halt()
                 raise Lite3Error('goal timed out after %.0fs; cancelled' % timeout)
-        except KeyboardInterrupt:
-            # estop() has already run from the signal handler; just propagate.
-            raise
         finally:
             self._goal_handle = None
-        status = result_fut.result().status
-        if status == 4 and heading_deg is not None:
-            err = gyaw - self.wait_pose()[2]
-            err = math.atan2(math.sin(err), math.cos(err))
+        status = result_fut.result().status if result_fut.done() else CANCELED
+        if status != SUCCEEDED:
+            self.halt()                     # whoever ended it, he ends stopped
+        if status == SUCCEEDED and heading_deg is not None:
+            err = wrap(gyaw - self.wait_pose()[2])
             if abs(err) > math.radians(5):
                 self.turn(err)
         return status
+
+    def goto_cancel(self):
+        """Ask Nav2 to drop the goal goto() is waiting on, from another
+        thread; goto() then returns CANCELED. True if there was one. Nav2
+        itself stays up - estop() is the one that kills it."""
+        handle = self._goal_handle
+        if handle is None:
+            return False
+        handle.cancel_goal_async()
+        return True

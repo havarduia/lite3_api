@@ -10,49 +10,33 @@
     python3 ~/robot/bin/tour.py --finale "roast the person in front of you" "goto 2.8"
 
 Steps (comma separated, or one per line with --interactive):
-    walk <m>            straight line, blind to routing, stops for obstacles
+    walk <m>            straight line, stops for obstacles within --stop
     turn <deg>          in place, +ve = left
-    goto <m> [<deg>]    Nav2 goal <m> ahead of where he faces now, then turn
-                        <deg> (+ve = left). Plans around obstacles. If that
-                        spot is inside an obstacle, goes to the free distance
-                        CLOSEST to <m> on that line instead, so he still moves.
+    goto <m> [<deg>]    Nav2 goal <m> ahead, then turn <deg>. Routes around
+                        obstacles; if the spot itself is blocked, goes to the
+                        closest free distance on that line
     approach <m>        Nav2 toward <m> ahead, stopping short of the FIRST
-                        obstacle on that line.
-    person              turn to and walk up to the nearest PERSON the camera
-                        sees (the robot's built-in tracker, see person.py),
-                        stopping at --stop.
-    follow <s>          follow that person for <s> seconds, holding --stop
-                        from them; every --talk-every seconds he stops and
-                        says what he sees (line prepared in the background just
-                        before, so he speaks at once). Ends if he loses them.
+                        obstacle on that line
+    person              walk up to the nearest person, stopping at --stop
+    follow <s>          follow that person for <s> seconds, stopping every
+                        --talk-every seconds to talk
 
-Movement is lite3.py's: the robot stands first, walk() stops for obstacles
-within --stop metres using the depth camera (so realsense_ros2.service must be
-running; --blind walks without that guard), Ctrl-C is an e-stop (it also kills
-Nav2), and it sits again at the end. If any step is a goto - or with
---interactive - mapless Nav2 is started after standing (it needs the pose
-settled first) and stopped before sitting. It sends its own controller
-heartbeat by default, so no handheld is needed - which also means Ctrl-C and
-the power switch are the only e-stops. --handheld uses the real controller.
-
-A step that fails (goal in an obstacle, planner abort, obstacle at the start)
-is reported and skipped; the API has already halted the robot by then.
-
-He only talks while STANDING STILL - the motors are too loud to hear him
-while walking: after each step he stops, looks (front camera -> Gemini Live ->
-Piper) and comments, then the next step starts. With --finale the last pause
-is the finale instead. A failed look is just printed and skipped.
+He stands first and sits at the end, talks only while standing still, and
+skips a step that fails. Without --handheld it sends its own heartbeat, so
+Ctrl-C (an e-stop) and the power switch are the only stops. More in
+README.md section 10.1.
 """
 import argparse
 import contextlib
-import math
+import os
 import sys
 import threading
 import time
 
-import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from robot.talk import Talker
+from robot.nav import LETHAL, dist, goal_ahead, status_text
+from robot.protocol import Lite3Error
+from robot.talk import PERSONA, Talker
 
 PAUSED = ('You just stopped for a moment during your walk. In one or two short '
           'sentences, say what you see ahead of you and what you think of it. Do '
@@ -68,19 +52,17 @@ PREP_CONTEXT = ('(You are still walking up to them and will say this the moment 
                 'there.) ')
 DONE = ('You just finished your walk; you covered %.1f metres in total. '
         'Say one short sentence about it.')
-NAV_STATUS = {4: 'arrived', 5: 'cancelled', 6: 'aborted - no path'}
-# Plannable costmap cost: below 99 (inscribed/LETHAL), as goto() itself
-# checks. 50 was tried first and wrongly refused open floor between two tables,
-# whose inflation spreads 50-90 over the whole gap.
-FREE_ENOUGH = 99
 APPROACH_MARGIN = 0.2  # stop this far short of the last free cell
 MIN_GOAL = 0.5         # xy_goal_tolerance is 0.25: a nearer goal "arrives" at once and he only turns
+STEPS = 'walk <m> | turn <deg> | goto <m> [<deg>] | approach <m> | person | follow <s>'
 
 
-def settled_profile(bot, out_to, tries=10):
-    """cost_ahead() once it stops changing. Same call as before; the waiting
-    now lives in Lite3.cost_ahead(settle=...) so shake.py shares it."""
-    return bot.cost_ahead(out_to=out_to, step=0.1, settle=tries)
+def settled_profile(bot, out_to):
+    """cost_ahead() once it stops changing, printed every 0.3 m."""
+    prof = bot.cost_ahead(out_to=out_to, step=0.1, settle=10)
+    print('\n[costmap ahead: %s]' % ' '.join(
+        '%.1f:%s' % (d, '?' if c is None else c) for d, c in prof[::3]))
+    return prof
 
 
 def parse_step(step):
@@ -89,9 +71,7 @@ def parse_step(step):
     nargs = {'walk': (1,), 'turn': (1,), 'goto': (1, 2), 'approach': (1,),
              'person': (0,), 'follow': (1,)}
     if verb not in nargs or len(args) not in nargs[verb]:
-        raise ValueError('bad step %r: use "walk <m>", "turn <deg>", '
-                         '"goto <m> [<deg>]", "approach <m>", "person" or '
-                         '"follow <s>"' % step)
+        raise ValueError('bad step %r: use  %s' % (step, STEPS))
     return verb, [float(x) for x in args]
 
 
@@ -104,10 +84,7 @@ def parse_route(text):
 
 class Odometer(threading.Thread):
     """Path length walked, sampled at 2 Hz, so the closing line is true.
-
-    Summing start-to-end per step undercounted a 14 m follow as 7.2 m (and
-    before any counting he announced "five meters" after moving 0.09 m).
-    Steps under 2 cm are ignored, so standing-still odometry noise doesn't add up.
+    Steps under 2 cm are ignored: standing-still odometry noise adds up.
     """
 
     def __init__(self, bot):
@@ -130,28 +107,30 @@ class Odometer(threading.Thread):
         p = self.bot.pose
         if p is None:
             return
-        d = math.hypot(p[0] - self.last[0], p[1] - self.last[1])
+        d = dist(self.last, p)
         if d >= 0.02:
             self.total += d
             self.last = p[:2]
 
 
+def aloud(talker, fn, text):
+    """fn(text) - the talker's look, say or ask - printed as he speaks it."""
+    print('\n%s:' % talker.name, end=' ', flush=True)
+    fn(text, on_sentence=lambda s: print(s, end=' ', flush=True))
+    print(flush=True)
+
+
 def comment(talker, prompt):
     """Look and speak, blocking - call it only while the robot stands still."""
     try:
-        print('\n%s:' % talker.name, end=' ', flush=True)
-        talker.look(prompt, on_sentence=lambda s: print(s, end=' ', flush=True))
-        print(flush=True)
+        aloud(talker, talker.look, prompt)
     except Exception as e:          # never let a look take down the walk
         print('\n[look failed: %s]' % e, flush=True)
 
 
 class Prepared(threading.Thread):
-    """The finale's line, written in the background while he is still walking.
-
-    Frame grab + Gemini take ~3-4 s; done during the last metre of a person
-    approach, he can speak the moment he arrives. result is the text, or None
-    if it failed (the finale is then done live, the slow way).
+    """A line written in the background while he is still walking (frame grab
+    + Gemini take ~3-4 s). result is the text, or None if it failed.
     """
 
     def __init__(self, talker, prompt):
@@ -184,22 +163,43 @@ def follow_and_talk(bot, a, det, talker, seconds):
         if prep.ident is not None:            # the timer did start it
             prep.join(timeout=15)
         if prep.result:
-            print('%s:' % talker.name, end=' ', flush=True)
-            talker.say(prep.result, on_sentence=lambda s: print(s, end=' ', flush=True))
-            print(flush=True)
+            aloud(talker, talker.say, prep.result)
         else:
             comment(talker, FOLLOWING)
         if r['reason'] != 'time limit':       # lost them, or no depth: stop
             break
 
 
+def goto_step(bot, want, *heading):
+    """goto <m> [<deg>]: a Nav2 goal <m> ahead, or at the free distance closest
+    to that if the spot itself is inside an obstacle."""
+    prof = settled_profile(bot, want + 1.5)
+    if not any(abs(d - want) < 0.05 and c is not None and c < LETHAL
+               for d, c in prof):
+        # Nearest free distance on the line, ties to the shorter one.
+        # Beyond an obstacle is allowed: Nav2 routes around it.
+        free = [d for d, c in prof
+                if d >= MIN_GOAL and c is not None and c < LETHAL]
+        if not free:
+            raise Lite3Error('nothing free between %.1f and %.1f m ahead'
+                             % (MIN_GOAL, want + 1.5))
+        closest = min(free, key=lambda d: (abs(d - want), d))
+        print('\n[goto %.1f m is inside an obstacle; using %.1f m, the '
+              'closest free distance]' % (want, closest))
+        want = closest
+    start = bot.wait_pose()
+    status = bot.goto(want, *heading)
+    there = bot.wait_pose()
+    time.sleep(2.0)
+    print('\n[goto %.1f m: %s - moved %.2f m, then drifted %.2f m in 2 s]' % (
+        want, status_text(status), dist(start, there), dist(there, bot.wait_pose())))
+
+
 def run_step(bot, a, verb, args, det=None, near=None, talker=None):
-    from robot.lite3 import Lite3Error
     try:
         if verb == 'person':
             from robot import person
-            if not det.ready.is_set():
-                det.ready.wait(6)
+            det.ready.wait(6)
             r = person.approach(bot, det, stop_distance=a.stop, speed=a.speed,
                                 near=near)
             print('\n[person: moved %.2f m, %s]' % (r['moved'], r['reason']))
@@ -216,55 +216,22 @@ def run_step(bot, a, verb, args, det=None, near=None, talker=None):
             print('\n[turned %+.0f deg]' % args[0])
         elif verb == 'approach':
             prof = settled_profile(bot, args[0])
-            print('\n[costmap ahead: %s]' % ' '.join(
-                '%.1f:%s' % (d, '?' if c is None else c) for d, c in prof[::3]))
-            # Walk the line outwards and stop at the first cell that is not
-            # free enough: going to a free cell BEHIND an obstacle would
-            # route around it, i.e. past the thing being approached.
-            goal = None
-            for d, c in prof:
-                if c is None or c >= FREE_ENOUGH:
-                    break
-                goal = d
-            if goal is None or goal - APPROACH_MARGIN < MIN_GOAL:
+            # Short of the FIRST obstacle on the line: a free cell BEHIND it
+            # would be routed to around it, i.e. past the thing being
+            # approached.
+            goal = goal_ahead(prof, APPROACH_MARGIN, MIN_GOAL)
+            if goal is None:
                 raise Lite3Error('obstacle within 0.5 m ahead, nowhere to approach to')
-            goal -= APPROACH_MARGIN
             print('[approach: goal %.1f m ahead]' % goal)
-            status = bot.goto(goal)
-            print('\n[approach %.1f m: %s]' % (goal, NAV_STATUS.get(status, 'status %s' % status)))
+            print('\n[approach %.1f m: %s]' % (goal, status_text(bot.goto(goal))))
         else:
-            want = args[0]
-            prof = settled_profile(bot, want + 1.5)
-            print('\n[costmap ahead: %s]' % ' '.join(
-                '%.1f:%s' % (d, '?' if c is None else c) for d, c in prof[::3]))
-            if not any(abs(d - want) < 0.05 and c is not None and c < FREE_ENOUGH
-                       for d, c in prof):
-                # Nearest free distance on the line, ties to the shorter one.
-                # Beyond an obstacle is allowed: Nav2 routes around it.
-                free = [d for d, c in prof
-                        if d >= MIN_GOAL and c is not None and c < FREE_ENOUGH]
-                if not free:
-                    raise Lite3Error('nothing free between %.1f and %.1f m ahead'
-                                     % (MIN_GOAL, want + 1.5))
-                near = min(free, key=lambda d: (abs(d - want), d))
-                print('\n[goto %.1f m is inside an obstacle; using %.1f m, the '
-                      'closest free distance]' % (want, near))
-                want = near
-            x0, y0, _ = bot.wait_pose()
-            status = bot.goto(want, *args[1:])
-            x1, y1, _ = bot.wait_pose()
-            time.sleep(2.0)
-            x2, y2, _ = bot.wait_pose()
-            print('\n[goto %.1f m: %s - moved %.2f m, then drifted %.2f m in 2 s]' % (
-                want, NAV_STATUS.get(status, 'status %s' % status),
-                math.hypot(x1 - x0, y1 - y0), math.hypot(x2 - x1, y2 - y1)))
+            goto_step(bot, *args)
     except Lite3Error as e:
         print('\n[%s %s skipped: %s]' % (verb, ' '.join('%g' % x for x in args), e))
 
 
 def steps_from_stdin():
-    print('Steps: walk <m> | turn <deg> | goto <m> [<deg>] | approach <m> | '
-          'person | follow <s>. Ctrl-D to finish.')
+    print('Steps: %s. Ctrl-D to finish.' % STEPS)
     while True:
         try:
             line = input('step> ').strip()
@@ -275,6 +242,52 @@ def steps_from_stdin():
                 yield parse_step(line)
             except ValueError as e:
                 print(e)
+
+
+def start_nav(bot):
+    # Standing makes leg odometry jump; nav_start() refuses until the pose has
+    # settled, so give it a moment first.
+    bot._wait(bot.pose_settled, 15, 0.5)
+    print('[starting Nav2...]', flush=True)
+    bot.nav_start()
+    print('[Nav2 up]', flush=True)
+
+
+def run_route(bot, a, route, det, talker, track):
+    """Every step of the route (typed ones if it is None), with a comment after
+    each: a step ends halted, so after it is a quiet moment to talk. On a
+    fixed route the last pause is left for the finale; returns its line being
+    Prepared, if that was started."""
+    prep = None
+    for i, (verb, args) in enumerate(steps_from_stdin() if route is None else route):
+        last = route is not None and i == len(route) - 1
+        near = None
+        if a.finale and last and verb == 'person' and not a.look_up:
+            # Write the finale during the last metre so it is ready on arrival. Not
+            # with --look-up: that frame is grabbed before the tilt and shows knees.
+            prep = Prepared(talker, PREP_CONTEXT + a.finale)
+            near = prep.start
+        run_step(bot, a, verb, args, det, near, talker)
+        track.sample()
+        if verb != 'follow' and not (last and a.finale):    # follow talks as it goes
+            comment(talker, PAUSED)
+    return prep
+
+
+def finale(bot, a, talker, prep):
+    """Answer --finale, tilted up at the person: the Prepared line if there is
+    one, otherwise looking now."""
+    if prep and prep.is_alive():
+        prep.join(timeout=15)
+    ready = prep.result if prep else None
+    with (bot.tilt(a.look_up, settle=0.3) if a.look_up
+          else contextlib.nullcontext()):
+        if ready:
+            aloud(talker, talker.say, ready)
+        else:
+            # Short settle above: look() spends ~2 s grabbing a frame anyway,
+            # and by then he is tilted.
+            comment(talker, a.finale)
 
 
 def main():
@@ -319,7 +332,7 @@ def main():
         det = person.PersonDetector()
         det.start()
 
-    talker = Talker(**{k: v for k, v in (('voice', a.voice), ('persona', a.persona)) if v})
+    talker = Talker(voice=a.voice, persona=a.persona or PERSONA)
     if talker.live:
         # Connect to Gemini while he stands up and walks, not when he has
         # to speak.
@@ -329,82 +342,24 @@ def main():
             comment(talker, PAUSED)
             return 0
         from robot.lite3 import Lite3
-        with Lite3() as bot:
+        # upright(): arm, stand, and on the way out sit FIRST; close() then
+        # disarms SECOND.
+        with Lite3() as bot, bot.upright(heartbeat=a.heartbeat):
             track = Odometer(bot)
-            if a.heartbeat:
-                bot.heartbeat_start()
             try:
-                # No sleep needed here. From 8 the heartbeat auto-arms and
-                # wait_ready() blocks out the ~2 s handover; from a cold-boot
-                # 98 nothing arms until something commands him, so it returns
-                # at once - and stand() re-sends the toggle that arming eats.
-                if a.heartbeat and not bot.wait_ready():
-                    raise SystemExit('interlock never came up')
-                bot.stand()
                 if use_nav:
-                    # Standing makes leg odometry jump; nav_start() refuses
-                    # until the pose has settled, so give it a moment first.
-                    deadline = time.time() + 15
-                    while not bot.pose_settled() and time.time() < deadline:
-                        time.sleep(0.5)
-                    print('[starting Nav2...]', flush=True)
-                    bot.nav_start()
-                    print('[Nav2 up]', flush=True)
+                    start_nav(bot)
                 track.reset()
-                prep = None
-                # Every step ends halted, so after it is a quiet moment to
-                # talk. On a fixed route the last pause is the finale's.
-                if a.interactive:
-                    for verb, args in steps_from_stdin():
-                        run_step(bot, a, verb, args, det, talker=talker)
-                        track.sample()
-                        if verb != 'follow':          # follow talks as it goes
-                            comment(talker, PAUSED)
-                else:
-                    for i, (verb, args) in enumerate(route):
-                        near = None
-                        if (a.finale and i == len(route) - 1 and verb == 'person'
-                                and not a.look_up):
-                            # Write the finale during the last metre so it can
-                            # be spoken on arrival. Only when he is NOT tilting
-                            # up: that frame is grabbed mid-walk, before the
-                            # tilt, so he would describe knees and shoes. With
-                            # --look-up the finale is done live after tilting,
-                            # which costs ~3 s of silence but sees the person.
-                            prep = Prepared(talker, PREP_CONTEXT + a.finale)
-                            near = prep.start
-                        run_step(bot, a, verb, args, det, near, talker)
-                        track.sample()
-                        if verb != 'follow' and (i < len(route) - 1 or not a.finale):
-                            comment(talker, PAUSED)
+                prep = run_route(bot, a, route, det, talker, track)
                 if a.finale:
-                    if prep and prep.is_alive():
-                        prep.join(timeout=15)
-                    ready = prep.result if prep else None
-                    with (bot.tilt(a.look_up, settle=0.3) if a.look_up
-                          else contextlib.nullcontext()):
-                        if ready:
-                            print('\n%s:' % talker.name, end=' ', flush=True)
-                            talker.say(ready, on_sentence=lambda s: print(s, end=' ', flush=True))
-                            print(flush=True)
-                        else:
-                            # Short settle above: look() spends ~2 s grabbing
-                            # a frame anyway, and by then he is tilted.
-                            comment(talker, a.finale)
+                    finale(bot, a, talker, prep)
             finally:
                 bot.halt()
-                try:
-                    if use_nav:
-                        bot.nav_stop()
-                    bot.sit()               # sit FIRST ...
-                finally:
-                    if a.heartbeat:
-                        bot.heartbeat_stop()    # ... disarm SECOND
+                if use_nav:
+                    bot.nav_stop()
         if a.finale:
             return 0
-        print('\n%s:' % talker.name, end=' ', flush=True)
-        talker.ask(DONE % track.total, on_sentence=lambda s: print(s, end=' ', flush=True))
-        print()
+        aloud(talker, talker.ask, DONE % track.total)
         return 0
     finally:
         if det:

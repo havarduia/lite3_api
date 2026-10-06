@@ -1,17 +1,18 @@
-import traceback
-import os, sys
+import os
+import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from robot.lite3 import Lite3, Lite3Error
+from robot.lite3 import Lite3
+from robot.nav import goal_ahead, status_text
 
 results = []
 def step(name, fn):
     try:
         r = fn()
-        results.append((name, 'OK', r))
+        results.append((name, 'OK'))
         print('[OK]   %-16s %s' % (name, r))
         return r
     except Exception as e:
-        results.append((name, 'FAIL', str(e)))
+        results.append((name, 'FAIL'))
         print('[FAIL] %-16s %s' % (name, e))
         return None
 
@@ -24,7 +25,7 @@ with Lite3() as bot:
         bot.heartbeat_start()
         if not bot.wait_ready():
             raise SystemExit('interlock never came up - is transfer_ros2 running?')
-        step('stand', lambda: bot.stand())
+        step('stand', bot.stand)
         print('       status:', bot.status())
 
         clear = bot.clearance()
@@ -41,22 +42,20 @@ with Lite3() as bot:
         r = step('turn -90', lambda: bot.turn_deg(-90))
         if r: print('       turned %.1f deg' % r['turned_deg'])
 
-        step('nav_start', lambda: bot.nav_start())
+        step('nav_start', bot.nav_start)
         if bot.nav_running:
             profile = bot.cost_ahead(out_to=3.0, settle=10)
             print('       cost ahead:', [(round(d,2), c) for d, c in profile])
-            free = [d for d, c in profile if c is not None and c < 50 and d >= 0.75]
-            goal = max(free) - 0.25 if free else 0
-            if goal >= 0.5:
-                st = step('goto %.2fm' % goal, lambda: bot.goto(goal, timeout=90))
-                print('       action status %s (4=SUCCEEDED, 6=ABORTED)' % st)
+            goal = goal_ahead(profile)
+            if goal is not None:
+                step('goto %.2fm' % goal, lambda: status_text(bot.goto(goal, timeout=90)))
             else:
-                print('[SKIP] goto - no free cell beyond 0.75 m')
-            step('nav_stop', lambda: bot.nav_stop())
+                print('[SKIP] goto - under 0.75 m of free floor ahead')
+            step('nav_stop', bot.nav_stop)
     finally:
-        step('sit', lambda: bot.sit())
+        step('sit', bot.sit)
         print('end:', bot.status())
 
 print('\n==== SUMMARY ====')
-for n, s, _ in results:
+for n, s in results:
     print('  %-14s %s' % (n, s))

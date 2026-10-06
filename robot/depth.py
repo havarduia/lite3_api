@@ -6,17 +6,32 @@
 """
 import math
 import struct
+import time
 
 from .protocol import Lite3Error
 
-# --- camera mounting, from voa/launch/voa_launch.py -------------------------
-# base_link -> camera_link  xyz 0.25489 0 0.07249  rpy 0 0.34907 0
-# The 20 degree nose-down pitch is REAL. Assume the camera is level and the
-# floor reads as a wall across the whole view at ~0.54 m.
+# --- camera mounting, from voa/launch/voa_launch.py ---
+# The 20 degree nose-down pitch is real: ignore it and the floor reads as a wall.
 CAM_PITCH, CAM_X, CAM_Z = 0.34907, 0.25489, 0.07249
 STAND_HEIGHT = 0.33
 FLOOR_MARGIN, CEILING = 0.08, 0.60
 MIN_VALID, MAX_RANGE = 0.15, 4.0
+DEPTH_SAMPLE_S = 0.25   # scan() walks the whole cloud: 4 Hz, not every 50 ms control cycle
+
+
+def sampled(read, value=None):
+    """read() for a control loop: the returned function calls it at most every
+    DEPTH_SAMPLE_S and gives the last answer in between. With `value` (a
+    reading just taken) the first call is not due until DEPTH_SAMPLE_S from now."""
+    last = {'t': 0.0 if value is None else time.time(), 'v': value}
+
+    def get():
+        now = time.time()
+        if now - last['t'] >= DEPTH_SAMPLE_S:
+            last['t'], last['v'] = now, read()
+        return last['v']
+
+    return get
 
 
 class Depth:
@@ -32,15 +47,8 @@ class Depth:
         return self._node.cloud
 
     def scan(self, fov_deg=45, bin_deg=5):
-        """Nearest obstacle range per bearing bin, in base_link.
-
-        Returns [(bearing_deg, range_m or None), ...], bearing +ve = LEFT.
-        Applies the real 20 degree nose-down camera pitch and drops the floor
-        and anything above the robot's back.
-
-        Convert range to LATERAL offset (range * sin(bearing)) before judging
-        clearance: a wall reading 0.67 m at -10 deg is only 0.12 m off the
-        centreline, well inside the 0.225 m half-width.
+        """Nearest obstacle per bearing bin: [(bearing_deg, range_m or None), ...],
+        +ve = LEFT, in base_link, with the floor and anything above his back dropped.
         """
         m = self.wait_cloud()
         f = {fd.name: fd.offset for fd in m.fields}
@@ -79,11 +87,8 @@ class Depth:
                 for i, b in enumerate(bins)]
 
     def clearance(self, half_width=0.225, bins=None):
-        """Nearest obstacle directly in the robot's path, in metres.
-
-        Uses lateral offset, not raw range, so a wall off to one side does not
-        read as an obstacle ahead. inf means nothing in the way. Pass `bins`
-        from scan() to reuse one scan for several checks.
+        """Nearest obstacle in the robot's path, metres (inf = none). Judged by
+        lateral offset, so a wall to one side is not "ahead". `bins` reuses a scan().
         """
         near = float('inf')
         for bearing, r in (bins if bins is not None else self.scan()):

@@ -1,17 +1,8 @@
 """sonar_range - the two ultrasonic sensors as sensor_msgs/Range, for Nav2.
 
-Jetson2Motion publishes them as bare Float64 at ~160 Hz (front =
-/us_publisher/ultrasound_front, rear = /us_publisher/ultrasound_distance).
-The costmap's RangeSensorLayer needs Range messages in a frame it can
-transform, so this republishes them at 20 Hz on /sonar/front and
-/sonar/rear, with static TFs base_link -> sonar_front / sonar_rear.
-
-Started with Nav2 by env/start_nav2_mapless.sh, in the same process group,
-so nav_stop() takes it down too.
-
-Measured 2026-09-27/28 (tape and depth camera): readings are good to ~2 cm;
-0.28 is its MINIMUM ("something within ~0.3 m"); 4.5 (sometimes ~4.7) means
-no echo. A tilted surface can deflect the pulse and read far.
+Republishes Jetson2Motion's bare Float64 readings at 20 Hz on /sonar/front
+and /sonar/rear, with static TFs from base_link. Started with Nav2 by
+env/start_nav2_mapless.sh, in its process group. README.md section 6.2.
 
     python3 -m robot.sonar_range
 """
@@ -25,18 +16,10 @@ from sensor_msgs.msg import Range
 from std_msgs.msg import Float64
 from tf2_ros import StaticTransformBroadcaster
 
-# name: (input topic, x in base_link, yaw, max range). x from the
-# camera-sonar offset (front face ~0.23 m ahead of base_link); the rear is not
-# measured, so it is placed at the back of the body (nose is 0.274 m ahead,
-# body 0.61 m long).
-#
-# Max range: a reading at or past it goes out AS max, which the range layer
-# treats as "nothing there". The FRONT is cut to 0.8 m: its wide beam hears a
-# chair base 30 deg off to the side, and the layer spreads every mark over
-# the whole cone, so a far front echo becomes a wall across the aisle. The
-# depth camera covers that distance properly; the front sonar is kept for
-# what the camera misses up close (under ~0.6 m, glass). The REAR is the only
-# sensor behind him, so it keeps its full range.
+# name: (input topic, x in base_link, yaw, max range). A reading at or past
+# max goes out AS max, which the range layer reads as "nothing there". The
+# front is cut to 0.8 m: its wide beam turns a chair off to the side into a
+# wall across the aisle. The rear is the only sensor behind him.
 SONARS = {
     'front': ('/us_publisher/ultrasound_front', 0.23, 0.0, 0.8),
     'rear': ('/us_publisher/ultrasound_distance', -0.31, math.pi, 4.0),

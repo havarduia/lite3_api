@@ -2,29 +2,11 @@
 
     python3 -m robot.hmi            # then open http://lite3-perception:8080
 
-It binds to this computer's Tailscale address (and localhost) only, so
-nothing on eduroam or the robot's own Wi-Fi can reach it. For HTTPS, run
-`sudo tailscale serve --bg 8080` once and open https://lite3-perception.<tailnet>.ts.net
-
-Both cameras are shown over WebRTC from the motion computer's mediamtx,
-through udp_relay.py: the front camera is the robot's own H.264 stream
-(1280x720, 30 fps), the RealSense colour is put there by rs_stream.py, which
-runs only while a page shows that view. If WebRTC does not connect, the front
-camera falls back to MJPEG; the RealSense view has no fallback. It holds one Lite3 with the heartbeat
-running, so stop it before running any other script that drives the robot.
-
-Safety model:
-  - Driving is HOLD-TO-MOVE. The page sends the stick position ~10x/s while
-    it is held; if nothing arrives for DEADMAN_S (released, tab closed, Wi-Fi
-    gone) the drive loop halts. On top of that the robot's own ~1.5 s
-    velocity failsafe applies.
-  - Forward motion stops when the depth camera sees less than
-    FORWARD_STOP_M ahead; backward motion stops when the rear sonar reads less
-    than REAR_STOP_M. Turning in place is always allowed.
-  - E-STOP bypasses the command queue and runs Lite3.estop() at once (cancels
-    any Nav2 goal, halts, kills Nav2).
-  - A browser button is not a hardware stop. Keep the handheld at hand.
-  - On shutdown it sits him down before dropping the heartbeat.
+It holds one Lite3 with the heartbeat running, so stop it before running any
+other script that drives the robot. A browser button is not a hardware stop:
+keep the handheld at hand. The safety model (hold-to-move, the depth and
+sonar stops, E-STOP, what happens when the page goes away) and the camera
+plumbing are in README.md section 10.3.
 """
 import asyncio
 import json
@@ -41,12 +23,13 @@ from concurrent.futures import ThreadPoolExecutor
 from aiohttp import ClientSession, web, WSMsgType
 
 from . import protocol as P
-from .lite3 import Lite3
+from .depth import sampled
+from .lite3 import BATTERY_REFUSE, BATTERY_WARN, LYING, Lite3
+from .nav import REPO, clamp, status_text
 from .protocol import Lite3Error
 
 PORT = 8080
 STATIC = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'hmi_static')
-HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # for -m robot.x
 
 DEADMAN_S = 0.3        # drive halts this long after the last stick message
 FORWARD_STOP_M = 0.6   # camera clearance (from body centre), as walk()
@@ -54,6 +37,14 @@ REAR_STOP_M = 0.5      # rear sonar reading
 DRIVE_MAX_VX = 0.5     # m/s, the page's speed slider tops out here
 DRIVE_MAX_WZ = 0.8     # rad/s
 RS_LINGER_S = 10.0     # rs_stream.py keeps running this long after the last viewer
+GONE_S = 3.0           # no page for this long: a Go is cancelled. The page reconnects in 1.5 s
+LET_GO_S = 2.0         # Nav2 gets this long to act on that cancel before it is an E-STOP
+PING_S = 5.0           # a page that has gone silent is noticed within about 1.5 x this
+
+# What the page needs to know to draw and warn with the same numbers as here.
+LIMITS = {'vx': DRIVE_MAX_VX, 'wz': DRIVE_MAX_WZ, 'stop': FORWARD_STOP_M,
+          'rear': REAR_STOP_M, 'refuse': BATTERY_REFUSE, 'warn': BATTERY_WARN,
+          'lying': LYING, 'gone': GONE_S}
 
 # basic_state values seen on this robot (see project notes)
 BASIC = {1: 'lying, ready', 6: 'standing', 8: 'not armed', 9: 'arming',
@@ -96,9 +87,7 @@ class FrontCamera(threading.Thread):
                 time.sleep(0.5)
                 continue
             proc = subprocess.Popen(
-                ['ffmpeg', '-loglevel', 'error', '-rtsp_transport', 'tcp',
-                 '-i', P.CAMERA_URL, '-an', '-vf', 'scale=640:-2,fps=8',
-                 '-q:v', '7', '-f', 'mjpeg', '-'],
+                P.camera_mjpeg('-an', '-vf', 'scale=640:-2,fps=8', '-q:v', '7'),
                 stdout=subprocess.PIPE, stdin=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL)
             buf = b''
@@ -144,12 +133,15 @@ class Robot:
         self.persona = None
 
     # --- commands --------------------------------------------------------
+    def log(self, msg, level=None):
+        self.emit({'t': 'log', 'level': level, 'msg': msg})
+
     def warn(self, msg, every=3.0):
         """A warning, but at most once per `every` s: the drive pad sends 10
         messages a second, and each refusal used to log a line."""
         if time.time() - self._warned.get(msg, 0) >= every:
             self._warned[msg] = time.time()
-            self.emit({'t': 'log', 'level': 'warn', 'msg': msg})
+            self.log(msg, 'warn')
 
     def submit(self, name, fn, *args):
         if self.busy:
@@ -160,12 +152,12 @@ class Robot:
         self.work.submit(self._run, name, fn, *args)
 
     def _run(self, name, fn, *args):
-        self.emit({'t': 'log', 'msg': name + ' ...'})
+        self.log(name + ' ...')
         try:
             r = fn(*args)
-            self.emit({'t': 'log', 'msg': '%s: %s' % (name, self._fmt(r))})
+            self.log('%s: %s' % (name, self._fmt(r)))
         except Exception as e:                   # Lite3Error and the rest
-            self.emit({'t': 'log', 'level': 'error', 'msg': '%s failed: %s' % (name, e)})
+            self.log('%s failed: %s' % (name, e), 'error')
         finally:
             self.busy = None
 
@@ -182,27 +174,39 @@ class Robot:
         self.drive_cmd = (0.0, 0.0, 0.0)
         try:
             self.bot.estop()
-            self.emit({'t': 'log', 'level': 'error', 'msg': 'E-STOP: halted, Nav2 killed'})
+            self.log('E-STOP: halted, Nav2 killed', 'error')
         except Exception as e:
-            self.emit({'t': 'log', 'level': 'error', 'msg': 'E-STOP error: %s' % e})
+            self.log('E-STOP error: %s' % e, 'error')
+
+    def cancel(self, why='from the panel'):
+        """End a Go that is under way. Nav2 stays up, unlike E-STOP."""
+        going = self.bot.goto_cancel()
+        if going:
+            self.log('Go cancelled ' + why, 'warn')
+        return going
+
+    def abandoned(self):
+        """No page is open, so nobody can press E-STOP: a Go must not carry on
+        alone. (Driving stops by itself already, DEADMAN_S.)"""
+        if self.cancel('- no panel connected'):
+            time.sleep(LET_GO_S)
+            if self.bot.goto_cancel():          # still there: Nav2 has not let go
+                self.estop()
 
     def goto(self, metres, degrees):
         if not self.bot.nav_running:
-            self.emit({'t': 'log', 'msg': 'starting Nav2 first ...'})
+            self.log('starting Nav2 first ...')
             self.bot.nav_start()
             self.bot.cost_ahead(out_to=3.0, step=0.1, settle=10)
-        st = self.bot.goto(metres, heading_deg=degrees or None, timeout=90)
-        return {4: 'arrived', 5: 'canceled', 6: 'aborted'}.get(st, 'status %s' % st)
+        return status_text(self.bot.goto(metres, heading_deg=degrees or None, timeout=90))
 
     def service(self, which, on):
-        getattr(P, which)(on)
-        self.services[which] = getattr(P, which)()
+        self.services[which] = getattr(P, which)(on)
         return '%s %s' % (which, 'up' if self.services[which] else 'down')
 
     # --- hold-to-drive ---------------------------------------------------
     def drive(self, vx, wz):
-        vx = max(-DRIVE_MAX_VX, min(DRIVE_MAX_VX, float(vx)))
-        wz = max(-DRIVE_MAX_WZ, min(DRIVE_MAX_WZ, float(wz)))
+        vx, wz = clamp(float(vx), DRIVE_MAX_VX), clamp(float(wz), DRIVE_MAX_WZ)
         self.drive_cmd = (vx, wz, time.time())
         if self.driving or (vx == 0 and wz == 0):
             return
@@ -216,7 +220,7 @@ class Robot:
         self.submit('drive', self._drive_loop)
 
     def _drive_loop(self):
-        guard = {'t': 0.0, 'clear': float('inf')}
+        clearance = sampled(self.bot.clearance)
 
         def control():
             if self.estopped:
@@ -226,14 +230,12 @@ class Robot:
                 return 'released'
             self.blocked = None
             if vx > 0:
-                if time.time() - guard['t'] > 0.25:     # clearance walks the cloud
-                    guard['t'] = time.time()
-                    try:
-                        guard['clear'] = self.bot.clearance()
-                    except Lite3Error:
-                        return 'lost the depth stream'
-                if guard['clear'] <= FORWARD_STOP_M:
-                    self.blocked = 'obstacle %.2f m ahead' % guard['clear']
+                try:
+                    clear = clearance()
+                except Lite3Error:
+                    return 'lost the depth stream'
+                if clear <= FORWARD_STOP_M:
+                    self.blocked = 'obstacle %.2f m ahead' % clear
                     vx = 0.0
             elif vx < 0:
                 rear = self.bot.ultrasound[1]
@@ -254,10 +256,6 @@ class Robot:
 
     def _talk(self, kind, text, persona):
         try:
-            if kind == 'say':
-                self.bot.say(text)
-                self.emit({'t': 'said', 'who': 'robot', 'text': text})
-                return
             from .talk import Talker, PERSONA
             persona = persona or PERSONA
             if self.talker is None or self.persona != persona:
@@ -265,17 +263,17 @@ class Robot:
                     self.talker.close()
                 self.talker = Talker(persona=persona)
                 self.persona = persona
-            if kind == 'ask':
-                self.emit({'t': 'said', 'who': 'you', 'text': text})
-            else:
-                self.emit({'t': 'said', 'who': 'you', 'text': '(look) ' + (text or 'what do you see?')})
             said = lambda s: self.emit({'t': 'said', 'who': 'robot', 'text': s})
-            if kind == 'ask':
+            if kind == 'say':               # in the persona's voice, like its replies
+                self.talker.say(text, on_sentence=said)
+            elif kind == 'ask':
+                self.emit({'t': 'said', 'who': 'you', 'text': text})
                 self.talker.ask(text, on_sentence=said)
             else:
+                self.emit({'t': 'said', 'who': 'you', 'text': '(look) ' + (text or 'what do you see?')})
                 self.talker.look(text or None, on_sentence=said)
         except Exception as e:
-            self.emit({'t': 'log', 'level': 'error', 'msg': '%s failed: %s' % (kind, e)})
+            self.log('%s failed: %s' % (kind, e), 'error')
 
     # --- status ----------------------------------------------------------
     def status(self):
@@ -293,7 +291,7 @@ class Robot:
             'camera': self.services['camera'], 'voa': self.services['voa'],
             'busy': self.busy, 'driving': self.driving, 'blocked': self.blocked,
             'estopped': self.estopped, 'scan': self.scan,
-            'limits': {'vx': DRIVE_MAX_VX, 'wz': DRIVE_MAX_WZ},
+            'limits': LIMITS,
         }
 
     def poll_slow(self):
@@ -350,7 +348,7 @@ class Server:
         return web.FileResponse(os.path.join(STATIC, 'index.html'))
 
     async def ws(self, request):
-        ws = web.WebSocketResponse(heartbeat=5.0)
+        ws = web.WebSocketResponse(heartbeat=PING_S)
         await ws.prepare(request)
         self.pages.add(ws)
         try:
@@ -359,70 +357,84 @@ class Server:
             personas, persona = sorted(PERSONAS), PERSONA
         except Exception as e:                  # talking unavailable, driving is not
             personas, persona = [], None
-            self.emit({'t': 'log', 'level': 'warn', 'msg': 'talk unavailable: %s' % e})
+            self.robot.log('talk unavailable: %s' % e, 'warn')
         await ws.send_str(json.dumps({'t': 'hello', 'personas': personas,
                                       'persona': persona, 'log': self.log,
                                       'volume': talk.VOLUME if personas else 1.0}))
-        r = self.robot
         try:
             async for m in ws:
                 if m.type != WSMsgType.TEXT:
                     continue
-                c = json.loads(m.data)
-                k = c.get('cmd')
-                if k == 'estop':
-                    await self.loop.run_in_executor(None, r.estop)
-                elif k == 'drive':
-                    r.drive(c.get('vx', 0), c.get('wz', 0))
-                elif k == 'stand':
-                    r.submit('stand', r.bot.stand)
-                elif k == 'sit':
-                    r.submit('sit', r.bot.sit)
-                elif k == 'nav':
-                    r.submit('nav ' + ('start' if c.get('on') else 'stop'),
-                             r.bot.nav_start if c.get('on') else r.bot.nav_stop)
-                elif k == 'goto':
-                    r.submit('goto %.1f m' % float(c['m']), r.goto,
-                             float(c['m']), float(c.get('deg') or 0))
-                elif k in ('camera', 'voa'):
-                    r.submit('%s %s' % (k, 'on' if c.get('on') else 'off'),
-                             r.service, k, bool(c.get('on')))
-                elif k == 'watch' and c.get('cam') == 'realsense':
-                    (self.rs_pages.add if c.get('on') else self.rs_pages.discard)(ws)
-                    self.rs_update()
-                elif k == 'volume':
-                    from . import talk
-                    talk.VOLUME = min(1.0, max(0.0, float(c['v'])))
-                elif k in ('say', 'ask', 'look'):
-                    r.talk(k, (c.get('text') or '').strip(), c.get('persona'))
+                try:
+                    await self.command(ws, json.loads(m.data))
+                except (ValueError, TypeError, KeyError, AttributeError) as e:
+                    # e.g. an emptied number box. Not worth the connection:
+                    # losing it stops the drive and costs the page 1.5 s.
+                    self.robot.warn('ignored a malformed message: %r' % e)
         finally:
             self.pages.discard(ws)
             self.rs_pages.discard(ws)
             self.rs_update()
-            r.drive_cmd = (0.0, 0.0, 0.0)       # a closed page never drives
+            self.robot.drive_cmd = (0.0, 0.0, 0.0)  # a closed page never drives
+            if not self.pages:
+                self.loop.call_later(GONE_S, self.gone)
         return ws
 
-    def stream(self, frames):
-        async def handler(request):
-            resp = web.StreamResponse(headers={
-                'Content-Type': 'multipart/x-mixed-replace; boundary=frame',
-                'Cache-Control': 'no-cache'})
-            await resp.prepare(request)
-            frames.viewers += 1
-            seq = -1
-            try:
-                while True:
-                    jpeg, seq = await self.loop.run_in_executor(None, self._next, frames, seq)
-                    if jpeg is None:
-                        continue
-                    await resp.write(b'--frame\r\nContent-Type: image/jpeg\r\n'
-                                     b'Content-Length: %d\r\n\r\n' % len(jpeg) + jpeg + b'\r\n')
-            except (ConnectionResetError, RuntimeError, asyncio.CancelledError):
-                pass                             # the page went away
-            finally:
-                frames.viewers -= 1
-            return resp
-        return handler
+    async def command(self, ws, c):
+        r, k = self.robot, c.get('cmd')
+        if k == 'estop':
+            await self.loop.run_in_executor(None, r.estop)
+        elif k == 'cancel':
+            await self.loop.run_in_executor(None, r.cancel)
+        elif k == 'drive':
+            r.drive(c.get('vx', 0), c.get('wz', 0))
+        elif k == 'stand':
+            r.submit('stand', r.bot.stand)
+        elif k == 'sit':
+            r.submit('sit', r.bot.sit)
+        elif k == 'nav':
+            r.submit('nav ' + ('start' if c.get('on') else 'stop'),
+                     r.bot.nav_start if c.get('on') else r.bot.nav_stop)
+        elif k == 'goto':
+            r.submit('goto %.1f m' % float(c['m']), r.goto,
+                     float(c['m']), float(c.get('deg') or 0))
+        elif k in ('camera', 'voa'):
+            r.submit('%s %s' % (k, 'on' if c.get('on') else 'off'),
+                     r.service, k, bool(c.get('on')))
+        elif k == 'watch' and c.get('cam') == 'realsense':
+            (self.rs_pages.add if c.get('on') else self.rs_pages.discard)(ws)
+            self.rs_update()
+        elif k == 'volume':
+            from . import talk
+            talk.VOLUME = min(1.0, max(0.0, float(c['v'])))
+        elif k in ('say', 'ask', 'look'):
+            r.talk(k, (c.get('text') or '').strip(), c.get('persona'))
+
+    def gone(self):
+        if not self.pages:                      # nobody came back
+            self.loop.run_in_executor(None, self.robot.abandoned)
+
+    async def stream_front(self, request):
+        """The front camera as MJPEG, for a page whose WebRTC did not connect."""
+        frames = self.front
+        resp = web.StreamResponse(headers={
+            'Content-Type': 'multipart/x-mixed-replace; boundary=frame',
+            'Cache-Control': 'no-cache'})
+        await resp.prepare(request)
+        frames.viewers += 1
+        seq = -1
+        try:
+            while True:
+                jpeg, seq = await self.loop.run_in_executor(None, self._next, frames, seq)
+                if jpeg is None:
+                    continue
+                await resp.write(b'--frame\r\nContent-Type: image/jpeg\r\n'
+                                 b'Content-Length: %d\r\n\r\n' % len(jpeg) + jpeg + b'\r\n')
+        except (ConnectionResetError, RuntimeError, asyncio.CancelledError):
+            pass                             # the page went away
+        finally:
+            frames.viewers -= 1
+        return resp
 
     def rs_update(self):
         """Run rs_stream.py while some page shows the RealSense view (it costs
@@ -434,7 +446,7 @@ class Server:
                 self.rs_stop = None
             if self.rs_proc is None or self.rs_proc.poll() is not None:
                 self.rs_proc = subprocess.Popen(
-                    [sys.executable, '-m', 'robot.rs_stream'], cwd=HERE)
+                    [sys.executable, '-m', 'robot.rs_stream'], cwd=REPO)
         elif self.rs_proc and not self.rs_stop:
             self.rs_stop = self.loop.call_later(RS_LINGER_S, self.rs_kill)
 
@@ -488,7 +500,7 @@ class Server:
                     await self.loop.run_in_executor(None, self.robot.poll_slow)
                 await self._send_all(self.robot.status())
             except Exception as e:               # keep the status flowing
-                self.emit({'t': 'log', 'level': 'error', 'msg': 'status: %s' % e})
+                self.robot.log('status: %s' % e, 'error')
             n += 1
             await asyncio.sleep(0.5)
 
@@ -500,7 +512,7 @@ class Server:
         app = web.Application()
         app.router.add_get('/', self.index)
         app.router.add_get('/ws', self.ws)
-        app.router.add_get('/stream/front', self.stream(self.front))
+        app.router.add_get('/stream/front', self.stream_front)
         app.router.add_post('/whep/{cam}', self.whep)
         runner = web.AppRunner(app)
         self.loop.run_until_complete(runner.setup())
@@ -510,7 +522,7 @@ class Server:
         relay = subprocess.Popen(
             [sys.executable, '-m', 'robot.udp_relay', host, str(P.CAMERA_RTC_PORT),
              P.MOTION_IP, str(P.CAMERA_RTC_PORT)],
-            cwd=HERE)
+            cwd=REPO)
         self.loop.create_task(self.ticker())
         for sig in (signal.SIGINT, signal.SIGTERM):
             self.loop.add_signal_handler(sig, self.loop.stop)

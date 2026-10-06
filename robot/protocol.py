@@ -31,7 +31,7 @@ MOTION_IP = '192.168.1.120'          # 192.168.2.1 on the robot's own wifi
 MOTION_ADDR = (MOTION_IP, 43893)     # jy_exe: every motion command
 TRACKER_ADDR = (MOTION_IP, 43901)    # track service, JSON payloads
 # jetson2app on THIS (perception) computer: the app/handheld AI switch
-APP_ADDR = ('127.0.0.1', 43899)
+# APP_ADDR = ('127.0.0.1', 43899)
 CAMERA_URL = 'rtsp://%s:8554/test' % MOTION_IP
 # The same mediamtx also serves that stream as WebRTC: signalling (WHEP) over
 # HTTP, then all the video over one UDP port.
@@ -52,19 +52,14 @@ MODE_AUTO = 0x21010C03      # needed before any velocity
 MODE_MANUAL = 0x21010C02    # the handheld sends this when a stick moves
 ZERO = 0x31010C05           # reset joints to zero / init pose
 HEARTBEAT = 0x21040001      # handheld keepalive, >= 2 Hz
-# Posture ("twist body") mode, decoded from the phone app 2026-09-18. In it
-# the app's sticks set the body attitude in place, values -32767..32767 sent
-# at 10 Hz, 0 = level. STICK_PITCH full scale is ~14 deg and NEGATIVE is NOSE
-# UP (checked with the camera, not just the IMU sign). STICK_ROLL is ~+-3 deg.
-# Outside posture mode the same two codes are the move-mode vx / vy sticks.
+# Posture ("twist body") mode: the sticks set the body attitude,
+# -32767..32767 at 10 Hz. NEGATIVE pitch is NOSE UP, full scale ~14 deg.
 POSTURE_ENTER, POSTURE_EXIT = 0x21010D05, 0x21010D06
-STICK_PITCH, STICK_ROLL = 0x21010130, 0x21010131
+STICK_PITCH = 0x21010130
+# STICK_ROLL = 0x21010131
 
-# Built-in tricks: name -> (code, posture it starts from). hello/dance/twist
-# are OFFICIAL (Lite3_LLM); the rest COMMUNITY. dance VERIFIED 2026-09-24
-# (standing, 3 sends at 1 Hz); the others are not yet run on THIS robot.
-# backflip (0x21010502) is left out on purpose: the Pro manual does not
-# list it.
+# Built-in tricks: name -> (code, posture it starts from). Only dance is
+# verified on this robot; backflip (0x21010502) is left out on purpose.
 ACTIONS = {
     'hello':      (0x21010506, 'lie'),
     'dance':      (0x2101030C, 'stand'),
@@ -84,20 +79,19 @@ ACTIONS = {
 #   telemetry to UDP 43897: 0x0901 robot state, 0x0902 joints, 0x0905
 #       handheld sticks. transfer_ros2 owns that port and republishes it.
 
-# --- app port (APP_ADDR), simple frames ---------------------------------------
-# The handheld/app AI switch: jetson2app (root) starts or stops realsense_ros2
-# AND voa_ros2 together. Only works while the robot's IMU topic is up. We no
-# longer use it - camera()/voa() below drive the two services separately.
-AI_SERVICES = 0x21012109    # value 0x40 start, 0x00 stop
-AI_QUERY = 0x2101210D       # reply: same code, value 0x11 up / 0x10 down
-CAMERA_ON, CAMERA_OFF = 0x40, 0x00
+# --- app port (APP_ADDR): the app's AI switch, no longer used ---
+# AI_SERVICES = 0x21012109    # value 0x40 start, 0x00 stop
+# AI_QUERY = 0x2101210D       # reply: same code, value 0x11 up / 0x10 down
+# CAMERA_ON, CAMERA_OFF = 0x40, 0x00
 
 # --- tracker port, 12 B header <code, json_len, 1> then JSON -----------------
-TRK_VIDEO = 0x21013301      # {"enabled":0|1}  video streaming
+# Replies come back to the sender's own address and port. The commented ones
+# are decoded but not used.
+# TRK_VIDEO = 0x21013301      # {"enabled":0|1}  video streaming
 TRK_DETECT = 0x21013302     # {"enabled":0|1}  person detection
-TRK_FOLLOW = 0x21013303     # {"targetID":n,"enabled":0|1}  built-in follow
+# TRK_FOLLOW = 0x21013303     # {"targetID":n,"enabled":0|1}  built-in follow
 TRK_TARGETS = 0x21013304    # <- {"targets":[{"id","following","bbox"}]} ~27/s
-TRK_QUERY = 0x21013305      # {} -> 0x21013306 {"modes":{...}}
+# TRK_QUERY = 0x21013305      # {} -> 0x21013306 {"modes":{...}}
 
 
 def send(code, value=0):
@@ -107,6 +101,13 @@ def send(code, value=0):
         s.sendto(struct.pack('<IiI', code, int(value), 0), MOTION_ADDR)
     finally:
         s.close()
+
+
+def camera_mjpeg(*args, url=CAMERA_URL):
+    """ffmpeg command line: the front camera as JPEGs on stdout. args are the
+    output options (-vf, -q:v, ...)."""
+    return ['ffmpeg', '-loglevel', 'error', '-rtsp_transport', 'tcp',
+            '-i', url, *args, '-f', 'mjpeg', '-']
 
 
 def _service(unit, on):

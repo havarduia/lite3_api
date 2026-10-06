@@ -1,21 +1,7 @@
-"""The D435i on realsense-ros 4.58.3 + librealsense 2.58.4, patched kernel.
-
-Drop-in for the vendor's dr_camera_launch.py (realsense-ros 3.2.3 fork): same
-topic names (/camera/depth/color/points, /camera/color/image_raw, ...), same
-frames (camera_link, camera_depth_optical_frame), and the vendor's two changes
-to the cloud, which voa_ros2, Nav2 and depth.py all depend on:
-
-  steady_stamp     the cloud is stamped with the steady clock, like every
-                   other robot topic - otherwise TF lookups against it fail
-  voxel_leaf_size  thinned to one point per 5 cm cube (vendor filter_voxel)
-
-Both are our patch to pointcloud_filter.cpp in ~/realsense_ros4_ws; stock
-4.58.3 ignores them.
-
-Unlike the vendor launch this also streams colour and the camera's own IMU:
-with the patched uvcvideo, depth + colour at 30 fps no longer takes the USB
-bus down (verified 2026-09-24). Colour stays 424x240 - there is no compressed
-transport, and raw 640x480 at 30 is ~27 MB/s, hopeless over wifi.
+"""The D435i on realsense-ros 4.58.3: a drop-in for the vendor's
+dr_camera_launch.py with the same topics and frames, plus colour and the
+camera's IMU. steady_stamp and voxel_leaf_size are our patch to the driver.
+README.md section 11.3.
 
     ros2 launch ~/robot/env/camera.launch.py
 """
