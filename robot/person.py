@@ -23,8 +23,11 @@ WIDTH, HEIGHT = 1280.0, 720.0       # bbox pixel space
 FRESH = 0.7                 # s: a detection older than this is not trusted
 GIVE_UP = 5.0               # s without the person before approach() stops
 CENTRED = 0.12              # |x - 0.5| under which he may walk forward
-K_TURN = 2.4                # rad/s per unit of x offset
-MAX_TURN = 0.6              # rad/s
+K_TURN = 4.0                # rad/s per unit of x offset
+MAX_TURN = 0.8              # rad/s, lite3's own ceiling
+SEARCH_TURN = 0.6           # rad/s toward the side a person left the picture on: half a turn in GIVE_UP
+AIM = 0.05                  # |x - 0.5| he calls facing them: no turning for less
+RESUME = 0.25               # m past the stop distance before he walks again, once stopped there
 SLOW_ZONE = 0.8             # m before the stop distance over which he slows down
 MIN_SPEED = 0.12            # m/s at the end of that ramp
 
@@ -101,11 +104,13 @@ def _controller(bot, det, stop_distance, speed, hold, near=None, near_distance=1
                 abort=None):
     """The per-cycle control behind approach() and follow(): turn to keep the
     person centred (never into something inside TURN_SWEEP), walk while they
-    are centred, slow over the last SLOW_ZONE metres. hold=True stays at the
+    are centred, slow over the last SLOW_ZONE metres, and turn after a person
+    who left the picture to one side. hold=True stays at the
     stop distance instead of ending there. abort() returning a reason ends it.
     """
     from .lite3 import TURN_SWEEP         # here, not on top: lite3 needs ROS
-    state = {'lost_since': None, 'near_done': near is None}
+    state = {'lost_since': None, 'near_done': near is None, 'off': 0.0,
+             'arrived': False, 'aimed': False}
 
     def read():
         bins = bot.scan()                       # one scan for both checks
@@ -120,29 +125,39 @@ def _controller(bot, det, stop_distance, speed, hold, near=None, near_distance=1
             return why
         if det.error:
             return 'detector failed: %s' % det.error
+        try:
+            clear, (left, right) = view()
+        except Lite3Error:
+            return 'lost the depth stream - stopped rather than walking blind'
+
+        def swing(wz):
+            """wz, unless it would swing the body into something on that side."""
+            return 0.0 if (wz > 0 and left < TURN_SWEEP) or (wz < 0 and right < TURN_SWEEP) else wz
+
         p = det.person()
         if p is None:
             state['lost_since'] = state['lost_since'] or now
             if now - state['lost_since'] > GIVE_UP:
                 return 'lost the person for %.0f s' % GIVE_UP
-            return 0.0, 0.0
+            # Last seen off to one side: they walked out of the picture that
+            # way, so look that way. Lost near the middle, wait where he is.
+            last = state['off']
+            return 0.0, swing(0.0 if abs(last) < CENTRED else -SEARCH_TURN if last > 0 else SEARCH_TURN)
         state['lost_since'] = None
-        try:
-            clear, (left, right) = view()
-        except Lite3Error:
-            return 'lost the depth stream - stopped rather than walking blind'
         if not state['near_done'] and clear <= stop_distance + near_distance:
             state['near_done'] = True
             near()
-        off = p['x'] - 0.5                        # +ve = person to the right
-        wz = clamp(-K_TURN * off, MAX_TURN)
-        # Don't swing the body into something on the side he'd turn toward.
-        if (wz > 0 and left < TURN_SWEEP) or (wz < 0 and right < TURN_SWEEP):
-            wz = 0.0
-        if clear <= stop_distance:
+        off = state['off'] = p['x'] - 0.5         # +ve = person to the right
+        wz = swing(clamp(-K_TURN * off, MAX_TURN)) if abs(off) >= AIM else 0.0
+        if clear <= stop_distance + (RESUME if state['arrived'] else 0.0):
             if not hold:
                 return 'reached: %.2f m from body centre' % clear
-            return 0.0, wz
+            # In front of them he stands still: any velocity at all keeps him
+            # stepping, so both leaving again and re-aiming need a real error.
+            state['arrived'] = True
+            state['aimed'] = abs(off) < (CENTRED if state['aimed'] else AIM)
+            return 0.0, 0.0 if state['aimed'] else wz
+        state['arrived'] = state['aimed'] = False
         ramp = (clear - stop_distance) / SLOW_ZONE
         # The ramp's floor never lifts him above the speed that was asked for.
         vx = max(min(MIN_SPEED, speed), speed * min(1.0, ramp)) if abs(off) < CENTRED else 0.0

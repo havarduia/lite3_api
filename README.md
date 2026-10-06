@@ -609,12 +609,23 @@ a 12-byte header `<code, json_length, 1>` then JSON, on port 43901.
 - We **don't use the built-in follow**: it drives at up to 1.0 m/s with no
   depth check. Driving goes through `bot.steer()` instead.
 - **The controller** (`_controller`), every 50 ms:
-  - turn rate = `−2.4 × (x − 0.5)`, clamped to 0.6 rad/s (a proportional
-    controller keeping the person centred in the image);
+  - turn rate = `−4.0 × (x − 0.5)`, clamped to 0.8 rad/s (a proportional
+    controller keeping the person centred in the image). It was 2.4 and 0.6
+    until 2026-10-06, which was far too slow to keep up with someone walking
+    past;
   - but don't turn toward a side with something inside `TURN_SWEEP`;
   - walk forward only when the person is roughly centred (`|x − 0.5| < 0.12`);
   - slow down linearly over the last 0.8 m before `stop_distance` (clearance
     is only sampled at 4 Hz, so full speed would overshoot), min 0.12 m/s;
+  - no turning at all for an offset under 0.05: a small velocity is still a
+    velocity, and any velocity keeps him stepping;
+  - standing in front of the person in `follow()`, he stays put until they
+    are 0.25 m beyond the stop distance or 0.12 off-centre, and once he turns
+    he turns until they are within 0.05 again. Without those margins he
+    shuffled on the spot, chasing depth and detection noise (2026-10-06);
+  - if the person is lost: when they were last seen off-centre they walked
+    out of the picture on that side, so turn that way at 0.6 rad/s (half a
+    turn in the 5 s below); lost near the middle, stand and wait;
   - stop if the person is lost for 5 s, or the depth stream is lost.
 - `approach()` ends at the stop distance; `follow()` holds position there,
   keeps turning to face the person, and walks again when they move away.
