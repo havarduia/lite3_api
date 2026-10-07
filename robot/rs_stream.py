@@ -7,11 +7,14 @@ encoder to RS_RTSP. A process of its own (hmi.py starts it); exits when
 that one does. Why JPEG, hardware and a separate process: README.md 10.3.
 """
 import os
+import signal
 import subprocess
 import sys
 import time
 
 import rclpy
+from rcl_interfaces.msg import Parameter, ParameterType, ParameterValue
+from rcl_interfaces.srv import SetParameters
 from rclpy.qos import qos_profile_sensor_data
 from sensor_msgs.msg import CompressedImage
 
@@ -57,10 +60,24 @@ class Stream:
             self.gst = None
 
 
+def colour(node, on):
+    """Switch the camera's colour stream. It is off unless this is running
+    (env/camera.launch.py): nothing else reads it, and it costs the driver 6% of a
+    core. The driver takes the switch while running and depth carries on."""
+    client = node.create_client(SetParameters, '/camera/set_parameters')
+    if not client.wait_for_service(3.0):
+        return                              # camera off: nothing to switch
+    value = ParameterValue(type=ParameterType.PARAMETER_BOOL, bool_value=on)
+    rclpy.spin_until_future_complete(node, client.call_async(SetParameters.Request(
+        parameters=[Parameter(name='enable_color', value=value)])), timeout_sec=3.0)
+
+
 def main():
     parent = os.getppid()
+    signal.signal(signal.SIGTERM, signal.default_int_handler)   # hmi.py stops us with it
     rclpy.init()
     node = rclpy.create_node('rs_stream')
+    colour(node, True)
     stream = Stream()
     node.create_subscription(CompressedImage, sys.argv[1] if len(sys.argv) > 1 else TOPIC,
                              stream.frame, qos_profile_sensor_data)
@@ -71,6 +88,7 @@ def main():
         pass
     finally:
         stream.close()
+        colour(node, False)
 
 
 if __name__ == '__main__':

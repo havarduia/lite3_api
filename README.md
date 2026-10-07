@@ -1044,7 +1044,12 @@ diffs against the vendor originals.
 `env/camera.launch.py` runs the newer realsense-ros 4.58.3 (with a patched
 kernel USB video module) as a drop-in for the vendor's old 3.2.3 fork, with
 the same topic names. It also streams colour and the camera's IMU; depth +
-colour at 30 fps no longer crashes the USB bus (verified 2026-09-24). Depth
+colour at 30 fps no longer crashes the USB bus (verified 2026-09-24). Colour
+is **off unless someone has the panel's RealSense view open**: `rs_stream.py`
+sets the driver's `enable_color` when it starts and clears it when it stops.
+The driver takes that while running and the depth cloud carries on (longest
+gap between clouds 0.24 s, measured 2026-10-07). Nothing else reads colour,
+and off takes the driver from 54% of a core to 48%. Depth
 stays at the vendor's 424×240, which Nav2 and voa expect; colour is 1280×720,
 since it is only looked at and never crosses the Wi-Fi raw. Depth is clipped
 at 5 m before the voxel grid: far points make PCL's 5 cm grid overflow its
