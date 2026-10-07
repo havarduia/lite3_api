@@ -242,6 +242,18 @@ def person_range(bins, bearing_deg, guess=None):
     return best if best is not None and abs(best - guess) <= BOX_MATCH * guess else guess
 
 
+def where(pose, p, bins):
+    """(x, y) in odom of the person `p` (PersonDetector.person()), seen from `pose`
+    with the depth scan `bins` (may be empty). None when there is no range on
+    them. One fix, unsmoothed: good to about half a metre."""
+    bearing = -(p['x'] - 0.5) * CAM_FOV
+    r = person_range(bins, math.degrees(bearing), box_range(p))
+    if r is None:
+        return None
+    x, y, yaw = pose
+    return x + r * math.cos(yaw + bearing), y + r * math.sin(yaw + bearing)
+
+
 def follow_nav(bot, det, seconds, stop_distance=0.6, speed=0.3, abort=None):
     """follow() while the straight line to the person is free, and Nav2 goals
     round whatever is on it while it is not. Needs Nav2 running. speed is for

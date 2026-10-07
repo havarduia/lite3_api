@@ -278,7 +278,10 @@ class Nav:
         # handler fires somewhere else entirely.
         self._goal_handle = handle
         self._goal_result = handle.get_result_async()
+        self.goal = (gx, gy, gyaw)
         return handle
+
+    goal = None     # (x, y, yaw) in odom of the goal last accepted; goal_active() says if it still stands
 
     def goal_active(self):
         """Is Nav2 still working on the goal last sent?"""

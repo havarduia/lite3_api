@@ -34,10 +34,13 @@ KNEE_R, FOOT_R, BELLY = 0.03, 0.023, 0.054
 MAX_HZ = 20.0           # per topic; latched topics are never dropped
 BIG, BIG_HZ = 20000, 5.0    # messages over BIG bytes (clouds) go at BIG_HZ
 SHARE = 4.0             # a topic waits this many times its last write before the next
-# What `sensors` on the command line stands for. The costmaps only exist with Nav2 up.
+GOAL, PERSON = '/intent/goal', '/intent/person'    # from the panel (hmi.py), drawn as markers here
+# What `sensors` on the command line stands for: what he senses, and what he intends.
+# The costmaps and paths only exist with Nav2 up, goal and person with the panel running.
 SENSORS = ['/camera/depth/color/points', '/us_publisher/ultrasound_front',
            '/us_publisher/ultrasound_distance', '/global_costmap/costmap',
-           '/local_costmap/costmap']
+           '/local_costmap/costmap', '/plan', '/local_plan', GOAL, PERSON]
+MARK_S = 1.5            # a goal or person marker fades this long after the panel last sent it (2 Hz)
 RESCAN_S = 2.0          # look for topics that were not there yet (Nav2 started later)
 RETRY_S = 2.0           # between attempts to reach the robot again
 ANNOUNCE = 255          # frame index that carries a topic announcement, not a message
@@ -204,7 +207,8 @@ def show(extra, record=None, play=None, speed=1.0):
     os.environ['ROS_LOCALHOST_ONLY'] = '1'
     import rclpy
     from ament_index_python.packages import get_package_prefix
-    from geometry_msgs.msg import TransformStamped
+    from builtin_interfaces.msg import Duration
+    from geometry_msgs.msg import PointStamped, PoseStamped, TransformStamped
     from nav_msgs.msg import Odometry
     from sensor_msgs.msg import JointState, Range
     from std_msgs.msg import Float64
@@ -213,6 +217,7 @@ def show(extra, record=None, play=None, speed=1.0):
     from rclpy.serialization import deserialize_message
     from rosidl_runtime_py.utilities import get_message
     from tf2_msgs.msg import TFMessage
+    from visualization_msgs.msg import Marker
 
     urdf = tempfile.NamedTemporaryFile('w', suffix='.urdf')
     urdf.write(model())
@@ -264,6 +269,7 @@ def show(extra, record=None, play=None, speed=1.0):
     tf_pub = node.create_publisher(TFMessage, '/tf', 10)
     sonar = {topic: (name, top, node.create_publisher(Range, '/sonar/' + name, 1))
              for name, (topic, _, _, top) in SONARS.items()}
+    mark_pub = node.create_publisher(Marker, '/intent/markers', 5)
     high = stamp = None
 
     def odom_tf(data):
@@ -291,6 +297,23 @@ def show(extra, record=None, play=None, speed=1.0):
         r.range = min(deserialize_message(data, Float64).data, top)
         pub.publish(r)
 
+    def mark(topic, data):
+        # As markers because they fade: a goal he has reached, or a person he no
+        # longer sees, is gone from the view MARK_S later.
+        m = Marker(ns=topic, action=Marker.ADD, lifetime=Duration(sec=int(MARK_S), nanosec=int(MARK_S % 1 * 1e9)))
+        m.header.frame_id = 'odom'
+        if topic == GOAL:                   # an arrow lying on the floor, pointing the way he will face
+            m.type, m.pose = Marker.ARROW, deserialize_message(data, PoseStamped).pose
+            m.pose.position.z = 0.03
+            m.scale.x, m.scale.y, m.scale.z = 0.5, 0.08, 0.08
+            m.color.r, m.color.g, m.color.b, m.color.a = 1.0, 0.72, 0.1, 1.0
+        else:                               # someone standing: a column of a person's size
+            m.type, m.pose.position = Marker.CYLINDER, deserialize_message(data, PointStamped).point
+            m.pose.position.z, m.pose.orientation.w = 0.9, 1.0
+            m.scale.x, m.scale.y, m.scale.z = 0.45, 0.45, 1.8
+            m.color.r, m.color.g, m.color.b, m.color.a = 0.3, 0.8, 1.0, 0.5
+        mark_pub.publish(m)
+
     def robot_tf(data):
         keep = [t for t in deserialize_message(data, TFMessage).transforms
                 if t.child_frame_id != 'base_link']
@@ -313,6 +336,8 @@ def show(extra, record=None, play=None, speed=1.0):
                         stamp = odom_tf(data)
                     elif names[i] in sonar and stamp is not None:
                         sonar_range(names[i], data)
+                    elif names[i] in (GOAL, PERSON):
+                        mark(names[i], data)
                     elif names[i] == '/joint_states':
                         joints = deserialize_message(data, JointState)
                         high = height(dict(zip(joints.name, joints.position)))

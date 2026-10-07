@@ -278,6 +278,28 @@ Visualization Manager:
         Reliability Policy: Reliable
         Value: /sonar/rear
       Value: true
+    - Class: rviz_default_plugins/Path
+      Name: Nav2 path
+      Enabled: true
+      Color: 255; 184; 28
+      Line Style: Billboards
+      Line Width: 0.029999999329447746
+      Topic:
+        Value: /plan
+      Value: true
+    - Class: rviz_default_plugins/Path
+      Name: Nav2 local path
+      Enabled: true
+      Color: 120; 220; 140
+      Topic:
+        Value: /local_plan
+      Value: true
+    - Class: rviz_default_plugins/Marker
+      Name: Goal and person
+      Enabled: true
+      Topic:
+        Value: /intent/markers
+      Value: true
   Enabled: true
   Global Options:
     Background Color: 48; 48; 48

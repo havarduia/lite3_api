@@ -675,6 +675,18 @@ async function buildModel(box) {
   // The depth scan of "Ahead of him", laid on the floor around him.
   const edge = new T.LineSegments(new T.BufferGeometry(), new T.LineBasicMaterial({ vertexColors: true })); edge.position.z = 0.01; rig.add(edge);
 
+  // What he intends, on the floor in the same frame as his position: Nav2's path, its
+  // goal as a ring with a stroke the way he will end up facing, and the person he sees
+  // as a column of a person's size.
+  const lit = col('--on-glass');
+  const path = new T.Line(new T.BufferGeometry(), new T.LineBasicMaterial({ color: lit })); scene.add(path);
+  const goal = new T.Group(); scene.add(goal);
+  goal.add(new T.Mesh(new T.RingGeometry(0.15, 0.2, 40), new T.MeshBasicMaterial({ color: lit, side: T.DoubleSide })));
+  goal.add(new T.Line(new T.BufferGeometry().setFromPoints([new T.Vector3(0.2, 0, 0), new T.Vector3(0.45, 0, 0)]), new T.LineBasicMaterial({ color: lit })));
+  const column = new T.CylinderGeometry(0.22, 0.22, 1.8, 24); column.rotateX(Math.PI / 2);
+  const them = new T.Mesh(column, new T.MeshBasicMaterial({ color: col('--trace'), transparent: true, opacity: 0.3, depthWrite: false })); scene.add(them);
+  path.visible = goal.visible = them.visible = false;
+
   // Looking: a point of view on a sphere round him. Drag turns it, the wheel moves it in and out.
   const view = { az: -2.2, el: 0.36, dist: 1.8 }, at = new T.Vector3(0, 0, 0.25);
   let grab = null;
@@ -730,6 +742,10 @@ async function buildModel(box) {
         m.scale.setScalar(Math.min(r, top));
         m.material.color.copy(name === 'rear' && r < LIM.rear ? yellow : trace); m.material.opacity = echo ? 0.16 : 0.05;
       }
+      goal.visible = !!s.goal; if (s.goal) { goal.position.set(s.goal[0], s.goal[1], 0.02); goal.rotation.z = s.goal[2]; }
+      them.visible = !!s.them; if (s.them) them.position.set(s.them[0], s.them[1], 0.9);
+      path.visible = !!s.plan;
+      if (s.plan) { path.geometry.dispose(); path.geometry = new T.BufferGeometry().setFromPoints(s.plan.map(([x, y]) => new T.Vector3(x, y, 0.02))); }
       const pts = [], cols = [], rad = Math.PI / 180;
       for (const [b, r] of s.scan || []) {
         if (r == null || r > 4) continue;                              // as the 2D scan: nothing within 4 m

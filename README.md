@@ -893,6 +893,17 @@ up-or-down one still scrolls the page.
   about 150 bytes each. Sonars, tilt and scan come from the status message
   the page gets anyway. The page eases between messages so he moves, not
   jumps.
+- **What he intends** is drawn on the floor: Nav2's path as a line, its goal
+  as a ring with a stroke the way he will end up facing, and the person he
+  sees as a column of a person's size. They come in the status message
+  (`goal`, `plan`, `them`, all in odom) and go when the goal is over or the
+  person is no longer seen. The person's place is one fix from the box in
+  the front camera and the depth scan (`person.where()`), good to about
+  half a metre, and only as fresh as the scan (1 Hz). The path is Nav2's
+  `/plan` thinned to about 40 points.
+- The panel also puts the goal and the person on `/intent/goal` and
+  `/intent/person` (2 Hz, while there is one) so rviz and recordings get
+  them: section 10.6.
 - Not in it: the full depth cloud and the costmaps. Those cost the robot
   real work per viewer; rviz on the laptop (section 10.6) has them.
 
@@ -943,7 +954,7 @@ debugging and capturing unknown codes only.
 ### 10.6 `robot/rviz.py`: the live robot in rviz2 on the laptop
 
     python3 -m robot.rviz                # on the laptop, in ~/lite3_api: the model only
-    python3 -m robot.rviz sensors        # plus depth cloud, sonars, costmaps
+    python3 -m robot.rviz sensors        # plus depth cloud, sonars, costmaps, Nav2 path, goal, person
     python3 -m robot.rviz /some/topic    # plus any topics you name
     python3 -m robot.rviz --record walk.rec sensors    # the same, and kept in walk.rec
     python3 -m robot.rviz --play walk.rec              # walk.rec again, with no robot
@@ -992,6 +1003,14 @@ model, so the computer box on the back is not shown. No network on that first ru
 so and shows the small ones. Delete the folder to go back to them.
 
 **What to expect.**
+- `sensors` also shows **what he intends**: Nav2's path (`/plan`, and the
+  controller's `/local_plan`), its goal as an arrow on the floor and the
+  person he sees as a column. Goal and person come from the panel
+  (`/intent/goal`, `/intent/person`), so the panel has to be running; the
+  laptop end draws them as markers that fade 1.5 s after the last one, so
+  a reached goal or a lost person disappears. (Markers are made on the
+  laptop because the Marker message changed after Foxy and would not
+  survive the relay.)
 - `sensors` shows what fits the 3D view: the depth cloud; the two sonars
   as cones (made on the laptop from
   the bare readings, the way `robot/sonar_range.py` does on the robot);

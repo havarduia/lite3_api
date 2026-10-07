@@ -46,6 +46,7 @@ FOLLOW_S = HARD_TIMEOUT  # one press of Follow lasts this long: the ceiling on a
 PING_S = 5.0           # a page that has gone silent is noticed within about 1.5 x this
 MODEL_HZ = 10.0        # joint angles to pages showing the 3D model; /joint_states comes at 10
 LEGS = ('LF', 'RF', 'LB', 'RB')    # the order the page gets the joints in, three per leg
+PLAN_POINTS = 40       # Nav2's path goes to the page thinned to about this many points
 
 # What the page needs to know to draw and warn with the same numbers as here.
 LIMITS = {'vx': DRIVE_MAX_VX, 'wz': DRIVE_MAX_WZ, 'stop': FORWARD_STOP_M,
@@ -143,10 +144,18 @@ class Robot:
         self.det = None                         # PersonDetector while detection is on
         self.stop_asked = False                 # Cancel, for a walk to or after a person
         self.joints = None                      # name -> angle, for the 3D model
+        from geometry_msgs.msg import PointStamped, PoseStamped
+        from nav_msgs.msg import Path
         from sensor_msgs.msg import JointState
         self.bot._node.create_subscription(
             JointState, '/joint_states',
             lambda m: setattr(self, 'joints', dict(zip(m.name, m.position))), 1)
+        # What he intends, for the 3D views: Nav2's path in, his goal and where he
+        # takes the person to be out (rviz gets those two through robot/rviz.py).
+        self.plan = None
+        self.bot._node.create_subscription(Path, '/plan', self._plan_cb, 1)
+        self._goal_pub = self.bot._node.create_publisher(PoseStamped, '/intent/goal', 1)
+        self._them_pub = self.bot._node.create_publisher(PointStamped, '/intent/person', 1)
 
     # --- commands --------------------------------------------------------
     def log(self, msg, level=None):
@@ -328,6 +337,7 @@ class Robot:
             self.log('person detection failed: %s' % det.error, 'error')
             self.det = det = None
         who = det and det.person()
+        goal, plan, them = self.intent(who)
         return {
             't': 'status',
             'basic': s.get('basic'), 'basic_text': BASIC.get(s.get('basic'), '?'),
@@ -341,8 +351,39 @@ class Robot:
             # the box is left, top, right, bottom as fractions of the front camera's picture
             'detect': det is not None,
             'person': [round(who[k], 3) for k in ('left', 'top', 'right', 'bottom')] if who else None,
+            # for the 3D view, in odom: Nav2's goal and path, and where the person is
+            'goal': goal, 'plan': plan, 'them': them,
             'limits': LIMITS,
         }
+
+    def _plan_cb(self, m):
+        step = max(1, len(m.poses) // PLAN_POINTS)
+        pts = m.poses[::step] + m.poses[-1:]
+        self.plan = [[round(q.pose.position.x, 2), round(q.pose.position.y, 2)] for q in pts]
+
+    def intent(self, who):
+        """His goal (x, y, yaw), Nav2's path to it and where the person `who` is, each
+        None when there is none. Also puts goal and person on /intent/... for rviz."""
+        from geometry_msgs.msg import PointStamped, PoseStamped
+        b = self.bot
+        goal = b.goal if b.goal_active() else None
+        if goal is None:
+            self.plan = None                    # the path of a goal that is over
+        them = person.where(b.pose, who, self.scan or []) if who and b.pose else None
+        # Stamp left at zero: 'wherever odom is now' to rviz.
+        if goal:
+            m = PoseStamped()
+            m.header.frame_id = 'odom'
+            m.pose.position.x, m.pose.position.y = goal[0], goal[1]
+            m.pose.orientation.z, m.pose.orientation.w = math.sin(goal[2] / 2), math.cos(goal[2] / 2)
+            self._goal_pub.publish(m)
+        if them:
+            m = PointStamped()
+            m.header.frame_id = 'odom'
+            m.point.x, m.point.y = them
+            self._them_pub.publish(m)
+        return ([round(v, 2) for v in goal] if goal else None, self.plan if goal else None,
+                [round(v, 2) for v in them] if them else None)
 
     def model(self):
         """Where the 3D model's joints and body are, or None before the first joint states."""
