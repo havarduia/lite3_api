@@ -1,0 +1,44 @@
+Panels:
+  - Class: rviz_common/Displays
+    Name: Displays
+Visualization Manager:
+  Class: ""
+  Displays:
+    - Class: rviz_default_plugins/Grid
+      Name: Grid
+      Enabled: true
+    - Class: rviz_default_plugins/RobotModel
+      Name: RobotModel
+      Enabled: true
+      Description Source: Topic
+      Description Topic:
+        Value: /robot_description
+    - Class: rviz_default_plugins/TF
+      Name: TF
+      Enabled: false
+    - Class: rviz_default_plugins/PointCloud2
+      Name: Depth cloud
+      Enabled: true
+      Size (m): 0.03
+      Color Transformer: AxisColor
+      Topic:
+        Value: /camera/depth/color/points
+        Reliability Policy: Best Effort
+    - Class: rviz_default_plugins/Map
+      Name: Costmap
+      Enabled: true
+      Color Scheme: costmap
+      Topic:
+        Value: /global_costmap/costmap
+        Durability Policy: Transient Local
+  Global Options:
+    Fixed Frame: base_link
+  Tools:
+    - Class: rviz_default_plugins/MoveCamera
+    - Class: rviz_default_plugins/Measure
+  Views:
+    Current:
+      Class: rviz_default_plugins/Orbit
+      Distance: 2.5
+      Pitch: 0.4
+      Yaw: 2.4

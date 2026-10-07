@@ -216,6 +216,7 @@ robot/                 the library: `from robot.lite3 import Lite3`
   hmi_static/index.html  the control panel page
   rs_stream.py         RealSense colour → H.264 on mediamtx  (started by hmi.py)
   udp_relay.py         WebRTC video between the tailnet and mediamtx (started by hmi.py)
+  rviz.py              the live robot in rviz2 on the laptop (run it on the laptop, §10.6)
 bin/                   things you run
   tour.py              walk / navigate a route, stop, look, talk
   teleop.py            drive from the keyboard over SSH
@@ -229,7 +230,9 @@ env/                   environment, launchers, and patches to vendor code
   start_nav2_mapless.sh   launches sonar node + Nav2 (called by nav_start())
   camera.launch.py     RealSense D435i launch: depth + colour + IMU at 30 fps
   start_realsense_v4.sh   starts it (the realsense_ros2 systemd unit calls this)
+  lite3.rviz           rviz2 layout used by robot/rviz.py
   *.patch              our changes to vendor code (see §11)
+urdf/                  Lite3 model and meshes for rviz (vendor's, joints renamed, see the file's header)
   sudoers-lite3-camera, voa_ros2-override.conf   system config
 ```
 
@@ -916,6 +919,44 @@ Why they are built this way (all measured 2026-10-05, at 1280×720):
 `python3 -m robot.protocol stand_toggle`, `... dance`, `... 0x21010300`,
 `... camera on`, `... voa off`. Sends a raw code with **no checks**; for
 debugging and capturing unknown codes only.
+### 10.6 `robot/rviz.py`: the live robot in rviz2 on the laptop
+
+    python3 -m robot.rviz                                  # on the laptop, in ~/lite3_api
+    python3 -m robot.rviz /camera/depth/color/points /global_costmap/costmap
+
+Opens rviz2 with the Lite3 model moving its legs as the robot does. Close
+rviz (or Ctrl-C) to stop everything, including the robot end.
+
+**How.** The laptop starts `python3 -m robot.rviz --send ...` on the robot
+over ssh. That end subscribes to `/joint_states`, `/tf`, `/tf_static` and
+the topics you name, and writes the messages, undecoded, down the ssh pipe;
+the laptop end republishes them unchanged. `robot_state_publisher` on the
+laptop turns `/joint_states` plus `urdf/lite3.urdf` into the leg frames.
+
+**Why not plain DDS.** The laptop only reaches the robot over Tailscale,
+which carries no multicast, and the robot's Foxy CycloneDDS talks on one
+interface only (`eth0`, which the bridge to the motion computer needs).
+Moving it to Tailscale means reconfiguring every node on the robot. The
+pipe needs nothing changed on the robot and no open ports.
+
+**What to expect.**
+- Each topic is capped at 20 Hz (`MAX_HZ`); latched topics (`/tf_static`,
+  costmaps) are passed whole. A topic that appears later (Nav2 started
+  after rviz) is picked up within 2 s.
+- Every extra topic is one more subscriber on a loaded Jetson (section 12).
+  The depth cloud is the heavy one: name it when you want it, not always.
+- A message type the laptop does not have (`transfer_interfaces`, the
+  RealSense extras) is skipped with a line saying so.
+- Fixed frame is `base_link`. `odom` only exists while Nav2 runs (its
+  `odom_to_tf.py` publishes it); then you can switch the fixed frame to
+  `odom` and watch the robot move across the grid.
+- Time stamps are the robot's steady clock, untouched, so the cloud and the
+  frames agree with each other but not with the laptop's clock.
+- The laptop end runs with `ROS_LOCALHOST_ONLY=1` and without the laptop's
+  own `CYCLONEDDS_URI`, so nothing leaves the laptop. To use `ros2 topic`
+  beside it, set the same two things in that shell.
+- After a cold boot (basic state 98) the hip and thigh angles the robot
+  reports are not yet meaningful, and the model shows that faithfully.
 
 ---
 
