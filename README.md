@@ -776,17 +776,27 @@ It adds software gain with a limiter and sets the codec volume to max.
   is `GEMINI_VOICE`, the panel's Voice box changes it, `--gvoice NAME` on
   the command line. A session keeps the voice it was opened with, so a
   change reopens it. Rocky's alien filter is applied to whichever voice.
-- **Piper still speaks** what is not a Live reply: "Say it" (exact text),
-  "Look and comment" and its follow-ups (REST, below), and any reply that
-  fell back to REST. Those are in his old voice, so the two differ.
-- **REST** (`generateContent`) is the fallback if Live fails. It keeps the
-  last 20 messages and re-sends the most recent camera frame so follow-ups
-  like "what did you just see?" work. **Image turns always go over REST**,
-  and so do follow-ups while the look is still in the history: measured
-  2026-10-05, Live answered about a frame it had plainly not read (invented a
-  person, misread text). The free tier sometimes stalls or 503s while an
-  immediate retry answers in ~1 s, so requests time out at 12 s and retry
-  three times. The model name is an alias (`gemini-flash-lite-latest`) so a
+- **Everything he says goes through that session**, so it is all one voice:
+  - *Ask*: the session answers.
+  - *Look and comment*: the camera frame goes with the question as one turn
+    (`clientContent`), and stays in the session's context, so follow-ups
+    ("what colour is their top?") are answered from the picture. Sent as a
+    realtime video frame, as it was until 2026-10-07, the model answered
+    without having read it ("I am unable to see a picture"); looks went
+    over REST for that reason, and REST on the free tier often stalls for
+    its whole 12 s timeout (4 of 7 calls that evening).
+  - *Say it* (exact text), and any reply that did come over REST: the
+    session is asked to read the text aloud word for word (`READ_ALOUD`).
+    It did, 10 times of 10, starting in 0.5 s.
+- Timed on the robot 2026-10-07, into a sink in place of the speaker: an
+  ask or a say is heard after 1.0-1.2 s, a look after 3.4-5.4 s, about 2 s
+  of which is fetching the camera frame.
+- **Piper is the fallback**: it speaks only when the session cannot (no
+  connection, or a reply that arrived with no speech), in his old voice.
+- **REST** (`generateContent`) is the fallback for the words, if Live fails.
+  It keeps the last 20 messages and re-sends the most recent camera frame
+  so follow-ups still work. Requests time out at 12 s and retry three
+  times. The model name is an alias (`gemini-flash-lite-latest`) so a
   retired version cannot break it, and "thinking" is turned down: it adds
   seconds a spoken one-liner does not need.
 - `sentences()` regroups streamed text chunks into whole sentences so

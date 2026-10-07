@@ -672,13 +672,19 @@ class Live:
         """Yield the reply as transcript chunks, as they arrive. The speech itself
         goes to on_audio(samples), LIVE_RATE Hz 16-bit mono, as it arrives.
 
-        `jpeg` is sent first as a video frame, so the question is about it and
-        the frame stays in the session's context for follow-ups.
+        `jpeg` goes with the question as one turn, so the answer is about it and
+        the picture stays in the session's context for follow-ups. As a turn
+        (clientContent), not as a realtime video frame: sent that way the model
+        answered without having read it (2026-10-05, and "I am unable to see a
+        picture" on 2026-10-07, when the same frame as a turn was described right).
         """
-        msgs = [{'realtimeInput': {'text': text}}]
         if jpeg:
-            msgs.insert(0, {'realtimeInput': {'video': {
-                'mimeType': 'image/jpeg', 'data': base64.b64encode(jpeg).decode()}}})
+            msgs = [{'clientContent': {'turnComplete': True, 'turns': [{'role': 'user', 'parts': [
+                {'inlineData': {'mimeType': 'image/jpeg',
+                                'data': base64.b64encode(jpeg).decode()}},
+                {'text': text}]}]}}]
+        else:
+            msgs = [{'realtimeInput': {'text': text}}]
 
         def send():
             for m in msgs:
@@ -784,6 +790,9 @@ def _tunnel():
     return s
 
 
+# What the Live session is asked so that it voices text written elsewhere.
+READ_ALOUD = ('Read this aloud exactly as written, word for word. Add nothing, change '
+              'nothing, do not answer it or comment on it:\n\n%s')
 _END = re.compile(r'[.!?]["\')]*\s')
 
 
@@ -829,57 +838,68 @@ class Talker:
         user = {'role': 'user', 'parts': [{'text': text}]}
         if jpeg:
             self.last_jpeg = jpeg
-        try:
-            # Image turns, and follow-ups while the look is still in history, go over
-            # REST: Live answered about a frame it had plainly not read.
-            seen = jpeg or any(h.get('image') for h in self.history)
-            if self.live and not seen:
-                # Live replies are heard in Gemini's own voice, as they arrive; the
-                # sentences are only for the caller. Piper (self.speaker) speaks what
-                # falls back to REST, image turns, and say().
-                line = Line(LIVE_RATE, alien=self.alien) if speaking else None
+        if self.live:
+            # Heard in Gemini's own voice, as it arrives; the sentences are only
+            # for the caller.
+            line = Line(LIVE_RATE, alien=self.alien) if speaking else None
+            try:
                 try:
-                    try:
-                        stream = self.live.ask(text, on_audio=line.write if line else None)
-                        first = next(stream, None)  # connection errors surface here
-                    except TalkError as e:
-                        print('[live unavailable, using REST: %s]' % e, file=sys.stderr)
-                        stream, first = None, None
-                    if stream is not None:
-                        self._emit(itertools.chain([first] if first else [], stream),
-                                   said, on_sentence, False)
-                finally:
-                    if line:
-                        line.finish()
-                if said and line and not line.heard:    # a transcript with no speech: say it
-                    for sentence in said:
-                        self.speaker.say(sentence)
-                elif said:
-                    speaking = False            # heard already: nothing for Piper to finish
-            if not said:
-                out = ask(self._rest_contents(user, jpeg), self.model, self.persona)
-                self._emit([out + ' '], said, on_sentence, speaking)
-            if jpeg:
-                user['image'] = True        # marks where last_jpeg belongs
-                for h in self.history:
-                    h.pop('image', None)
-            self.history += [user,
-                             {'role': 'model', 'parts': [{'text': ' '.join(said)}]}]
-            del self.history[:-HISTORY]
-        finally:
-            if speaking and said:
-                self.speaker.finish()
+                    stream = self.live.ask(text, jpeg=jpeg,
+                                           on_audio=line.write if line else None)
+                    first = next(stream, None)  # connection errors surface here
+                except TalkError as e:
+                    print('[live unavailable, using REST: %s]' % e, file=sys.stderr)
+                    stream, first = None, None
+                if stream is not None:
+                    self._emit(itertools.chain([first] if first else [], stream),
+                               said, on_sentence)
+            finally:
+                if line:
+                    line.finish()
+            if said and line and not line.heard:    # a transcript with no speech
+                self._speak(said)
+        if not said:
+            out = ask(self._rest_contents(user, jpeg), self.model, self.persona)
+            self._emit([out + ' '], said, on_sentence)
+            if speaking:
+                self._speak(said)
+        if jpeg:
+            user['image'] = True        # marks where last_jpeg belongs
+            for h in self.history:
+                h.pop('image', None)
+        self.history += [user,
+                         {'role': 'model', 'parts': [{'text': ' '.join(said)}]}]
+        del self.history[:-HISTORY]
         return ' '.join(said)
 
     def say(self, text, on_sentence=None):
         """Speak text that is already written (e.g. from ask(speak=False))."""
         said = []
-        try:
-            self._emit([text + ' '], said, on_sentence, self.speaker)
-        finally:
-            if self.speaker and said:
-                self.speaker.finish()
+        self._emit([text + ' '], said, on_sentence)
+        if self.speaker:
+            self._speak(said)
         return ' '.join(said)
+
+    def _speak(self, said):
+        """Say sentences that are already written, and wait until they are heard.
+        In Gemini's voice when the Live session will read them out (asked to, it
+        repeats text word for word: 10 of 10 on 2026-10-07, first sound in 0.5 s),
+        so a reply that came over REST sounds like one that did not. Piper if not."""
+        heard = False
+        if self.live and said:
+            line = Line(LIVE_RATE, alien=self.alien)
+            try:
+                for _ in self.live.ask(READ_ALOUD % ' '.join(said), on_audio=line.write):
+                    pass
+            except TalkError as e:
+                print('[live unavailable, using Piper: %s]' % e, file=sys.stderr)
+            finally:
+                line.finish()
+            heard = line.heard
+        if said and not heard:
+            for sentence in said:
+                self.speaker.say(sentence)
+            self.speaker.finish()
 
     def _rest_contents(self, user, jpeg):
         """History + this turn for REST, with the latest image put back in.
@@ -904,8 +924,8 @@ class Talker:
         return self.ask(question or 'What do you see right now through your camera?',
                           on_sentence, jpeg=snapshot(), speak=speak)
 
-    def _emit(self, chunks, said, on_sentence, speak):
-        """Each sentence in the text chunks: noted in `said`, reported, spoken."""
+    def _emit(self, chunks, said, on_sentence):
+        """Each sentence in the text chunks: noted in `said` and reported."""
         for s in sentences(chunks):
             s = s.replace('*', '').strip()
             if not s:
@@ -913,8 +933,6 @@ class Talker:
             said.append(s)
             if on_sentence:
                 on_sentence(s)
-            if speak:
-                self.speaker.say(s)
 
     def close(self):
         if self.live:
