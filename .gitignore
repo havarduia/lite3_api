@@ -9,3 +9,6 @@ __pycache__/
 /*.bak
 /*.orig
 robot/persona_private.py
+
+# Dense rviz meshes, fetched by robot/rviz.py on first run (73 MB).
+/urdf/meshes_hd/

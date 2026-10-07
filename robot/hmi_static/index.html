@@ -195,6 +195,13 @@ output { min-width: 4.6em; font-weight: 700; text-align: right; }
 .cam .off { color: var(--trace); font-size: 13px; }
 .cam { position: relative; }
 #who { position: absolute; border: 2px solid var(--yellow); pointer-events: none; }
+#cam-model { aspect-ratio: 4 / 3; background: var(--glass); cursor: grab; }
+@media (min-width: 681px) {     /* room to look at him: the open model takes the whole row */
+  .monitor:has(#cam-model.on) { grid-column: 1 / -1; }
+  #cam-model { aspect-ratio: 16 / 9; }
+}
+#cam-model canvas { display: block; width: 100%; height: 100%; touch-action: pan-y; }
+#cam-model .off { position: absolute; }
 
 /* --- talk and log ---------------------------------------------------------- */
 textarea { display: block; width: 100%; min-height: 76px; margin: 12px 0; resize: vertical; }
@@ -323,6 +330,10 @@ textarea { display: block; width: 100%; min-height: 76px; margin: 12px 0; resize
         <div class="bar">RealSense colour <button class="key" data-cam="realsense">Show</button></div>
         <div class="cam" id="cam-realsense"></div>
       </div>
+      <div class="monitor glass">
+        <div class="bar">Him, in 3D <button class="key" data-cam="model">Show</button></div>
+        <div class="cam" id="cam-model" title="Drag to look around him, scroll to move closer"></div>
+      </div>
     </div>
   </section>
 
@@ -365,11 +376,13 @@ function connect() {
   ws.onopen = () => {
     online(true);
     if ($('cam-realsense').querySelector('img, video')) send({ cmd: 'watch', cam: 'realsense', on: true });
+    if ($('cam-model').classList.contains('on')) send({ cmd: 'watch', cam: 'model', on: true });
   };
   ws.onclose = () => { lostOnce = true; online(false); setTimeout(connect, 1500); };
   ws.onmessage = (e) => {
     const m = JSON.parse(e.data);
     if (m.t === 'status') renderStatus(m);
+    else if (m.t === 'model') { if (model) model.pose(m); }
     else if (m.t === 'log') addLog(m);
     else if (m.t === 'said') addChat(m);
     else if (m.t === 'hello') {
@@ -453,6 +466,7 @@ function renderStatus(s) {
   if (p) Object.assign(who.style, { left: p[0] * 100 + '%', top: p[1] * 100 + '%', width: (p[2] - p[0]) * 100 + '%', height: (p[3] - p[1]) * 100 + '%' });
   notice();
   drawScan(s.scan);
+  if (model) model.status(s);
 }
 
 // One row at the bottom of a scrolling list: a short label, then the text.
@@ -575,13 +589,159 @@ document.querySelectorAll('[data-cam]').forEach(b => b.addEventListener('click',
   const name = b.dataset.cam, box = $('cam-' + name), on = !box.classList.contains('on');
   box.querySelectorAll('img, video, .off').forEach(e => e.remove());
   closeRtc(name);
-  send({ cmd: 'watch', cam: name, on });       // the RealSense stream only runs while shown
-  if (on && window.RTCPeerConnection) showRtc(box, name);
+  send({ cmd: 'watch', cam: name, on });       // the RealSense stream and the model's angles only run while shown
+  if (name === 'model') showModel(box, on);
+  else if (on && window.RTCPeerConnection) showRtc(box, name);
   else if (on) showMjpeg(box, name);
   box.classList.toggle('on', on);
   b.textContent = on ? 'Hide' : 'Show';
 }));
 $('speed').addEventListener('input', () => { $('speed-v').textContent = Number($('speed').value).toFixed(2) + ' m/s'; });
+
+// --- him in 3D: the URDF rviz uses (urdf/lite3.urdf), posed from his joint angles ----
+let model = null, modelLoading = null;
+function showModel(box, on) {
+  const say = (text) => { const s = document.createElement('span'); s.className = 'off'; s.textContent = text; box.appendChild(s); };
+  if (model) { model.run(on); return; }
+  if (!on || modelLoading) return;
+  say('Loading the model…');
+  modelLoading = buildModel(box).then((m) => {
+    model = m; box.querySelectorAll('.off').forEach(e => e.remove());
+    if (lastStatus) m.status(lastStatus);
+    m.run(box.classList.contains('on'));
+  }).catch((e) => { box.querySelectorAll('.off').forEach(e => e.remove()); say('No 3D view here: ' + e.message); })
+    .finally(() => { modelLoading = null; });
+}
+async function buildModel(box) {
+  const T = await import('/lib/three.module.min.js');
+  const css = getComputedStyle(box), col = (n) => new T.Color(css.getPropertyValue(n).trim());
+  const cv = document.createElement('canvas');
+  const gl = new T.WebGLRenderer({ canvas: cv, antialias: true });
+  const scene = new T.Scene(); scene.background = col('--glass');
+  const cam = new T.PerspectiveCamera(40, 4 / 3, 0.05, 60); cam.up.set(0, 0, 1);       // z is up, as in the URDF
+  const sky = new T.HemisphereLight(0xffffff, 0x3a4144, 2.4); sky.position.set(0, 0, 1); scene.add(sky);
+  const sun = new T.DirectionalLight(0xffffff, 1.4); sun.position.set(1.5, -2, 4); scene.add(sun);
+  // The floor: 6 m each way, a line every half metre, in half-metre pieces (whole lines
+  // run behind the point of view, and some renderers then drop them altogether). It
+  // moves with him a square at a time, so he never walks off it.
+  const lines = [];
+  for (let i = -12; i <= 12; i++) for (let k = -12; k < 12; k++) lines.push(i / 2, k / 2, 0, i / 2, k / 2 + 0.5, 0, k / 2, i / 2, 0, k / 2 + 0.5, i / 2, 0);
+  const floor = new T.LineSegments(new T.BufferGeometry(), new T.LineBasicMaterial({ color: col('--dim'), transparent: true, opacity: 0.45 }));
+  floor.geometry.setAttribute('position', new T.Float32BufferAttribute(lines, 3)); scene.add(floor);
+
+  // The URDF, read here: a link is a group, a joint a frame on its parent with a group that turns in it.
+  const doc = new DOMParser().parseFromString(await (await fetch('/model/lite3.urdf')).text(), 'text/xml');
+  const nums = (el, attr, or) => ((el && el.getAttribute(attr)) || or).trim().split(/\s+/).map(Number);
+  const place = (obj, origin) => {
+    obj.position.set(...nums(origin, 'xyz', '0 0 0'));
+    const [r, p, y] = nums(origin, 'rpy', '0 0 0'); obj.rotation.set(r, p, y, 'ZYX');
+  };
+  const files = {};
+  const stl = (url) => files[url] = files[url] || fetch(url).then(r => { if (!r.ok) throw new Error(url + ' ' + r.status); return r.arrayBuffer(); }).then((buf) => {
+    const dv = new DataView(buf), n = dv.getUint32(80, true), at = new Float32Array(n * 9);    // binary STL: 50 bytes a triangle
+    for (let i = 0; i < n; i++) for (let k = 0; k < 9; k++) at[i * 9 + k] = dv.getFloat32(96 + i * 50 + k * 4, true);
+    const g = new T.BufferGeometry(); g.setAttribute('position', new T.BufferAttribute(at, 3)); g.computeVertexNormals(); return g;
+  });
+  const links = {}, joints = {}, waits = [];
+  for (const l of doc.querySelectorAll('robot > link')) {
+    const group = links[l.getAttribute('name')] = new T.Group();
+    for (const v of l.querySelectorAll(':scope > visual')) {
+      const [r, g, b] = nums(v.querySelector('material > color'), 'rgba', '0.6 0.6 0.6 1');
+      const mat = new T.MeshLambertMaterial({ color: new T.Color().setRGB(r, g, b, T.SRGBColorSpace) });
+      const mesh = v.querySelector('geometry > mesh'), box3 = v.querySelector('geometry > box');
+      const add = (geo, scale) => { const m = new T.Mesh(geo, mat); place(m, v.querySelector('origin')); m.scale.set(...scale); group.add(m); };
+      if (mesh) waits.push(stl(new URL(mesh.getAttribute('filename'), location.origin + '/model/').href).then(geo => add(geo, nums(mesh, 'scale', '1 1 1'))));
+      else if (box3) add(new T.BoxGeometry(...nums(box3, 'size', '0.1 0.1 0.1')), [1, 1, 1]);
+    }
+  }
+  for (const j of doc.querySelectorAll('robot > joint')) {
+    const frame = new T.Group(), turn = new T.Group();
+    place(frame, j.querySelector('origin'));
+    links[j.querySelector('parent').getAttribute('link')].add(frame); frame.add(turn);
+    turn.add(links[j.querySelector('child').getAttribute('link')]);
+    if (j.getAttribute('type') === 'revolute') joints[j.getAttribute('name')] = { turn, axis: new T.Vector3(...nums(j.querySelector('axis'), 'xyz', '1 0 0')) };
+  }
+  await Promise.all(waits);
+  // rig: where he is on the floor and which way he faces. body: his height and lean on top of that.
+  const rig = new T.Group(), body = new T.Group(); scene.add(rig); rig.add(body); body.add(links.base_link);
+
+  // Sonar beams, apex at the sensor. A reading at its longest means no echo: drawn faint.
+  const beams = {};
+  for (const [name, [x, yaw]] of Object.entries(LIM.sonars || {})) {
+    const geo = new T.ConeGeometry(Math.tan(LIM.fov / 2), 1, 28, 1, true); geo.translate(0, -0.5, 0); geo.rotateZ(Math.PI / 2);
+    const m = beams[name] = new T.Mesh(geo, new T.MeshBasicMaterial({ transparent: true, depthWrite: false, side: T.DoubleSide }));
+    m.position.x = x; m.rotation.z = yaw; body.add(m);
+  }
+  // The depth scan of "Ahead of him", laid on the floor around him.
+  const edge = new T.LineSegments(new T.BufferGeometry(), new T.LineBasicMaterial({ vertexColors: true })); edge.position.z = 0.01; rig.add(edge);
+
+  // Looking: a point of view on a sphere round him. Drag turns it, the wheel moves it in and out.
+  const view = { az: -2.2, el: 0.36, dist: 1.8 }, at = new T.Vector3(0, 0, 0.25);
+  let grab = null;
+  cv.addEventListener('pointerdown', (e) => { grab = [e.clientX, e.clientY]; cv.setPointerCapture(e.pointerId); });
+  cv.addEventListener('pointermove', (e) => {
+    if (!grab) return;
+    view.az -= (e.clientX - grab[0]) * 0.008;
+    if (e.pointerType === 'mouse') view.el = Math.max(0.05, Math.min(1.5, view.el + (e.clientY - grab[1]) * 0.008));   // a finger moving up or down scrolls the page
+    grab = [e.clientX, e.clientY];
+  });
+  for (const ev of ['pointerup', 'pointercancel']) cv.addEventListener(ev, () => { grab = null; });
+  cv.addEventListener('wheel', (e) => { e.preventDefault(); view.dist = Math.max(0.8, Math.min(12, view.dist * Math.exp(e.deltaY * 0.001))); }, { passive: false });
+
+  const want = { j: null, p: null, z: 0.06 }, now = { j: null, x: 0, y: 0, yaw: 0, z: 0.06, roll: 0, pitch: 0 };
+  let tilt = [0, 0], raf = 0, last = 0;
+  const LEGS = ['LF', 'RF', 'LB', 'RB'], PARTS = ['', '_1', '_2'];        // the order hmi.py sends them in
+  function frame(t) {
+    raf = requestAnimationFrame(frame);
+    const W = box.clientWidth, H = box.clientHeight;
+    if (!W) return;
+    if (cv.width !== Math.round(W * gl.getPixelRatio()) || cv.height !== Math.round(H * gl.getPixelRatio())) {
+      gl.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2)); gl.setSize(W, H, false); cam.aspect = W / H; cam.updateProjectionMatrix();
+    }
+    // The angles come 10 times a second; ease towards them so he moves, not jumps.
+    const k = 1 - Math.exp(-Math.min(0.1, (t - last) / 1000) * 14); last = t;
+    if (want.j) {
+      now.j = now.j || want.j.slice();
+      want.j.forEach((q, i) => { now.j[i] += (q - now.j[i]) * k; const jt = joints[LEGS[i / 3 | 0] + '_Joint' + PARTS[i % 3]]; if (jt) jt.turn.quaternion.setFromAxisAngle(jt.axis, now.j[i]); });
+    }
+    if (want.p) {
+      now.x += (want.p[0] - now.x) * k; now.y += (want.p[1] - now.y) * k;
+      now.yaw += Math.atan2(Math.sin(want.p[2] - now.yaw), Math.cos(want.p[2] - now.yaw)) * k;
+    }
+    now.z += (want.z - now.z) * k; now.roll += (tilt[0] - now.roll) * k; now.pitch += (tilt[1] - now.pitch) * k;
+    rig.position.set(now.x, now.y, 0); rig.rotation.z = now.yaw;
+    floor.position.set(Math.round(now.x * 2) / 2, Math.round(now.y * 2) / 2, 0);
+    body.position.z = now.z; body.rotation.set(now.roll, now.pitch, 0, 'ZYX');
+    at.lerp(new T.Vector3(now.x, now.y, 0.25), k);
+    cam.position.set(at.x + view.dist * Math.cos(view.el) * Math.cos(view.az), at.y + view.dist * Math.cos(view.el) * Math.sin(view.az), at.z + view.dist * Math.sin(view.el));
+    cam.lookAt(at); gl.render(scene, cam);
+  }
+  box.appendChild(cv);
+  return {
+    pose(m) { want.j = m.j; want.p = m.p; want.z = m.z; },
+    status(s) {
+      tilt = (s.tilt || [0, 0]).map(d => d * Math.PI / 180);
+      const trace = col('--trace'), yellow = col('--yellow');
+      for (const [name, m] of Object.entries(beams)) {
+        const top = LIM.sonars[name][2], r = s.sonar[name === 'front' ? 0 : 1];
+        m.visible = r != null;
+        if (r == null) continue;
+        const echo = r < top;
+        m.scale.setScalar(Math.min(r, top));
+        m.material.color.copy(name === 'rear' && r < LIM.rear ? yellow : trace); m.material.opacity = echo ? 0.16 : 0.05;
+      }
+      const pts = [], cols = [], rad = Math.PI / 180;
+      for (const [b, r] of s.scan || []) {
+        if (r == null || r > 4) continue;                              // as the 2D scan: nothing within 4 m
+        const c = r < LIM.stop ? yellow : trace;
+        for (const a of [b - 2.5, b + 2.5]) { pts.push(r * Math.cos(a * rad), r * Math.sin(a * rad), 0); cols.push(c.r, c.g, c.b); }
+      }
+      edge.geometry.dispose(); edge.geometry = new T.BufferGeometry();
+      edge.geometry.setAttribute('position', new T.Float32BufferAttribute(pts, 3)); edge.geometry.setAttribute('color', new T.Float32BufferAttribute(cols, 3));
+    },
+    run(on) { cancelAnimationFrame(raf); raf = 0; if (on) { last = performance.now(); raf = requestAnimationFrame(frame); } },
+  };
+}
 
 // --- hold-to-drive: joystick + keyboard ----------------------------------
 let stick = { x: 0, y: 0 }, driveTimer = null;

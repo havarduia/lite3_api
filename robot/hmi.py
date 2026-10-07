@@ -28,6 +28,8 @@ from . import person
 from .lite3 import BATTERY_REFUSE, BATTERY_WARN, HARD_TIMEOUT, LYING, Lite3
 from .nav import REPO, clamp, status_text
 from .protocol import Lite3Error
+from .rviz import height
+from .sonar_range import FOV, SONARS
 
 PORT = 8080
 STATIC = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'hmi_static')
@@ -42,11 +44,16 @@ GONE_S = 3.0           # no page for this long: a Go is cancelled. The page reco
 LET_GO_S = 2.0         # Nav2 gets this long to act on that cancel before it is an E-STOP
 FOLLOW_S = HARD_TIMEOUT  # one press of Follow lasts this long: the ceiling on any one move
 PING_S = 5.0           # a page that has gone silent is noticed within about 1.5 x this
+MODEL_HZ = 10.0        # joint angles to pages showing the 3D model; /joint_states comes at 10
+LEGS = ('LF', 'RF', 'LB', 'RB')    # the order the page gets the joints in, three per leg
 
 # What the page needs to know to draw and warn with the same numbers as here.
 LIMITS = {'vx': DRIVE_MAX_VX, 'wz': DRIVE_MAX_WZ, 'stop': FORWARD_STOP_M,
           'rear': REAR_STOP_M, 'refuse': BATTERY_REFUSE, 'warn': BATTERY_WARN,
-          'lying': LYING, 'gone': GONE_S, 'follow': FOLLOW_S}
+          'lying': LYING, 'gone': GONE_S, 'follow': FOLLOW_S,
+          # for the 3D model: each sonar's x on the body, heading, longest reading; beam width
+          'sonars': {name: [x, yaw, top] for name, (_, x, yaw, top) in SONARS.items()},
+          'fov': FOV}
 
 # basic_state values seen on this robot (see project notes)
 BASIC = {1: 'lying, ready', 6: 'standing', 8: 'not armed', 9: 'arming',
@@ -135,6 +142,11 @@ class Robot:
         self.persona = None
         self.det = None                         # PersonDetector while detection is on
         self.stop_asked = False                 # Cancel, for a walk to or after a person
+        self.joints = None                      # name -> angle, for the 3D model
+        from sensor_msgs.msg import JointState
+        self.bot._node.create_subscription(
+            JointState, '/joint_states',
+            lambda m: setattr(self, 'joints', dict(zip(m.name, m.position))), 1)
 
     # --- commands --------------------------------------------------------
     def log(self, msg, level=None):
@@ -332,6 +344,15 @@ class Robot:
             'limits': LIMITS,
         }
 
+    def model(self):
+        """Where the 3D model's joints and body are, or None before the first joint states."""
+        j, p = self.joints, self.bot.pose
+        if j is None:
+            return None
+        return {'t': 'model',
+                'j': [round(j[leg + '_Joint' + n], 3) for leg in LEGS for n in ('', '_1', '_2')],
+                'p': [round(v, 3) for v in p] if p else None, 'z': round(height(j), 3)}
+
     def poll_slow(self):
         """systemd states and the depth scan, ~1 Hz from a thread."""
         self.services = {'camera': P.camera(), 'voa': P.voa()}
@@ -368,6 +389,7 @@ class Server:
         self.rs_pages = set()       # pages showing the RealSense view
         self.rs_proc = None         # rs_stream.py, running only while watched
         self.rs_stop = None         # pending stop (timer handle)
+        self.model_pages = set()    # pages showing the 3D model
 
     def emit(self, msg):
         """Thread-safe broadcast to every open page."""
@@ -415,6 +437,7 @@ class Server:
         finally:
             self.pages.discard(ws)
             self.rs_pages.discard(ws)
+            self.model_pages.discard(ws)
             self.rs_update()
             self.robot.drive_cmd = (0.0, 0.0, 0.0)  # a closed page never drives
             if not self.pages:
@@ -455,6 +478,8 @@ class Server:
         elif k == 'watch' and c.get('cam') == 'realsense':
             (self.rs_pages.add if c.get('on') else self.rs_pages.discard)(ws)
             self.rs_update()
+        elif k == 'watch' and c.get('cam') == 'model':
+            (self.model_pages.add if c.get('on') else self.model_pages.discard)(ws)
         elif k == 'volume':
             from . import talk
             talk.VOLUME = min(1.0, max(0.0, float(c['v'])))
@@ -555,6 +580,22 @@ class Server:
             n += 1
             await asyncio.sleep(0.5)
 
+    async def model_ticker(self):
+        while True:
+            try:
+                m = self.model_pages and self.robot.model()
+            except Exception as e:              # keep the ticker alive
+                self.robot.warn('model: %r' % e)
+                m = None
+            if m:
+                data = json.dumps(m)
+                for ws in list(self.model_pages):
+                    try:
+                        await ws.send_str(data)
+                    except Exception:
+                        self.model_pages.discard(ws)
+            await asyncio.sleep(1.0 / MODEL_HZ)
+
     def main(self):
         host = self.host = tailscale_ip()
         self.loop = asyncio.get_event_loop()
@@ -565,6 +606,8 @@ class Server:
         app.router.add_get('/ws', self.ws)
         app.router.add_get('/stream/front', self.stream_front)
         app.router.add_post('/whep/{cam}', self.whep)
+        app.router.add_static('/lib', os.path.join(STATIC, 'lib'))      # three.js
+        app.router.add_static('/model', os.path.join(REPO, 'urdf'))     # lite3.urdf, meshes
         runner = web.AppRunner(app)
         self.loop.run_until_complete(runner.setup())
         self.loop.run_until_complete(web.TCPSite(runner, host, PORT).start())
@@ -575,6 +618,7 @@ class Server:
              P.MOTION_IP, str(P.CAMERA_RTC_PORT)],
             cwd=REPO)
         self.loop.create_task(self.ticker())
+        self.loop.create_task(self.model_ticker())
         for sig in (signal.SIGINT, signal.SIGTERM):
             self.loop.add_signal_handler(sig, self.loop.stop)
         print('HMI on http://%s:%d  (tailnet only) - Ctrl-C sits him and stops'

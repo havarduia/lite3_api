@@ -10,14 +10,24 @@
        - joint axes and limits negated: Jetson2Motion.cpp publishes minus the motion
          computer's angle
        - base_link (what Nav2's odom -> base_link names) and camera_link added; the camera
-         mount is the one in the Nav2 launch -->
+         mount is the one in the Nav2 launch, the box is a RealSense D435's outline
+       - colours per part (the vendor meshes carry none), after the vendor's product
+         photo: white torso, hips and thighs, blue-grey shanks -->
 <robot name="Lite3">
     <link name="base_link"/>
     <joint name="base_to_torso" type="fixed">
         <parent link="base_link"/>
         <child link="TORSO"/>
     </joint>
-    <link name="camera_link"/>
+    <link name="camera_link">
+        <visual>
+            <origin xyz="0 0 0"/>
+            <geometry>
+                <box size="0.025 0.09 0.025"/>
+            </geometry>
+            <material name="camera"><color rgba="0.6 0.62 0.65 1"/></material>
+        </visual>
+    </link>
     <joint name="base_to_camera" type="fixed">
         <parent link="base_link"/>
         <child link="camera_link"/>
@@ -36,7 +46,7 @@
             <geometry>
                 <mesh filename="./meshes/torso.STL"/>
             </geometry>
-            <material name="grey"><color rgba="0.55 0.57 0.6 1"/></material>
+            <material name="shell"><color rgba="0.93 0.93 0.94 1"/></material>
         </visual>
         <collision>
             <origin xyz="0 0 0.01"/>
@@ -64,7 +74,7 @@
             <geometry>
                 <mesh filename="./meshes/hip.STL" scale="1 1 1"/>
             </geometry>
-            <material name="grey"><color rgba="0.55 0.57 0.6 1"/></material>
+            <material name="shell"><color rgba="0.93 0.93 0.94 1"/></material>
         </visual>
         <collision>
             <origin xyz="0 0.05 0" rpy="1.57079632 0 0"/>
@@ -90,7 +100,7 @@
             <geometry>
                 <mesh filename="./meshes/thigh.STL"/>
             </geometry>
-            <material name="grey"><color rgba="0.55 0.57 0.6 1"/></material>
+            <material name="shell"><color rgba="0.93 0.93 0.94 1"/></material>
         </visual>
         <collision>
             <origin xyz="-0.015 0 -0.08" />
@@ -116,7 +126,7 @@
             <geometry>
                 <mesh filename="./meshes/shank.STL"/>
             </geometry>
-            <material name="grey"><color rgba="0.55 0.57 0.6 1"/></material>
+            <material name="leg"><color rgba="0.40 0.44 0.48 1"/></material>
         </visual>
         <collision>
             <origin xyz="0.005 0 -0.03" rpy="0 -0.2 0"/>
@@ -169,7 +179,7 @@
             <geometry>
                 <mesh filename="./meshes/hip.STL" scale="1 -1 1"/>
             </geometry>
-            <material name="grey"><color rgba="0.55 0.57 0.6 1"/></material>
+            <material name="shell"><color rgba="0.93 0.93 0.94 1"/></material>
         </visual>
         <collision>
             <origin xyz="0 -0.05 0" rpy="1.57079632 0 0"/>
@@ -196,7 +206,7 @@
             <geometry>
                 <mesh filename="./meshes/thigh.STL" scale="1 -1 1"/>
             </geometry>
-            <material name="grey"><color rgba="0.55 0.57 0.6 1"/></material>
+            <material name="shell"><color rgba="0.93 0.93 0.94 1"/></material>
         </visual>
         <collision>
             <origin xyz="-0.015 0 -0.08" />
@@ -222,7 +232,7 @@
             <geometry>
                 <mesh filename="./meshes/shank.STL"/>
             </geometry>
-            <material name="grey"><color rgba="0.55 0.57 0.6 1"/></material>
+            <material name="leg"><color rgba="0.40 0.44 0.48 1"/></material>
         </visual>
         <collision>
             <origin xyz="0.005 0 -0.03" rpy="0 -0.2 0"/>
@@ -275,7 +285,7 @@
             <geometry>
                 <mesh filename="./meshes/hip.STL" scale="-1 1 1"/>
             </geometry>
-            <material name="grey"><color rgba="0.55 0.57 0.6 1"/></material>
+            <material name="shell"><color rgba="0.93 0.93 0.94 1"/></material>
         </visual>
         <collision>
             <origin xyz="0 0.05 0" rpy="1.57079632 0 0"/>
@@ -301,7 +311,7 @@
             <geometry>
                 <mesh filename="./meshes/thigh.STL"/>
             </geometry>
-            <material name="grey"><color rgba="0.55 0.57 0.6 1"/></material>
+            <material name="shell"><color rgba="0.93 0.93 0.94 1"/></material>
         </visual>
         <collision>
             <origin xyz="-0.015 0 -0.08" />
@@ -327,7 +337,7 @@
             <geometry>
                 <mesh filename="./meshes/shank.STL"/>
             </geometry>
-            <material name="grey"><color rgba="0.55 0.57 0.6 1"/></material>
+            <material name="leg"><color rgba="0.40 0.44 0.48 1"/></material>
         </visual>
         <collision>
             <origin xyz="0.005 0 -0.03" rpy="0 -0.2 0"/>
@@ -380,7 +390,7 @@
             <geometry>
                 <mesh filename="./meshes/hip.STL" scale="-1 -1 1"/>
             </geometry>
-            <material name="grey"><color rgba="0.55 0.57 0.6 1"/></material>
+            <material name="shell"><color rgba="0.93 0.93 0.94 1"/></material>
         </visual>
         <collision>
             <origin xyz="0 -0.05 0" rpy="1.57079632 0 0"/>
@@ -406,7 +416,7 @@
             <geometry>
                 <mesh filename="./meshes/thigh.STL" scale="1 -1 1"/>
             </geometry>
-            <material name="grey"><color rgba="0.55 0.57 0.6 1"/></material>
+            <material name="shell"><color rgba="0.93 0.93 0.94 1"/></material>
         </visual>
         <collision>
             <origin xyz="-0.015 0 -0.08" />
@@ -432,7 +442,7 @@
             <geometry>
                 <mesh filename="./meshes/shank.STL"/>
             </geometry>
-            <material name="grey"><color rgba="0.55 0.57 0.6 1"/></material>
+            <material name="leg"><color rgba="0.40 0.44 0.48 1"/></material>
         </visual>
         <collision>
             <origin xyz="0.005 0 -0.03" rpy="0 -0.2 0"/>

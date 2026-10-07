@@ -214,6 +214,7 @@ robot/                 the library: `from robot.lite3 import Lite3`
   talk.py              speaker, Piper TTS, YouTube audio, Gemini chat, personas
   hmi.py               web control panel server (aiohttp)
   hmi_static/index.html  the control panel page
+  hmi_static/lib/      three.js, for the panel's 3D view
   rs_stream.py         RealSense colour → H.264 on mediamtx  (started by hmi.py)
   udp_relay.py         WebRTC video between the tailnet and mediamtx (started by hmi.py)
   rviz.py              the live robot in rviz2 on the laptop (run it on the laptop, §10.6)
@@ -834,6 +835,7 @@ CDN: even its typeface, B612, is embedded) with:
 - live status (battery, posture, Nav2, camera, heartbeat, sonars, tilt, pose)
   pushed over a WebSocket twice per second, and the depth scan drawn as a
   top-down fan;
+- the robot **in 3D**, live (see "Him, in 3D" below);
 - two camera views (front wide-angle, RealSense colour) as H.264 over WebRTC,
   running **only while someone is watching** (see "Cameras" below);
 - stand/sit, Nav2 on/off, camera/voa on/off, "goto N m";
@@ -874,6 +876,25 @@ a hardware stop: keep the handheld at hand. For HTTPS, run
 `sudo tailscale serve --bg 8080` once and open
 `https://lite3-perception.<tailnet>.ts.net`; the server also listens on
 localhost for that.
+
+**Him, in 3D.** A third monitor under Cameras: the robot model posed from
+his joint angles, on a floor grid he walks across, with the two sonar beams
+and the depth scan of "Ahead of him" laid on the floor. Drag to look around
+him, scroll to move closer; on a phone a sideways drag turns the view and an
+up-or-down one still scrolls the page.
+- The browser does the drawing. It reads the same `urdf/lite3.urdf` and
+  small meshes as rviz (served under `/model`, 3.4 MB, once) with a short
+  URDF reader in the page, and `three.js` (r160, MIT, 670 kB) from
+  `hmi_static/lib/`, kept in the repo because the panel must work with no
+  internet. Both are fetched only when the monitor is opened.
+- The robot's part is small: `hmi.py` listens to `/joint_states` (10 Hz) and,
+  only to pages with the monitor open, sends the 12 angles, the pose and the
+  body height (`rviz.height()`, the same sum rviz uses) 10 times a second,
+  about 150 bytes each. Sonars, tilt and scan come from the status message
+  the page gets anyway. The page eases between messages so he moves, not
+  jumps.
+- Not in it: the full depth cloud and the costmaps. Those cost the robot
+  real work per viewer; rviz on the laptop (section 10.6) has them.
 
 **Cameras.** Both views come from the motion computer's mediamtx as WebRTC.
 The front camera is the robot's own H.264 stream (1280×720, 30 fps). The
@@ -921,8 +942,9 @@ Why they are built this way (all measured 2026-10-05, at 1280×720):
 debugging and capturing unknown codes only.
 ### 10.6 `robot/rviz.py`: the live robot in rviz2 on the laptop
 
-    python3 -m robot.rviz                                  # on the laptop, in ~/lite3_api
-    python3 -m robot.rviz /camera/depth/color/points /global_costmap/costmap
+    python3 -m robot.rviz                # on the laptop, in ~/lite3_api: the model only
+    python3 -m robot.rviz sensors        # plus depth cloud, sonars, costmaps
+    python3 -m robot.rviz /some/topic    # plus any topics you name
 
 Opens rviz2 with the Lite3 model moving its legs as the robot does. Close
 rviz (or Ctrl-C) to stop everything, including the robot end.
@@ -939,18 +961,44 @@ interface only (`eth0`, which the bridge to the motion computer needs).
 Moving it to Tailscale means reconfiguring every node on the robot. The
 pipe needs nothing changed on the robot and no open ports.
 
+**The model.** `urdf/lite3.urdf` with the small meshes in `urdf/meshes`
+(3.4 MB, in git) always works. On its first run the laptop end also
+downloads the vendor's dense meshes (about ten times the triangles, 57 MB)
+from `DeepRoboticsLab/Lite3_rl_training` and Intel's D435 mesh (16 MB, in
+place of the grey box where the camera sits) into `urdf/meshes_hd/`, which
+git ignores, and uses those from then on. The vendor publishes no Lite3 Pro
+model, so the computer box on the back is not shown. No network on that first run: it says
+so and shows the small ones. Delete the folder to go back to them.
+
 **What to expect.**
-- Each topic is capped at 20 Hz (`MAX_HZ`); latched topics (`/tf_static`,
-  costmaps) are passed whole. A topic that appears later (Nav2 started
-  after rviz) is picked up within 2 s.
+- `sensors` shows what fits the 3D view: the depth cloud; the two sonars
+  as cones (made on the laptop from
+  the bare readings, the way `robot/sonar_range.py` does on the robot);
+  the global and local costmaps once Nav2 is up. There is no lidar on this
+  robot (`/rslidar_points` has no publisher) and the IMU has no display.
+- Each topic is capped at 20 Hz (`MAX_HZ`), messages over 20 kB (the
+  cloud) at 5 Hz; latched topics (`/tf_static`, costmaps) are passed
+  whole. A topic that appears later (Nav2 started after rviz) is picked up
+  within 2 s.
+- The link decides the rest. When Tailscale cannot connect the laptop and
+  robot directly it relays through a server (`tailscale status` says
+  `relay`), and everything shares roughly 300 kB/s. Each topic then waits
+  four times as long as its last message took to send, so a big topic
+  cannot starve the model. Measured 2026-10-07 on a relayed link, with the
+  160 kB camera picture also going (since removed): cloud 2 Hz, sonars
+  11 Hz.
 - Every extra topic is one more subscriber on a loaded Jetson (section 12).
   The depth cloud is the heavy one: name it when you want it, not always.
 - A message type the laptop does not have (`transfer_interfaces`, the
   RealSense extras) is skipped with a line saying so.
 - Fixed frame is `odom`, so the grid is the floor and the robot walks and
-  turns across it. On the robot `odom -> base_link` only exists while Nav2
-  runs (its `odom_to_tf.py`); when the robot sends no `/tf`, the laptop end
-  makes the same transform from `/leg_odom2` itself.
+  turns across it. The laptop end makes `odom -> base_link` itself: x, y
+  and heading from `/leg_odom2`, height from the joint angles (the lowest
+  foot, knee or the belly rests on the floor, body taken as level). The
+  odometry's own height stays at standing height (0.32 m) when the robot
+  lies down, which left the model floating. The robot's own
+  `odom -> base_link` (Nav2's `odom_to_tf.py`) is dropped for that reason.
+  `python3 -m robot.rviz --check` tests the height sum.
 - Time stamps are the robot's steady clock, untouched, so the cloud and the
   frames agree with each other but not with the laptop's clock.
 - The laptop end runs with `ROS_LOCALHOST_ONLY=1` and without the laptop's
