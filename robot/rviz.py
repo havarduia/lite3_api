@@ -2,7 +2,7 @@
 
     python3 -m robot.rviz [topic ...]        on the laptop (ROS2 Jazzy)
 
-Copies /joint_states, /tf, /tf_static and any topics named from the robot to
+Copies /joint_states, /tf, /tf_static, /leg_odom2 and any topics named from the robot to
 the laptop over ssh, and starts robot_state_publisher (urdf/lite3.urdf) and
 rviz2 there. Why ssh and not DDS, and what to expect: README section 10.6.
 
@@ -19,9 +19,12 @@ import time
 
 ROBOT = 'ysc@lite3-perception'
 REMOTE = 'source ~/robot/env/lite3_env.sh && cd ~/robot && exec python3 -m robot.rviz --send '
-TOPICS = ['/joint_states', '/tf', '/tf_static']
+TOPICS = ['/joint_states', '/tf', '/tf_static', '/leg_odom2']
+ODOM = '/leg_odom2'     # becomes odom -> base_link here while Nav2 is not sending it
+TF_QUIET_S = 1.0        # no /tf from the robot for this long = Nav2's odom_to_tf is off
 MAX_HZ = 20.0           # per topic; latched topics are never dropped
 RESCAN_S = 2.0          # look for topics that were not there yet (Nav2 started later)
+RETRY_S = 2.0           # between attempts to reach the robot again
 ANNOUNCE = 255          # frame index that carries a topic announcement, not a message
 HEAD = struct.Struct('<BI')
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -90,8 +93,13 @@ def show(extra):
     os.environ.pop('CYCLONEDDS_URI', None)
     os.environ['ROS_LOCALHOST_ONLY'] = '1'
     import rclpy
+    from ament_index_python.packages import get_package_prefix
+    from geometry_msgs.msg import TransformStamped
+    from nav_msgs.msg import Odometry
     from rclpy.qos import DurabilityPolicy, QoSProfile
+    from rclpy.serialization import deserialize_message
     from rosidl_runtime_py.utilities import get_message
+    from tf2_msgs.msg import TFMessage
 
     # rviz wants whole mesh paths; the URDF as shipped has them relative.
     urdf = tempfile.NamedTemporaryFile('w', suffix='.urdf')
@@ -100,27 +108,66 @@ def show(extra):
     urdf.flush()
     topics = TOPICS + [t for t in extra if t not in TOPICS]
     procs = [
-        subprocess.Popen(['ros2', 'run', 'robot_state_publisher', 'robot_state_publisher',
+        # The program itself: `ros2 run` leaves it running when it is told to stop.
+        subprocess.Popen([os.path.join(get_package_prefix('robot_state_publisher'), 'lib',
+                                       'robot_state_publisher', 'robot_state_publisher'),
                           urdf.name],
                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL),
         subprocess.Popen(['rviz2', '-d', os.path.join(ROOT, 'env', 'lite3.rviz')],
                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL),
-        subprocess.Popen(['ssh', '-o', 'BatchMode=yes', ROBOT, REMOTE + ' '.join(topics)],
-                         stdout=subprocess.PIPE),
     ]
-    rviz, ssh = procs[1], procs[2]
+    rviz = procs[1]
+
+    def connect():
+        # Keepalive: a laptop that changes network leaves a dead connection that
+        # ssh would otherwise sit on for many minutes.
+        procs.append(subprocess.Popen(
+            ['ssh', '-o', 'BatchMode=yes', '-o', 'ServerAliveInterval=3',
+             '-o', 'ServerAliveCountMax=2', ROBOT, REMOTE + ' '.join(topics)],
+            stdout=subprocess.PIPE))
+        return procs[-1]
+
+    ssh = connect()
     rclpy.init()
     node = rclpy.create_node('rviz_relay')
-    pubs = {}
+    pubs, names = {}, {}
+    tf_pub = node.create_publisher(TFMessage, '/tf', 10)
+    tf_seen = 0.0
+
+    def odom_tf(data):
+        # What the robot's odom_to_tf.py does, which only runs with Nav2.
+        odom = deserialize_message(data, Odometry)
+        t = TransformStamped()
+        t.header.stamp = odom.header.stamp
+        t.header.frame_id, t.child_frame_id = 'odom', 'base_link'
+        p = odom.pose.pose.position
+        t.transform.translation.x, t.transform.translation.y, t.transform.translation.z = p.x, p.y, p.z
+        t.transform.rotation = odom.pose.pose.orientation
+        tf_pub.publish(TFMessage(transforms=[t]))
+
     try:
         while rviz.poll() is None:
-            i, n = HEAD.unpack(read(ssh.stdout, HEAD.size))
-            data = read(ssh.stdout, n)
+            try:
+                i, n = HEAD.unpack(read(ssh.stdout, HEAD.size))
+                data = read(ssh.stdout, n)
+            except EOFError:
+                print('lost the robot end (is ~/robot pulled, the robot reachable?); retrying')
+                ssh.terminate()
+                procs.remove(ssh)
+                time.sleep(RETRY_S)
+                ssh = connect()
+                continue
             if i != ANNOUNCE:
                 if i in pubs:
                     pubs[i].publish(data)
+                    if names[i] == '/tf':
+                        tf_seen = time.monotonic()
+                    elif names[i] == ODOM and time.monotonic() - tf_seen > TF_QUIET_S:
+                        odom_tf(data)
                 continue
             i, topic, kind, latched = json.loads(data)
+            if i in pubs:               # announced again after a reconnect
+                continue
             try:
                 msg = get_message(kind)
             except (AttributeError, ModuleNotFoundError, ValueError):
@@ -130,9 +177,8 @@ def show(extra):
             if latched:
                 qos.durability = DurabilityPolicy.TRANSIENT_LOCAL
             pubs[i] = node.create_publisher(msg, topic, qos)
+            names[i] = topic
             print('relaying %s [%s]' % (topic, kind))
-    except EOFError:
-        print('the robot end stopped (is ~/robot pulled, and the robot reachable?)')
     except KeyboardInterrupt:
         pass
     finally:

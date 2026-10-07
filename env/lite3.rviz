@@ -32,7 +32,7 @@ Visualization Manager:
         Value: /global_costmap/costmap
         Durability Policy: Transient Local
   Global Options:
-    Fixed Frame: base_link
+    Fixed Frame: odom
   Tools:
     - Class: rviz_default_plugins/MoveCamera
     - Class: rviz_default_plugins/Measure

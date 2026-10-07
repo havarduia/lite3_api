@@ -928,7 +928,7 @@ Opens rviz2 with the Lite3 model moving its legs as the robot does. Close
 rviz (or Ctrl-C) to stop everything, including the robot end.
 
 **How.** The laptop starts `python3 -m robot.rviz --send ...` on the robot
-over ssh. That end subscribes to `/joint_states`, `/tf`, `/tf_static` and
+over ssh. That end subscribes to `/joint_states`, `/tf`, `/tf_static`, `/leg_odom2` and
 the topics you name, and writes the messages, undecoded, down the ssh pipe;
 the laptop end republishes them unchanged. `robot_state_publisher` on the
 laptop turns `/joint_states` plus `urdf/lite3.urdf` into the leg frames.
@@ -947,16 +947,21 @@ pipe needs nothing changed on the robot and no open ports.
   The depth cloud is the heavy one: name it when you want it, not always.
 - A message type the laptop does not have (`transfer_interfaces`, the
   RealSense extras) is skipped with a line saying so.
-- Fixed frame is `base_link`. `odom` only exists while Nav2 runs (its
-  `odom_to_tf.py` publishes it); then you can switch the fixed frame to
-  `odom` and watch the robot move across the grid.
+- Fixed frame is `odom`, so the grid is the floor and the robot walks and
+  turns across it. On the robot `odom -> base_link` only exists while Nav2
+  runs (its `odom_to_tf.py`); when the robot sends no `/tf`, the laptop end
+  makes the same transform from `/leg_odom2` itself.
 - Time stamps are the robot's steady clock, untouched, so the cloud and the
   frames agree with each other but not with the laptop's clock.
 - The laptop end runs with `ROS_LOCALHOST_ONLY=1` and without the laptop's
   own `CYCLONEDDS_URI`, so nothing leaves the laptop. To use `ros2 topic`
   beside it, set the same two things in that shell.
-- After a cold boot (basic state 98) the hip and thigh angles the robot
-  reports are not yet meaningful, and the model shows that faithfully.
+- After a cold boot (basic state 98) the thigh angles the robot reports are
+  not yet meaningful: lying in the ready pose it reports about ±0.3 rad and
+  the model's thighs hang straight down. Once it has stood up the angles
+  are right (standing: thigh 0.67, knee -1.35 on `/joint_states`).
+- If the link drops (the laptop changes network), the laptop end notices
+  within about 6 s and reconnects every 2 s until the robot answers.
 
 ---
 
