@@ -9,6 +9,7 @@ with the depth-camera stop. README.md section 8.
 """
 import json
 import math
+import os
 import select
 import socket
 import struct
@@ -22,7 +23,8 @@ from .protocol import (TRACKER_ADDR, TRK_DETECT, TRK_MODES, TRK_QUERY, TRK_TARGE
 
 WIDTH, HEIGHT = 1280.0, 720.0       # bbox pixel space
 FRESH = 0.7                 # s: a detection older than this is not trusted
-GIVE_UP = 5.0               # s without the person before approach() stops
+GIVE_UP = 5.0               # s without the person before approach() stops, and a follow stops looking round
+FOLLOW_GIVE_UP = 15.0       # s before a follow ends: close up the tracker loses them (it sees legs only), and he should wait
 CENTRED = 0.25              # |x - 0.5| under which he may walk forward: keeping up, not pointing
 # Turn rates are what is commanded; he delivers about 0.7 of it.
 K_TURN = 5.0                # rad/s per unit of x offset
@@ -52,7 +54,7 @@ LINE_HALF = 0.3             # m either side of the line to them that has to be e
 BLOCK_MARGIN = 0.5          # m: something this much nearer than they are is in the way, not them
 BLOCKED_S = 0.3             # the way has to be blocked this long before Nav2 takes over
 CLEAR_S = 1.0               # and free this long before he walks straight again
-FOLLOW_LOG = '/tmp/follow_nav.log'   # every change of state in the last follow_nav()
+FOLLOW_LOG = '/tmp/follow_nav.log'   # every change of state in each follow_nav(), newest last
 NAV_NEAR = 0.3              # m: a goal nearer than this is "there" to Nav2 (xy_goal_tolerance 0.25)
 
 
@@ -167,12 +169,14 @@ def _controller(bot, det, stop_distance, speed, hold, near=None, near_distance=1
         p = det.person()
         if p is None:
             state['lost_since'] = state['lost_since'] or now
-            if now - state['lost_since'] > GIVE_UP:
-                return 'lost the person for %.0f s' % GIVE_UP
+            gone = now - state['lost_since']
+            if gone > (FOLLOW_GIVE_UP if hold else GIVE_UP):
+                return 'lost the person for %.0f s' % gone
             # Last seen off to one side: they walked out of the picture that
-            # way, so look that way. Lost near the middle, wait where he is.
+            # way, so look that way, for GIVE_UP. Lost near the middle, wait.
             last = state['off']
-            return 0.0, swing(0.0 if abs(last) < CENTRED else -SEARCH_TURN if last > 0 else SEARCH_TURN)
+            return 0.0, swing(0.0 if abs(last) < CENTRED or gone > GIVE_UP
+                              else -SEARCH_TURN if last > 0 else SEARCH_TURN)
         state['lost_since'] = None
         if not state['near_done'] and clear <= stop_distance + near_distance:
             state['near_done'] = True
@@ -208,7 +212,7 @@ def approach(bot, det, stop_distance=0.6, speed=0.3, limit=30.0,
 
 def follow(bot, det, seconds, stop_distance=0.6, speed=0.3, abort=None):
     """Follow the person for `seconds` (at most lite3's 30 s HARD_TIMEOUT),
-    keeping stop_distance; ends early if they are lost for GIVE_UP seconds.
+    keeping stop_distance; ends early if they are lost for FOLLOW_GIVE_UP seconds.
     Returns lite3.steer()'s result dict ('time limit' = followed the full time).
     """
     return bot.steer(_controller(bot, det, stop_distance, speed, True, abort=abort),
@@ -259,7 +263,10 @@ def follow_nav(bot, det, seconds, stop_distance=0.6, speed=0.3, abort=None):
     straight = _controller(bot, det, stop_distance, speed, True, view=lambda: (
         bot.clearance(bins=state['bins']), bot.side_clear(state['bins'])))
     spent = {}
-    trace = open(FOLLOW_LOG, 'w')
+    # Appended, so an earlier run is still there to read; started afresh past 1 MB.
+    big = os.path.exists(FOLLOW_LOG) and os.path.getsize(FOLLOW_LOG) > 1000000
+    trace = open(FOLLOW_LOG, 'w' if big else 'a')
+    trace.write('--- follow_nav %s\n' % time.strftime('%H:%M:%S'))
 
     def note(label, detail=''):
         """Count the time in each state and write every change of it down."""
@@ -342,17 +349,25 @@ def follow_nav(bot, det, seconds, stop_distance=0.6, speed=0.3, abort=None):
             out = straight()
             if isinstance(out, str):
                 return out
-            note('straight')
+            # what the straight controller is doing, and on what it sees
+            if p is None:
+                note('straight: not seen')
+            else:
+                note('straight: ' + ('walking' if out[0] else 'turning' if out[1] else 'standing'),
+                     'ahead %.2f m, sides %.2f / %.2f m, them %s at %+.0f deg' % (
+                         (bot.clearance(bins=bins),) + bot.side_clear(bins)
+                         + ('-' if r is None else '%.2f m' % r, deg)))
             bot._drive(clamp(out[0], MAX_SPEED), 0.0, clamp(out[1], MAX_YAW_RATE))
             time.sleep(0.05)
             return None
         if p is None:
             state['lost_since'] = state['lost_since'] or now
-            if now - state['lost_since'] > GIVE_UP:
-                return 'lost the person for %.0f s' % GIVE_UP
+            gone = now - state['lost_since']
+            if gone > FOLLOW_GIVE_UP:
+                return 'lost the person for %.0f s' % gone
             note('not seen')
             # A goal under way stays: it leads to where they were last seen.
-            if not state['goal'] and abs(state['off']) >= CENTRED:
+            if not state['goal'] and abs(state['off']) >= CENTRED and gone <= GIVE_UP:
                 wz = -SEARCH_TURN if state['off'] > 0 else SEARCH_TURN
         else:
             state['lost_since'] = None
@@ -416,11 +431,14 @@ def follow_nav(bot, det, seconds, stop_distance=0.6, speed=0.3, abort=None):
         drop()
         bot.halt()
         note(None)
+        trace.write('--- stopped %s\n' % time.strftime('%H:%M:%S'))
         trace.close()
     spent.pop(None, None)
     r['spent'] = spent
     r['reason'] += ' (%d goals; %s)' % (state['sent'], ', '.join(
         '%.0f s %s' % (t, k) for k, t in sorted(spent.items(), key=lambda kv: -kv[1])))
+    with open(FOLLOW_LOG, 'a') as trace:
+        trace.write('--- ended: %s\n' % r['reason'])
     r['moved'] = dist(r['start'], r['end'])
     return r
 

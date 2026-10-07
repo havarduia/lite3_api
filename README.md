@@ -635,7 +635,10 @@ a 12-byte header `<code, json_length, 1>` then JSON, on port 43901.
   - if the person is lost: when they were last seen off-centre they walked
     out of the picture on that side, so turn that way at 1.0 rad/s commanded (half a
     turn in the 5 s below); lost near the middle, stand and wait;
-  - stop if the person is lost for 5 s, or the depth stream is lost.
+  - stop if the person is lost for 5 s (`approach()`) or 15 s (the follows:
+    close up the tracker often loses a person, seeing only legs, and a follow
+    that ends because they stood near him for 5 s is no use), or the depth
+    stream is lost.
 - `approach()` ends at the stop distance; `follow()` holds position there,
   keeps turning to face the person, and walks again when they move away.
   `approach(near=fn)` calls `fn` ~1 m before arrival, which the tour uses to
@@ -693,7 +696,7 @@ a 12-byte header `<code, json_length, 1>` then JSON, on port 43901.
     person: he then comes to rest beside it until he sees them clear of it;
   - the speed argument is for the straight part; Nav2 sets its own pace;
   - the result's reason ends with how many goals were sent and the seconds
-    spent in each state (`straight`, `goal`, `with them`, `beside him`, `not seen`,
+    spent in each state (`straight: walking / turning / standing / not seen`, `goal`, `with them`, `beside him`, `not seen`,
     `goal blocked`, `no range on them`), and every change of state is written to
     `/tmp/follow_nav.log`. Read that first when he stands about.
 
