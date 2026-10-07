@@ -1,6 +1,8 @@
 """rviz - show the live robot in rviz2 on the laptop.
 
     python3 -m robot.rviz [sensors] [topic ...]      on the laptop (ROS2 Jazzy)
+    python3 -m robot.rviz --record FILE [sensors] [topic ...]     the same, kept in FILE
+    python3 -m robot.rviz --play FILE [speed]        FILE again, with no robot
 
 Copies /joint_states, /tf, /tf_static, /leg_odom2 and any topics named from the robot to
 the laptop over ssh, and starts robot_state_publisher (urdf/lite3.urdf) and
@@ -40,6 +42,7 @@ RESCAN_S = 2.0          # look for topics that were not there yet (Nav2 started 
 RETRY_S = 2.0           # between attempts to reach the robot again
 ANNOUNCE = 255          # frame index that carries a topic announcement, not a message
 HEAD = struct.Struct('<BI')
+REC = struct.Struct('<dBI')     # a recording: seconds since it began, then the frame as it came
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 HD_DIR = os.path.join(ROOT, 'urdf', 'meshes_hd')
 HD_URL = ('https://raw.githubusercontent.com/DeepRoboticsLab/Lite3_rl_training/HEAD/'
@@ -113,6 +116,22 @@ def read(pipe, n):
     return data
 
 
+def recorded(path, speed=1.0, sleep=time.sleep):
+    """The frames of a recording, each at the moment it first came (or `speed` times as fast)."""
+    with open(path, 'rb') as f:
+        start = time.monotonic()
+        while True:
+            head = f.read(REC.size)
+            if len(head) < REC.size:
+                return                      # the end, or a last frame cut short by a kill
+            t, i, n = REC.unpack(head)
+            data = f.read(n)
+            if len(data) < n:
+                return
+            sleep(max(0.0, t / speed - (time.monotonic() - start)))
+            yield i, data
+
+
 def fetch_hd():
     """The vendor's dense meshes and Intel's D435 into urdf/meshes_hd (73 MB, not in git).
     True if all there."""
@@ -177,8 +196,9 @@ def height(joints):
     return -low
 
 
-def show(extra):
-    """Laptop end."""
+def show(extra, record=None, play=None, speed=1.0):
+    """Laptop end. `record`: also keep every frame in that file. `play`: take the frames
+    from that file, not from the robot."""
     # The laptop's own DDS setup belongs to another robot network; stay on this machine.
     os.environ.pop('CYCLONEDDS_URI', None)
     os.environ['ROS_LOCALHOST_ONLY'] = '1'
@@ -219,7 +239,21 @@ def show(extra):
             stdout=subprocess.PIPE))
         return procs[-1]
 
-    ssh = connect()
+    def live():
+        ssh = connect()
+        while True:
+            try:
+                i, n = HEAD.unpack(read(ssh.stdout, HEAD.size))
+                yield i, read(ssh.stdout, n)
+            except EOFError:
+                print('lost the robot end (is ~/robot pulled, the robot reachable?); retrying')
+                ssh.terminate()
+                procs.remove(ssh)
+                time.sleep(RETRY_S)
+                ssh = connect()
+
+    tape = open(record, 'wb') if record else None
+    began = time.monotonic()
     # Stop the same clean way however we are told to (a plain kill, or Ctrl-C when
     # started in the background, where the shell has it ignored).
     for sig in (signal.SIGINT, signal.SIGTERM):
@@ -264,17 +298,11 @@ def show(extra):
             tf_pub.publish(TFMessage(transforms=keep))
 
     try:
-        while rviz.poll() is None:
-            try:
-                i, n = HEAD.unpack(read(ssh.stdout, HEAD.size))
-                data = read(ssh.stdout, n)
-            except EOFError:
-                print('lost the robot end (is ~/robot pulled, the robot reachable?); retrying')
-                ssh.terminate()
-                procs.remove(ssh)
-                time.sleep(RETRY_S)
-                ssh = connect()
-                continue
+        for i, data in recorded(play, speed) if play else live():
+            if rviz.poll() is not None:
+                break
+            if tape:
+                tape.write(REC.pack(time.monotonic() - began, i, len(data)) + data)
             if i != ANNOUNCE:
                 if i in pubs:
                     if names[i] == '/tf':
@@ -303,21 +331,38 @@ def show(extra):
             pubs[i] = node.create_publisher(msg, topic, qos)
             names[i] = topic
             print('relaying %s [%s]' % (topic, kind))
+        else:
+            # Once only: the stamps are the robot's clock, and rviz ignores frames
+            # older than ones it has, so a second pass would show a frozen robot.
+            print('end of %s; close rviz when done, run again to see it again' % play)
+            rviz.wait()
     except KeyboardInterrupt:
         pass
     finally:
+        if tape:
+            tape.close()
         for p in procs:
             p.terminate()
 
 
 def check():
-    """python3 -m robot.rviz --check: height() against the standing height the robot reports."""
+    """python3 -m robot.rviz --check: height() against the standing height the robot
+    reports, and a recording read back."""
     def pose(a, b, c):
         return {leg + '_Joint' + n: v for leg in ('LF', 'RF', 'LB', 'RB')
                 for n, v in (('', a), ('_1', b), ('_2', c))}
     # Standing, /leg_odom2 said 0.324 to the foot centre; the foot reaches FOOT_R below that.
     assert abs(height(pose(0.0, 0.67, -1.35)) - (0.324 + FOOT_R)) < 0.01
     assert BELLY <= height(pose(0.0, 1.2, -2.7)) < 0.15       # folded: near the floor
+    # A recording comes back frame for frame, each waited for, and a cut-off tail is dropped.
+    frames, waits = [(ANNOUNCE, b'[0]'), (0, b'abc'), (0, b'')], []
+    with tempfile.NamedTemporaryFile() as f:
+        for t, (i, data) in enumerate(frames):
+            f.write(REC.pack(t * 10.0, i, len(data)) + data)
+        f.write(REC.pack(30.0, 0, 99) + b'short')
+        f.flush()
+        assert list(recorded(f.name, speed=2.0, sleep=waits.append)) == frames
+    assert [round(w) for w in waits] == [0, 5, 10]
     print('ok')
 
 
@@ -326,5 +371,9 @@ if __name__ == '__main__':
         check()
     elif sys.argv[1:2] == ['--send']:
         send(sys.argv[2:])
+    elif sys.argv[1:2] == ['--record']:
+        show(sys.argv[3:], record=sys.argv[2])
+    elif sys.argv[1:2] == ['--play']:
+        show([], play=sys.argv[2], speed=float(sys.argv[3]) if sys.argv[3:] else 1.0)
     else:
         show(sys.argv[1:])

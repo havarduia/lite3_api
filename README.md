@@ -945,6 +945,9 @@ debugging and capturing unknown codes only.
     python3 -m robot.rviz                # on the laptop, in ~/lite3_api: the model only
     python3 -m robot.rviz sensors        # plus depth cloud, sonars, costmaps
     python3 -m robot.rviz /some/topic    # plus any topics you name
+    python3 -m robot.rviz --record walk.rec sensors    # the same, and kept in walk.rec
+    python3 -m robot.rviz --play walk.rec              # walk.rec again, with no robot
+    python3 -m robot.rviz --play walk.rec 0.25         # at quarter speed (2 = twice as fast)
 
 Opens rviz2 with the Lite3 model moving its legs as the robot does. Close
 rviz (or Ctrl-C) to stop everything, including the robot end.
@@ -954,6 +957,24 @@ over ssh. That end subscribes to `/joint_states`, `/tf`, `/tf_static`, `/leg_odo
 the topics you name, and writes the messages, undecoded, down the ssh pipe;
 the laptop end republishes them unchanged. `robot_state_publisher` on the
 laptop turns `/joint_states` plus `urdf/lite3.urdf` into the leg frames.
+
+**Record and replay.** `--record FILE` writes every message that comes down
+the pipe to FILE, each with the time it arrived, while showing it as usual.
+`--play FILE` feeds rviz from FILE with the same timing and no connection to
+the robot, so a walk or a failed follow can be looked at again afterwards,
+slowed down if need be. What is in the file is what was relayed: name the
+topics you will want when recording (`sensors`, a costmap, ...).
+- Size: the model alone is about 10 kB/s; with `sensors` the depth cloud
+  dominates, 3.5 MB for 23 s on a relayed link (2026-10-07), more on a
+  direct one. `*.rec` is in `.gitignore`.
+- A replay runs once and then leaves rviz open. The messages keep the
+  robot's own time stamps, and rviz ignores frames older than ones it
+  already has, so looping in the same rviz would show a frozen robot. Run
+  it again to see it again.
+- There is no pause or step. Slow it down with the speed number.
+- It replays into rviz exactly what the live view does, the laptop-made
+  `odom -> base_link` and sonar cones included, because those are made
+  from the recorded messages on the way through.
 
 **Why not plain DDS.** The laptop only reaches the robot over Tailscale,
 which carries no multicast, and the robot's Foxy CycloneDDS talks on one
