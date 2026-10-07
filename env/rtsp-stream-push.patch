@@ -1,0 +1,14 @@
+--- a/rtsp_stream/push_video.sh
++++ b/rtsp_stream/push_video.sh
+@@ -1,4 +1,9 @@
+ # sudo gst-launch-1.0 v4l2src device=/dev/video0 ! image/jpeg, width=1280, height=720, framerate=30/1 ! jpegdec ! videoconvert ! mpph264enc ! rtspclientsink location=rtsp://127.0.0.1/live/test latency=10
+ 
+-sudo gst-launch-1.0 v4l2src device=/dev/video0 ! image/jpeg, width=1280, height=720, framerate=30/1 ! jpegdec ! videoconvert ! mpph264enc ! rtspclientsink location=rtsp://127.0.0.1:8554/test latency=10
+-
++# In a loop: start_stream.sh starts this beside mediamtx, and when it gets there
++# first (it did on 2026-10-07) the push fails to connect and gst-launch exits for
++# good, leaving the front camera with no picture until the next boot.
++while true; do
++  sudo gst-launch-1.0 v4l2src device=/dev/video0 ! image/jpeg, width=1280, height=720, framerate=30/1 ! jpegdec ! videoconvert ! mpph264enc ! rtspclientsink location=rtsp://127.0.0.1:8554/test latency=10
++  sleep 2
++done

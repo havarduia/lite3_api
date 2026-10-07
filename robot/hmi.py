@@ -408,7 +408,10 @@ class Server:
                 self.pages.discard(ws)
 
     async def index(self, request):
-        return web.FileResponse(os.path.join(STATIC, 'index.html'))
+        # no-cache = ask before reusing a kept copy. Without it a browser may show
+        # yesterday's page for hours after a pull (a phone did, 2026-10-07).
+        return web.FileResponse(os.path.join(STATIC, 'index.html'),
+                                headers={'Cache-Control': 'no-cache'})
 
     async def ws(self, request):
         ws = web.WebSocketResponse(heartbeat=PING_S)
