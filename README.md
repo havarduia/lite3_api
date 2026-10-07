@@ -754,14 +754,31 @@ sentence; a pump thread feeds them into a single open `ffmpeg | ssh aplay`
 stream. The first sentence plays while the next is still being synthesised.
 It adds software gain with a limiter and sets the codec volume to max.
 
-### 9.3 `Talker`: Gemini writes it, Speaker says it
+### 9.3 `Talker`: Gemini answers, in its own voice
 
 - **Gemini Live** (default): one WebSocket session that keeps its own
-  conversation context. Live models won't answer in plain text, so we ask for
-  audio **plus a transcript**, throw the audio away, and speak the transcript
-  with Piper (so the robot keeps one consistent voice). First words arrive in
-  ~0.5 s. Session resumption handles dropped idle connections; if no reply
-  starts within 6 s it reconnects once.
+  conversation context. Live models answer in speech, with a transcript
+  alongside. **The speech is what you hear**: `Line` plays the samples
+  (24 kHz) on the robot's speaker as they arrive, and the transcript only
+  feeds the chat display. Session resumption handles dropped idle
+  connections; if no reply starts within 6 s it reconnects once.
+- **Why not Piper for replies** (it was, until 2026-10-07): the wait was on
+  our side, not Gemini's. Measured that day on the Jetson: Gemini's whole
+  reply in 0.5 s, then Piper 1.7-2.0 s to make each sentence, then 0.8 s of
+  lead-in silence, about 3 s before a sound; the first question after a
+  start also paid 3.9 s to load Piper and 1.9 s to open the session. Now
+  `Line` is opened before the question is sent, so the ssh to the speaker
+  and the lead-in pass while Gemini thinks, and the panel loads everything
+  at start: **sound begins 1.0-1.6 s after asking** (timed into a sink in
+  place of the speaker; the real speaker adds its ssh, about 0.4 s, where
+  that is not already hidden by the lead-in).
+- **Voices.** 30 of Gemini's (`python3 -m robot.talk gvoices`); the default
+  is `GEMINI_VOICE`, the panel's Voice box changes it, `--gvoice NAME` on
+  the command line. A session keeps the voice it was opened with, so a
+  change reopens it. Rocky's alien filter is applied to whichever voice.
+- **Piper still speaks** what is not a Live reply: "Say it" (exact text),
+  "Look and comment" and its follow-ups (REST, below), and any reply that
+  fell back to REST. Those are in his old voice, so the two differ.
 - **REST** (`generateContent`) is the fallback if Live fails. It keeps the
   last 20 messages and re-sends the most recent camera frame so follow-ups
   like "what did you just see?" work. **Image turns always go over REST**,
@@ -785,7 +802,7 @@ It adds software gain with a limiter and sets the codec volume to max.
 - The API key is read from `~/.gemini_key` (git-ignored).
 
 CLI: `python3 -m robot.talk` (chat), `... ask "hi"`, `... look`, `... say "text"`,
-`... play OKstandup`, `... url <link>`, `... clips`, `... voices`.
+`... play OKstandup`, `... url <link>`, `... clips`, `... voices`, `... gvoices`.
 
 ---
 

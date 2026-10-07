@@ -2,10 +2,11 @@
 """talk - everything the robot says: its speaker, and the Gemini chat behind it.
 
 The speaker is on the MOTION computer, so playing a sound is ssh + aplay.
-Three layers: Voice (one sound: a clip, a file, a URL, or text through
-Piper), Speaker (streaming Piper, sentence by sentence) and Talker (Gemini
-writes the line, Speaker says it; look() adds a camera frame). How it works
-and what it needs installed: README.md section 9.
+The layers: Voice (one sound: a clip, a file, a URL, or text through
+Piper), Speaker (streaming Piper, sentence by sentence), Line (speech that
+comes as samples) and Talker (Gemini answers in its own voice through Line;
+say(), look() and anything that falls back to REST go through Speaker). How
+it works and what it needs installed: README.md section 9.
 
     from robot.talk import Voice, Talker
     Voice().play('OKstandup')                  # one of the robot's ~33 clips
@@ -23,9 +24,9 @@ From the shell:
     python3 -m robot.talk play OKstandup       # a built-in clip
     python3 -m robot.talk file ~/alarm.wav     # any local audio
     python3 -m robot.talk url <youtube url>    # a video's audio
-    python3 -m robot.talk clips | voices       # list clips / Piper voices
-  options: --persona NAME  --voice PIPER_VOICE  --alien  --quiet (chat, text
-  only)  --rest (skip Gemini Live)  --model NAME
+    python3 -m robot.talk clips | voices | gvoices   # list clips / Piper voices / Gemini voices
+  options: --persona NAME  --voice PIPER_VOICE  --gvoice GEMINI_VOICE  --alien
+  --quiet (chat, text only)  --rest (skip Gemini Live)  --model NAME
   (in chat, type  /look  or  /look <question>)
 """
 import base64
@@ -33,6 +34,7 @@ import glob
 import itertools
 import json
 import os
+import queue
 import re
 import shutil
 import socket
@@ -102,10 +104,15 @@ def _aplay():
             '-c', str(CHANNELS), '-']
 
 
-def _to_speaker(*filters):
+def _play_cmd(host):
+    """The command that plays what _to_speaker() makes on the robot's speaker."""
+    return _ssh(host) + ['amixer', '-q', '-c', '0', 'sset', 'PCM', str(HW_PCM), ';'] + _aplay()
+
+
+def _to_speaker(*filters, lead=True):
     """ffmpeg output arguments: these filters (None is skipped), then the amp
-    lead-in, as raw samples on stdout."""
-    lead = 'adelay=%d|%d' % (LEAD_IN_MS, LEAD_IN_MS)
+    lead-in (unless the caller sends that silence itself), as raw samples on stdout."""
+    lead = 'adelay=%d|%d' % (LEAD_IN_MS, LEAD_IN_MS) if lead else None
     return ['-af', ','.join(f for f in filters + (lead,) if f),
             '-f', 's16le', '-ar', str(RATE), '-ac', str(CHANNELS), '-']
 
@@ -340,6 +347,56 @@ class Speaker:
             self._cv.notify_all()
 
 
+class Line:
+    """Speech that arrives as raw samples (Gemini's own voice), played as it
+    comes. Open it BEFORE asking: the ssh and the amp's lead-in silence then pass
+    while Gemini thinks, not after it has answered.
+
+        line = Line(); ...; line.write(samples); ...; line.finish()
+    """
+
+    def __init__(self, rate, alien=False, host=HOST):
+        gain = 'volume=%.2f,alimiter=limit=0.95' % (SOFT_GAIN * VOLUME)
+        self._ff = subprocess.Popen(
+            ['ffmpeg', '-loglevel', 'error', '-f', 's16le', '-ar', str(rate), '-ac', '1',
+             '-i', '-'] + _to_speaker(ALIEN_FILTER if alien else None, gain, lead=False),
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE)
+        self._ap = subprocess.Popen(_play_cmd(host), stdin=self._ff.stdout,
+                                    stderr=subprocess.DEVNULL)
+        self._ff.stdout.close()
+        self.heard = False                  # has anything but the lead-in gone out?
+        # Written from a thread of its own: the pipe to the robot's speaker fills
+        # (Gemini sends faster than speech plays) and must not hold up the reply.
+        self._q = queue.Queue()
+        self._q.put(bytes(2 * (rate * LEAD_IN_MS // 1000)))
+        self._t = threading.Thread(target=self._pump, daemon=True)
+        self._t.start()
+
+    def write(self, samples):
+        self.heard = True
+        self._q.put(samples)
+
+    def _pump(self):
+        for samples in iter(self._q.get, None):
+            try:
+                self._ff.stdin.write(samples)
+                self._ff.stdin.flush()
+            except OSError:                 # the player died; finish() reports it
+                return
+
+    def finish(self):
+        """Wait until all of it has played, then free the speaker."""
+        self._q.put(None)
+        self._t.join()
+        try:
+            self._ff.stdin.close()
+        except OSError:
+            pass
+        self._ff.wait()
+        if self._ap.wait() != 0 and self.heard:
+            raise TalkError('aplay on the robot failed (exit %d)' % self._ap.returncode)
+
+
 # --- Gemini -------------------------------------------------------------------
 KEY_FILE = os.path.expanduser('~/.gemini_key')
 # An alias, so a retired model version cannot break it (gemini-2.5-flash was
@@ -356,6 +413,16 @@ URL = ('https://generativelanguage.googleapis.com/v1beta/models/'
 # ask once more, then give up so the caller can fall back to REST.
 FIRST_REPLY = 6.0
 LIVE_MODEL = 'gemini-3.1-flash-live-preview'   # fastest of the Live models, 2026-09-18
+LIVE_RATE = 24000       # Hz, 16-bit mono: the speech a Live session sends
+# The voice of his chat replies: Gemini's own speech, played as it arrives (it was
+# the reply's text re-spoken by Piper until 2026-10-07, 2-3 s slower). Any of
+# GEMINI_VOICES; the panel's Voice box sets it. `gvoices` on the command line lists them.
+GEMINI_VOICE = 'Charon'
+GEMINI_VOICES = (
+    'Achernar Achird Algenib Algieba Alnilam Aoede Autonoe Callirrhoe Charon Despina '
+    'Enceladus Erinome Fenrir Gacrux Iapetus Kore Laomedeia Leda Orus Puck Pulcherrima '
+    'Rasalgethi Sadachbia Sadaltager Schedar Sulafat Umbriel Vindemiatrix Zephyr '
+    'Zubenelgenubi').split()
 LIVE_HOST = 'generativelanguage.googleapis.com'
 LIVE_URI = ('wss://%s/ws/google.ai.generativelanguage.v1beta.GenerativeService.'
             'BidiGenerateContent' % LIVE_HOST)
@@ -583,8 +650,8 @@ def snapshot(url=CAMERA_URL, width=1280):
 class Live:
     """One Gemini Live session; the server keeps the conversation context."""
 
-    def __init__(self, model=LIVE_MODEL, persona=PERSONA):
-        self.model, self.persona = model, persona
+    def __init__(self, model=LIVE_MODEL, persona=PERSONA, voice=None):
+        self.model, self.persona, self.voice = model, persona, voice or GEMINI_VOICE
         self.ws = None
         self.handle = None      # session resumption: reconnect keeps context
         self._lock = threading.Lock()   # warm() may connect from another thread
@@ -601,8 +668,9 @@ class Live:
             if self.ws is None:
                 self._connect()
 
-    def ask(self, text, jpeg=None):
-        """Yield the reply as transcript chunks, as they arrive.
+    def ask(self, text, jpeg=None, on_audio=None):
+        """Yield the reply as transcript chunks, as they arrive. The speech itself
+        goes to on_audio(samples), LIVE_RATE Hz 16-bit mono, as it arrives.
 
         `jpeg` is sent first as a video frame, so the question is about it and
         the frame stays in the session's context for follow-ups.
@@ -637,6 +705,12 @@ class Live:
                 if upd.get('resumable') and upd.get('newHandle'):
                     self.handle = upd['newHandle']
                 sc = m.get('serverContent', {})
+                for part in sc.get('modelTurn', {}).get('parts', []):
+                    data = part.get('inlineData', {}).get('data')
+                    if data:
+                        started = True
+                        if on_audio:
+                            on_audio(base64.b64decode(data))
                 chunk = sc.get('outputTranscription', {}).get('text')
                 if chunk:
                     started = True
@@ -653,7 +727,8 @@ class Live:
         self.close()
         setup = {
             'model': 'models/' + self.model,
-            'generationConfig': {'responseModalities': ['AUDIO']},
+            'generationConfig': {'responseModalities': ['AUDIO'], 'speechConfig': {
+                'voiceConfig': {'prebuiltVoiceConfig': {'voiceName': self.voice}}}},
             'outputAudioTranscription': {},
             'systemInstruction': {'parts': [{'text': PERSONAS[self.persona][1]}]},
             'sessionResumption': {'handle': self.handle} if self.handle else {},
@@ -731,14 +806,15 @@ class Talker:
     """A conversation with one persona, spoken through Speaker as it streams."""
 
     def __init__(self, model=MODEL, voice=None, speak=True, live=True,
-                 persona=PERSONA):
+                 persona=PERSONA, gvoice=None):
         if persona not in PERSONAS:
             raise TalkError('unknown persona %r; have %s' % (persona, ', '.join(PERSONAS)))
         self.model, self.persona = model, persona
         self.name, _, default_voice, alien = PERSONAS[persona]
+        self.alien = alien
         self.history = []                   # for REST; Live keeps its own
         self.last_jpeg = None               # latest camera frame, for REST
-        self.live = Live(persona=persona) if live else None
+        self.live = Live(persona=persona, voice=gvoice) if live else None
         self.speaker = None
         if speak:
             self.speaker = Speaker(voice=voice or default_voice, alien=alien, flat=alien)
@@ -758,15 +834,28 @@ class Talker:
             # REST: Live answered about a frame it had plainly not read.
             seen = jpeg or any(h.get('image') for h in self.history)
             if self.live and not seen:
+                # Live replies are heard in Gemini's own voice, as they arrive; the
+                # sentences are only for the caller. Piper (self.speaker) speaks what
+                # falls back to REST, image turns, and say().
+                line = Line(LIVE_RATE, alien=self.alien) if speaking else None
                 try:
-                    stream = self.live.ask(text)
-                    first = next(stream, None)  # connection errors surface here
-                except TalkError as e:
-                    print('[live unavailable, using REST: %s]' % e, file=sys.stderr)
-                    stream, first = None, None
-                if stream is not None:
-                    self._emit(itertools.chain([first] if first else [], stream),
-                               said, on_sentence, speaking)
+                    try:
+                        stream = self.live.ask(text, on_audio=line.write if line else None)
+                        first = next(stream, None)  # connection errors surface here
+                    except TalkError as e:
+                        print('[live unavailable, using REST: %s]' % e, file=sys.stderr)
+                        stream, first = None, None
+                    if stream is not None:
+                        self._emit(itertools.chain([first] if first else [], stream),
+                                   said, on_sentence, False)
+                finally:
+                    if line:
+                        line.finish()
+                if said and line and not line.heard:    # a transcript with no speech: say it
+                    for sentence in said:
+                        self.speaker.say(sentence)
+                elif said:
+                    speaking = False            # heard already: nothing for Piper to finish
             if not said:
                 out = ask(self._rest_contents(user, jpeg), self.model, self.persona)
                 self._emit([out + ' '], said, on_sentence, speaking)
@@ -853,7 +942,7 @@ def _cli(argv):
             opts['live'] = False
         elif a == '--alien':
             alien = True
-        elif a in ('--model', '--voice', '--persona'):
+        elif a in ('--model', '--voice', '--persona', '--gvoice'):
             opts[a[2:]] = next(it)
         else:
             args.append(a)
@@ -873,6 +962,8 @@ def _cli(argv):
             print('\n'.join(v.clips())); return 0
         if cmd == 'voices':
             print('\n'.join(v.voices())); return 0
+        if cmd == 'gvoices':
+            print('\n'.join(GEMINI_VOICES)); return 0
         if cmd not in ('chat', 'ask', 'look'):
             print('unknown command %r - see --help' % cmd, file=sys.stderr)
             return 2

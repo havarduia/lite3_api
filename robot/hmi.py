@@ -156,6 +156,7 @@ class Robot:
         self.bot._node.create_subscription(Path, '/plan', self._plan_cb, 1)
         self._goal_pub = self.bot._node.create_publisher(PoseStamped, '/intent/goal', 1)
         self._them_pub = self.bot._node.create_publisher(PointStamped, '/intent/person', 1)
+        self.talk_pool.submit(self._warm_talk)
 
     # --- commands --------------------------------------------------------
     def log(self, msg, level=None):
@@ -302,6 +303,28 @@ class Robot:
             self.blocked = None
 
     # --- talking ---------------------------------------------------------
+    def _warm_talk(self):
+        """Load the voice and open the chat session now. Left to the first
+        question they cost it about 6 s (Piper 3.9 s, Gemini Live 1.9 s, 2026-10-07).
+        On the talk thread, so a question asked meanwhile waits for it. Also how a
+        new Gemini voice takes effect: a session keeps the voice it was opened with."""
+        try:
+            from .talk import Talker, PERSONA
+            if self.talker:
+                self.talker.close()
+                self.talker = None
+            self.persona = self.persona or PERSONA
+            self.talker = Talker(persona=self.persona)
+            self.talker.live.warm()
+        except Exception as e:                  # talking unavailable, driving is not
+            self.log('talk is not ready: %s' % e, 'warn')
+
+    def voice(self, name):
+        from . import talk
+        if name in talk.GEMINI_VOICES and name != talk.GEMINI_VOICE:
+            talk.GEMINI_VOICE = name
+            self.talk_pool.submit(self._warm_talk)
+
     def talk(self, kind, text, persona):
         self.talk_pool.submit(self._talk, kind, text, persona)
 
@@ -467,6 +490,8 @@ class Server:
             self.robot.log('talk unavailable: %s' % e, 'warn')
         await ws.send_str(json.dumps({'t': 'hello', 'personas': personas,
                                       'persona': persona, 'log': self.log,
+                                      'voices': talk.GEMINI_VOICES if personas else [],
+                                      'voice': talk.GEMINI_VOICE if personas else None,
                                       'volume': talk.VOLUME if personas else 1.0}))
         try:
             async for m in ws:
@@ -527,6 +552,8 @@ class Server:
         elif k == 'volume':
             from . import talk
             talk.VOLUME = min(1.0, max(0.0, float(c['v'])))
+        elif k == 'voice':
+            r.voice(c.get('v'))
         elif k in ('say', 'ask', 'look'):
             r.talk(k, (c.get('text') or '').strip(), c.get('persona'))
 

@@ -343,6 +343,10 @@ textarea { display: block; width: 100%; min-height: 76px; margin: 12px 0; resize
       <label for="persona">Persona</label>
       <select id="persona"></select>
     </div>
+    <div class="line" title="The voice of his answers. Say it, and Look and comment, keep his own">
+      <label for="voice">Voice</label>
+      <select id="voice"></select>
+    </div>
     <div class="line">
       <label for="volume">Volume</label>
       <input type="range" id="volume" min="0" max="100" step="5" value="100">
@@ -390,6 +394,11 @@ function connect() {
       for (const p of m.personas) {
         const o = document.createElement('option'); o.value = o.textContent = p;
         if (p === m.persona) o.selected = true; sel.appendChild(o);
+      }
+      const vs = $('voice'); vs.innerHTML = '';
+      for (const v of m.voices || []) {
+        const o = document.createElement('option'); o.value = o.textContent = v;
+        if (v === m.voice) o.selected = true; vs.appendChild(o);
       }
       $('volume').value = Math.round(m.volume * 100); showVolume();
       $('log').innerHTML = ''; $('chat').innerHTML = '';
@@ -548,6 +557,7 @@ $('estop').addEventListener('click', pressEstop);
 const showVolume = () => { $('volume-v').textContent = $('volume').value + ' %'; };
 $('volume').addEventListener('input', showVolume);
 $('volume').addEventListener('change', () => send({ cmd: 'volume', v: $('volume').value / 100 }));
+$('voice').addEventListener('change', () => send({ cmd: 'voice', v: $('voice').value }));
 document.querySelectorAll('[data-talk]').forEach(b => b.addEventListener('click', () => {
   send({ cmd: b.dataset.talk, text: $('talk-text').value, persona: $('persona').value });
   if (b.dataset.talk !== 'look') $('talk-text').value = '';
