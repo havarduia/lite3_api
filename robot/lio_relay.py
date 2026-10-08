@@ -38,6 +38,12 @@ FUSED_TOPIC = '/odom_fused'
 LIO_DELAY_S = 0.05      # how old a FAST-LIO2 pose is on arrival; rough, from one walked loop
 GAP_S = 0.5             # longer than this between poses: a new run, or it stalled
 STEP_TOL = (0.15, 0.2)  # m, rad: a step differing more than this from the legs' is not believed
+# FAST-LIO2 is started from here, not from the Orin: it has to start with the
+# robot standing still, and only this side knows whether he is.
+STANDING = 6            # basic state, first number of /robot_state_debug
+STILL = (0.02, 0.02)    # m, rad over the last second
+CHECK_S = 5.0
+START_RETRY_S = 30.0    # it needs a few seconds to come up; do not ask again before this
 
 
 def qmul(a, b):
@@ -144,6 +150,16 @@ def live(what, **options):
         return json.load(e)
 
 
+def should_start(basic, legs, lio_age):
+    """Start FAST-LIO2 now? Standing, still for the second in `legs`, and no
+    pose from it lately (lio_age: seconds, None = never)."""
+    if basic != STANDING or len(legs) < legs.maxlen:
+        return False
+    a, b = legs[0][1], legs[-1][1]
+    still = math.hypot(b[0] - a[0], b[1] - a[1]) < STILL[0] and abs(wrap(b[2] - a[2])) < STILL[1]
+    return still and (lio_age is None or lio_age > GAP_S)
+
+
 def listen():
     """Child, on the Orin's DDS: one line per pose on stdout."""
     import rclpy
@@ -166,6 +182,7 @@ def main():
     import rclpy
     from nav_msgs.msg import Odometry
     from rclpy.clock import Clock, ClockType
+    from std_msgs.msg import Int32MultiArray
 
     rclpy.init()
     node = rclpy.create_node('lio_relay')
@@ -189,7 +206,7 @@ def main():
 
     fuse = Fuse()
     legs = collections.deque(maxlen=50)     # (arrival, leg pose): about a second of them
-    state = {'seen': None, 'prev': None, 'using': False}
+    state = {'seen': None, 'prev': None, 'using': False, 'basic': None, 'asked': -START_RETRY_S}
 
     def take_lio(s):
         arrived, t, p, q = s
@@ -231,7 +248,23 @@ def main():
         ori.x, ori.y, ori.z, ori.w = qmul((0.0, 0.0, math.sin(half), math.cos(half)), q)
         fused_pub.publish(m)
 
+    def start():
+        try:
+            print('lio_relay: asked the Orin to start FAST-LIO2:', live('start'), file=sys.stderr)
+        except (OSError, ValueError) as e:      # Orin off, panel down, or not its answer
+            print('lio_relay: could not reach the Orin panel:', e, file=sys.stderr)
+
+    def check():
+        now = time.monotonic()
+        age = now - fuse.prev[0] if fuse.prev else None
+        if now - state['asked'] > START_RETRY_S and should_start(state['basic'], legs, age):
+            state['asked'] = now
+            threading.Thread(target=start, daemon=True).start()     # not in the 50 Hz path
+
     node.create_subscription(Odometry, LEG_TOPIC, leg, 1)
+    node.create_subscription(Int32MultiArray, '/robot_state_debug',
+                             lambda m: state.__setitem__('basic', m.data[0]), 1)
+    node.create_timer(CHECK_S, check)
     threading.Thread(target=read, daemon=True).start()
     try:
         rclpy.spin(node)
@@ -290,6 +323,14 @@ def demo():
     assert f.using and near(f.fix, held)
     f.lio(t + 10, (0.0, 0.0, 0.0), leg)
     assert near(f.fix, held) and not f.using
+    # starting FAST-LIO2: only standing, still, and with nothing coming from it
+    still = collections.deque([(i * 0.02, (1.0, 2.0, 0.5)) for i in range(50)], maxlen=50)
+    moving = collections.deque([(i * 0.02, (1.0 + i * 0.01, 2.0, 0.5)) for i in range(50)], maxlen=50)
+    assert should_start(STANDING, still, None) and should_start(STANDING, still, 3.0)
+    assert not should_start(STANDING, still, 0.1)       # it is running
+    assert not should_start(STANDING, moving, None)     # walking
+    assert not should_start(1, still, None)             # lying down
+    assert not should_start(STANDING, collections.deque(list(still)[:10], maxlen=50), None)
     print('lio_relay ok')
 
 

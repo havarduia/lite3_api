@@ -48,7 +48,7 @@
 -        inflation_radius: 0.3
 -        cost_scaling_factor: 10.0
 +        inflation_radius: 0.45   # was 0.30 (0.50 originally); 0.30 let NavFn fail next to corners (2026-09-27)
-+        cost_scaling_factor: 3.0
++        cost_scaling_factor: 8.0   # was 3.0: flat cost over the whole 0.45 m made aisles look blocked (2026-10-08)
          inflate_unknown: False
          inflate_around_unknown: False
  
@@ -100,7 +100,7 @@
 -        inflation_radius: 0.3
 -        cost_scaling_factor: 10.0
 +        inflation_radius: 0.45   # was 0.30 (0.50 originally); 0.30 let NavFn fail next to corners (2026-09-27)
-+        cost_scaling_factor: 3.0
++        cost_scaling_factor: 8.0   # was 3.0: flat cost over the whole 0.45 m made aisles look blocked (2026-10-08)
          inflate_unknown: False
          inflate_around_unknown: False
  

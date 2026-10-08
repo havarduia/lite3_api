@@ -14,7 +14,7 @@ story. Logins are left out on purpose.
 | Lidar driver on the Orin | Running, 10 Hz cloud and 200 Hz IMU |
 | FAST-LIO2 on the Orin | Installed; runs only during a Live run from its web panel |
 | `robot/lio_relay.py` | Publishes `/lio_odom` and `/odom_fused` on the robot's graph |
-| Nav2 and `Lite3` | Code switched to `/odom_fused` (section 10). Deployed on the robot: see section 11 |
+| Nav2 and `Lite3` | Switched to `/odom_fused` and deployed on the robot (sections 10, 11). Walked by handheld; `walk()`, `turn()` and one Nav2 goal run on it |
 
 ## 1. The hardware
 
@@ -261,11 +261,134 @@ the service.
 4. Restart the web panel.
 5. Walk a loop on `/odom_fused`, then try Nav2 on it.
 
-Done so far: none of these.
+Done 2026-10-08, with the robot standing and a Live run on:
 
-## 12. Still open
+1. Pushed (`70682f8`) and pulled.
+2. Service installed, enabled and started. Its log said "/odom_fused is
+   corrected by FAST-LIO2"; `/odom_fused` at 49.9 Hz.
+3. `odom_to_tf.py` changed in both places, backups beside them as
+   `odom_to_tf.py.pre-fused`. The repo's patch hunk reverses cleanly
+   against the result, so the two match.
+4. The panel had been restarted after the pull, before the service
+   existed. It needed no second restart: it only waits for the topic.
 
-- `/odom_fused` has not been walked yet, and Nav2 has not driven on it.
+5. Walked loop on `/odom_fused` (handheld, mark to mark, 96 s):
+
+| | Fused | FAST-LIO2 | Leg odometry |
+|---|---|---|---|
+| Distance walked | 9.50 m | 9.44 m | 9.05 m |
+| Gap between end and start | 0.033 m | 0.032 m | 0.073 m |
+| Heading compared with start | -3.3° | -3.2° | -1.9° |
+
+   The fused pose stayed within 0.029 m of FAST-LIO2 all the way and
+   ended 0.001 m from it. The relay never left "corrected by FAST-LIO2",
+   and no step between samples was larger than walking speed.
+
+6. The robot driving itself on it, from the command line, user watching:
+
+| Command | Result | Measured by the fused odometry |
+|---|---|---|
+| `walk 0.5` | target reached | moved 0.52 m |
+| `turn 90` | target reached | turned 90.0° |
+| `turn -90` | target reached | turned -89.2° |
+
+   The relay stayed on "corrected by FAST-LIO2" throughout.
+
+7. Nav2 on it (the user started Nav2 from the panel; I sent the goal):
+
+- `odom -> base_link` came from the fused odometry: `tf2_echo` showed
+  the same position as `/odom_fused`.
+- `goto 1.5`: Nav2 reported the goal reached. The fused pose moved
+  1.32 m.
+- The relay stayed on "corrected by FAST-LIO2" and did not restart.
+- In the Nav2 log: 38 dropped camera frames inside one second, and a few
+  "Range sensor layer can't transform from odom to sonar_front/rear".
+  The dropped frames came while I was starting several check commands on
+  the computer; it was quiet before and after. The load average was
+  about 9 on 6 cores.
+
+So it drives. The open worry is the computer's load, not the odometry:
+the odom transform now passes through two Python programs (the relay,
+then `odom_to_tf.py`), and the relay itself takes about a third of a
+core.
+
+## 12. Nav2's margins
+
+The user watched the 1.5 m goal: it went forward but curved, ended angled
+to the right, and looked nervous on an easy path.
+
+- The odometry itself recorded the turn (heading -179° to 142°, 39° to
+  the right), so the robot turned on purpose; it was not the fused
+  odometry misreading the heading.
+- The costmap showed why: a solid obstacle from 0.5 m to the left of the
+  straight line for the whole first metre (a table or its chairs), free
+  floor on the right. The space straight ahead was clear, as the user said.
+- Nav2 keeps a 0.45 m zone of raised cost around obstacles. With
+  `cost_scaling_factor` at 3.0 that cost hardly fades inside the zone
+  (54 or more out of 99, then zero), so the middle of an aisle looks
+  almost as costly as the edge. Nav2 also accepts any final heading, so
+  it stayed angled.
+
+Changed, with the user's go-ahead: `cost_scaling_factor` 3.0 to 8.0 in
+both costmaps (vendor config on the robot, source and installed copy,
+backups `*.pre-csf8`; same change in `env/nav2-mapless-lite3.patch`).
+The 0.45 m radius stays: it was raised from 0.30 because the planner
+failed next to box corners. Nav2 restarted; both costmaps report 8.0.
+
+### Driving with the new value
+
+The user picked the robot up and put it in place (it detects the lift and
+tucks its legs; it is made for that).
+
+1. First goal: **aborted, the robot did not move.** The planner could not
+   make a path: the robot's own cell and the cells just ahead of it were
+   marked as obstacles, left from the carry. They had not faded after two
+   minutes. The relay stayed on "corrected by FAST-LIO2" through the
+   carry.
+2. Nav2 restarted for a fresh costmap: own cell free, cost along the line
+   0 to 29.
+3. Second goal, 1.5 m ahead: reached. 1.28 m forward, 0.14 m to the left,
+   **heading 40° to the right again.**
+
+So the cost scaling change did not stop the turning: same goal, same 40°
+as before it. The cause is still unknown. Next step is to record what the
+controller commands (`/cmd_vel`) next to the pose during one drive, to
+see whether Nav2 asks for the turn or the robot yaws on its own. Not done:
+the battery was at 20%.
+
+Also seen in this drive: 87 camera frames dropped for lack of a transform,
+with the load average between 8.5 and 11.
+
+## 13. After the battery change: FAST-LIO2 starting by itself
+
+The battery went to 20% and was changed. After the reboot, as expected:
+the relay service was up by itself, FAST-LIO2 was not running, and
+`/odom_fused` was plain leg odometry.
+
+The user offered to let me change code on the Orin so FAST-LIO2 would not
+need starting by hand. It turned out not to need any change there:
+
+- FAST-LIO2 must start with the robot standing still. The Orin does not
+  know the robot's posture; the perception computer does.
+- So the relay does it: every 5 s, if the robot is standing, has been
+  still for a second and no FAST-LIO2 pose is arriving, it calls the
+  Orin panel's start (the API from section 10), then waits 30 s before
+  asking again.
+- It never stops a run and does not restart a diverged one.
+
+Self-check added for the rule (standing and still: yes; walking, lying,
+already running: no). Not yet run on the robot.
+
+## 14. Still open
+
+- Why Nav2 ends its goals about 40° to the right. Not known whether it
+  did this before today's changes.
+- Marks left in the costmap by carrying the robot block planning until
+  Nav2 is restarted.
+- Nav2 has driven one 1.5 m goal on `/odom_fused`. Not more than that.
+- The perception computer's load (about 9 on 6 cores with Nav2, the panel
+  and the relay): camera frames get dropped for lack of a transform when
+  it spikes. Not yet looked into.
 - FAST-LIO2 is not started automatically with Nav2.
 - The relay costs about a third of a core on the perception computer.
 - The lidar's x/y/z position on the body is still the Orin's guess

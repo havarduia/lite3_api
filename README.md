@@ -530,7 +530,14 @@ There is no pre-built map and no SLAM. Everything is in the **odom frame**
   ([STVL README](https://github.com/SteveMacenski/spatio_temporal_voxel_layer)).
 - **Range layer**: the sonars (§6.2).
 - **Inflation**: 0.45 m (was 0.30; at 0.30 the planner failed next to box
-  corners in 2 of 3 runs).
+  corners in 2 of 3 runs). `cost_scaling_factor` 8.0 since 2026-10-08. It
+  was 3.0, at which the cost barely fades: 54 or more out of 99 across
+  the whole 0.45 m, then zero. Between two tables that left no cheap lane
+  down the middle, and with a table 0.5 m to his left he curved 39° to
+  the right on a clear 1.5 m goal and looked nervous doing it. At 8.0 the
+  cost falls to about 20 at the edge of the zone (calculated; a profile
+  read 0 to 29 down a clear aisle). It did NOT stop the turning: the same
+  goal at 8.0 again ended 40° to the right. Cause not found yet.
 - Planner **NavFn**; controller **DWB**. Goal tolerance 0.25 m in xy and
   **3.14 rad in yaw**, i.e. "any heading". Letting Nav2 rotate a legged robot
   at the goal made it step and drift around the goal instead of stopping, so
@@ -1117,9 +1124,21 @@ can die on its own while the bridge still takes velocities.
 **Starting FAST-LIO2 from code.** FAST-LIO2 belongs to the Orin's web
 panel (its Live run), and the panel has an HTTP API, so nothing on the
 Orin had to change: `lio_relay.live('start')`, `live('stop', name='hall')`
-and `live('state')`, or the same three words on the command line. Start
-it with the robot standing still. A stop saves that run's map on the
-Orin. Nothing calls `live()` yet; `nav_start()` does not start FAST-LIO2.
+and `live('state')`, or the same three words on the command line. A stop
+saves that run's map on the Orin.
+
+**It starts by itself.** Every 5 s the relay asks: is the robot standing
+(basic state 6), has leg odometry been still for the last second, and has
+no FAST-LIO2 pose arrived lately? If so it calls `live('start')`, and
+does not ask again for 30 s while FAST-LIO2 comes up. This lives on the
+perception computer, not the Orin, because FAST-LIO2 has to start with
+the robot standing still and only this side knows his posture; started
+at the Orin's boot it would initialise lying down. So after a boot or a
+battery change it comes on the first time he stands still. If you stop
+the Live run from the Orin's panel, the relay starts a new one the next
+time he stands still. It never stops a run, and it does not restart one
+that has diverged: `/odom_fused` is then leg odometry until someone
+stops and starts it.
 
 **Why a relay.** The Orin is ROS 2 Humble with Fast DDS on domain 42. The
 robot's nodes are Foxy with CycloneDDS on domain 0. Measured 2026-10-08
@@ -1205,7 +1224,7 @@ diffs against the vendor originals.
 | `transfer-jetson2motion.patch` | the UDP↔ROS bridge | **caps what it republishes**: odometry, sonars, state and handheld at 50 Hz, joint states at 10 Hz, instead of every one of the ~160 packets a second (parameters `state_hz`, `handle_hz`, `joint_hz`; 0 = every packet; the IMU stays at 160 Hz because VOA pairs it with each point cloud). Each subscriber pays per message and together they had the Jetson at 3% idle (section 12); publishes the **front** sonar (stock published only the rear); adds **battery**, error, charging to the state array (a flat battery used to be invisible: the robot just silently refused to stand); scales leg odometry x/y by **1.15**; fixes a race where every velocity reached the robot **twice** (raw and obstacle-corrected), so the obstacle avoider could never veto anything |
 | `voa-lite3.patch` | vendor obstacle avoider | odometry averaging window 10 → 3 samples, the same ~60 ms now that odometry comes at 50 Hz; the idle handheld publishes zeros at ~160 Hz, which overwrote every ROS velocity; now ignored. A dead sender's last command times out after 500 ms. The config file named a node that doesn't exist, so **every parameter was silently ignored**: fixed |
 | `rtsp-stream-push.patch` | front camera push (`~/rtsp_stream/push_video.sh` on the **motion** computer) | **retries**. The boot script starts the stream server and the camera push side by side; when the push got there first (2026-10-07) it failed to connect and exited for good, so the front camera had no picture until the next boot (`mediamtx` logs "no one is publishing to path 'test'"). Now it is a loop that tries again every 2 s. Backup beside the file as `push_video.sh.pre-retry` |
-| `nav2-mapless-lite3.patch` | Nav2 config, and `scripts/odom_to_tf.py` | range layer for the sonars, voxel decay 2→15 s, inflation 0.30→0.45 m, footprint padding 0.10→0.05, yaw tolerance "any"; `odom -> base_link` is made from `/odom_fused` (§10.7), not `/leg_odom2` |
+| `nav2-mapless-lite3.patch` | Nav2 config, and `scripts/odom_to_tf.py` | range layer for the sonars, voxel decay 2→15 s, inflation 0.30→0.45 m with cost scaling 10→8, footprint padding 0.10→0.05, yaw tolerance "any"; `odom -> base_link` is made from `/odom_fused` (§10.7), not `/leg_odom2` |
 | `realsense-ros-4.58.3-lite3.patch` | camera driver | re-adds the vendor's two cloud changes to the newer driver: steady-clock timestamps (so TF lookups work) and a 5 cm PCL voxel filter |
 
 ### 11.3 Camera stack
