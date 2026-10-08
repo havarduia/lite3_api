@@ -698,7 +698,27 @@ before the drive), against 15 times in 90 s before.
 One drive. The same goal before the fix read fused 0.86, legs 0.62,
 wall 0.63.
 
-## 16. Still open
+## 16. Spec for the rest
+
+Steps 2 and 3 were specified with the spec command, question by question.
+What the user decided:
+
+- Mainly "send it to a place"; talking while it walks would be nice.
+- From code, from the panel and by voice, all three.
+- Anyone with access to the panel may use it.
+- Waypoints as pins on the map, and also as physical tags in the
+  building ("A for convenience, B for fun"); tags as a later phase.
+- One floor at a time. Stairs and lifts are for later.
+- Localization on the perception computer, with the Orin as the fallback
+  if the load does not fit.
+- The building (UiA): some glass, all doors opaque and sometimes closed,
+  long featureless corridors.
+- It is a project of a month or more.
+
+Saved as `.planning/specs/building-navigation.md`, five phases: map and
+localization, places from code, the panel, voice, tags.
+
+## 17. Still open
 
 - The wiggle fix (section 14) has two runs behind it: one in the open,
   one in the aisle.
