@@ -678,10 +678,36 @@ Note for later: the Orin panel's Navigate tab starts the same launch
 file itself and kills any copy it finds first. Using that tab would
 fight with the new service.
 
+### Deployed (commit `9c0814a`)
+
+Relay restarted with the new matching, Nav2 restarted, the robot backed
+0.37 m (rear sonar 0.96 m, so the script allowed no more) and got a
+1.0 m goal with the recorder on.
+
+| Source | Says the robot moved |
+|---|---|
+| Fused odometry | 0.83 m |
+| Leg odometry | 0.89 m |
+| Lidar: how much closer the wall got | 0.81 m |
+
+No jump: the fused pose never changed more than 0.11 m in 0.2 s (legs
+0.12 m). No turn-command flips, heading +2°. The relay dropped to leg
+odometry once in the three minutes after the restart (while standing,
+before the drive), against 15 times in 90 s before.
+
+One drive. The same goal before the fix read fused 0.86, legs 0.62,
+wall 0.63.
+
 ## 16. Still open
 
 - The wiggle fix (section 14) has two runs behind it: one in the open,
   one in the aisle.
+- Lidar step 1: whether the floor leaks into the scan while trotting,
+  and what the lidar layer costs the perception computer.
+- Steps 2 and 3 of whole-building navigation (map + localization,
+  named goals): not started; a short spec comes first.
+- Why FAST-LIO2's poses reach the perception computer at about 8 a
+  second and sometimes most of a second late.
 - Marks left in the costmap by carrying the robot block planning until
   Nav2 is restarted.
 - Nav2 has driven one 1.5 m goal on `/odom_fused`. Not more than that.
