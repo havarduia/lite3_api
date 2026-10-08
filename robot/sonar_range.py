@@ -18,7 +18,7 @@ from sensor_msgs.msg import Range
 from std_msgs.msg import Float64
 from tf2_ros import StaticTransformBroadcaster
 
-from .lite3 import take_ready
+from .lite3 import ODOM_TOPIC, take_ready
 
 # name: (input topic, x in base_link, yaw, max range). A reading at or past
 # max goes out AS max, which the range layer reads as "nothing there". The
@@ -42,13 +42,13 @@ READY_FILE = '/tmp/sonar_range.ready'
 class SonarRange(Node):
     def __init__(self):
         super().__init__('sonar_range')
-        self._stamp = None           # latest /leg_odom2 stamp (steady clock)
+        self._stamp = None           # latest odometry stamp (steady clock)
         self._last = {}
         self._pubs = {}
         self._ready = False
         # depth 1, read RATE_HZ times a second in main(): these come at 160 Hz
         # and taking every message cost most of a core
-        self.create_subscription(Odometry, 'leg_odom2', self._odom, 1)
+        self.create_subscription(Odometry, ODOM_TOPIC, self._odom, 1)
         tfs = []
         for name, (topic, x, yaw, _) in SONARS.items():
             self._pubs[name] = self.create_publisher(Range, '/sonar/' + name, 10)

@@ -218,7 +218,7 @@ robot/                 the library: `from robot.lite3 import Lite3`
   rs_stream.py         RealSense colour → H.264 on mediamtx  (started by hmi.py)
   udp_relay.py         WebRTC video between the tailnet and mediamtx (started by hmi.py)
   rviz.py              the live robot in rviz2 on the laptop (run it on the laptop, §10.6)
-  lio_relay.py         FAST-LIO2's pose from the Orin → /lio_odom (§10.7)
+  lio_relay.py         FAST-LIO2's pose from the Orin → /lio_odom, /odom_fused (§10.7)
 bin/                   things you run
   tour.py              walk / navigate a route, stop, look, talk
   teleop.py            drive from the keyboard over SSH
@@ -229,6 +229,7 @@ demos/                 teaching and regression scripts
   check_motion.py      the motion loop's promises against a fake robot (no robot needed)
 env/                   environment, launchers, and patches to vendor code
   lite3_env.sh         source this first: ROS workspaces, CycloneDDS, PYTHONPATH
+  lio_relay.service    systemd unit for robot/lio_relay.py (§10.7)
   start_nav2_mapless.sh   launches sonar node + Nav2 (called by nav_start())
   camera.launch.py     RealSense D435i launch: depth + colour + IMU at 30 fps
   start_realsense_v4.sh   starts it (the realsense_ros2 systemd unit calls this)
@@ -286,7 +287,7 @@ fixes a crash that actually happened (segfault, `InvalidHandle`).
 | `state` | `/robot_state_debug` | dict: `basic, gait, policy, motion, task, need_move, zero_flag, battery, error, charging` |
 | `battery` | same | percent |
 | `standing` | same | `basic == 6` |
-| `pose` | `/leg_odom2` | `(x, y, yaw)` in the odom frame |
+| `pose` | `/odom_fused` (§10.7) | `(x, y, yaw)` in the odom frame |
 | `attitude` | `/imu/data` | `(roll, pitch)` in degrees (quaternion → Euler in `_imu_cb`) |
 | `ultrasound` | sonar topics | `(front, rear)` metres |
 | `nav_running` | `pgrep bt_navigator` | is Nav2 up |
@@ -992,7 +993,7 @@ Opens rviz2 with the Lite3 model moving its legs as the robot does. Close
 rviz (or Ctrl-C) to stop everything, including the robot end.
 
 **How.** The laptop starts `python3 -m robot.rviz --send ...` on the robot
-over ssh. That end subscribes to `/joint_states`, `/tf`, `/tf_static`, `/leg_odom2` and
+over ssh. That end subscribes to `/joint_states`, `/tf`, `/tf_static`, `/odom_fused` and
 the topics you name, and writes the messages, undecoded, down the ssh pipe;
 the laptop end republishes them unchanged. `robot_state_publisher` on the
 laptop turns `/joint_states` plus `urdf/lite3.urdf` into the leg frames.
@@ -1061,7 +1062,7 @@ so and shows the small ones. Delete the folder to go back to them.
   RealSense extras) is skipped with a line saying so.
 - Fixed frame is `odom`, so the grid is the floor and the robot walks and
   turns across it. The laptop end makes `odom -> base_link` itself: x, y
-  and heading from `/leg_odom2`, height from the joint angles (the lowest
+  and heading from `/odom_fused`, height from the joint angles (the lowest
   foot, knee or the belly rests on the floor, body taken as level). The
   odometry's own height stays at standing height (0.32 m) when the robot
   lies down, which left the model floating. The robot's own
@@ -1089,14 +1090,36 @@ web panel (port 8000), FAST-LIO2. Its own notes are in `~/bin/README.md`
 there.
 
 ```bash
-source ~/robot/env/lite3_env.sh
-python3 -m robot.lio_relay          # on the perception computer; Ctrl-C stops it
-python3 -m robot.lio_relay check    # the pose maths only, anywhere
+sudo systemctl status lio_relay     # it runs as a service on the perception computer
+python3 -m robot.lio_relay check    # the maths only, anywhere
+python3 -m robot.lio_relay start    # start FAST-LIO2 on the Orin; also: stop, state
 ```
 
-It publishes `/lio_odom` (`nav_msgs/Odometry`, `odom -> base_link`, 10 Hz)
-on the robot's graph. Nothing reads it yet: Nav2 and `Lite3` still use
-`/leg_odom2`. It is not started by anything; run it by hand.
+It publishes two topics on the robot's graph:
+
+- `/lio_odom`: FAST-LIO2's pose as it comes (`odom -> base_link`, 10 Hz).
+- `/odom_fused`: `/leg_odom2` with FAST-LIO2's correction, at `/leg_odom2`'s
+  50 Hz and with its stamps. With the Orin silent it is `/leg_odom2`
+  exactly.
+
+`/odom_fused` is the robot's odometry: `Lite3.pose`, the sonar node, the
+rviz relay and Nav2's `odom -> base_link` (`odom_to_tf.py`, patched) all
+read it, because goals and obstacle positions pass between them in that
+one frame. Nav2 still takes speed from `/leg_odom2`.
+
+**The service.** `env/lio_relay.service` (`lio_relay` on the perception
+computer) keeps the relay up from boot and restarts it after 2 s. If it
+is down there is no odometry: `wait_pose()` refuses to start a motion,
+and a motion under way stops with "odometry stopped arriving" once the
+pose is `ODOM_STALE_S` (0.5 s) old. That check exists because the relay
+can die on its own while the bridge still takes velocities.
+
+**Starting FAST-LIO2 from code.** FAST-LIO2 belongs to the Orin's web
+panel (its Live run), and the panel has an HTTP API, so nothing on the
+Orin had to change: `lio_relay.live('start')`, `live('stop', name='hall')`
+and `live('state')`, or the same three words on the command line. Start
+it with the robot standing still. A stop saves that run's map on the
+Orin. Nothing calls `live()` yet; `nav_start()` does not start FAST-LIO2.
 
 **Why a relay.** The Orin is ROS 2 Humble with Fast DDS on domain 42. The
 robot's nodes are Foxy with CycloneDDS on domain 0. Measured 2026-10-08
@@ -1124,9 +1147,38 @@ and the Orin must stay off domain 0.
 - FAST-LIO2 sends no speed, so `twist` (vx, vy, yaw rate, in `base_link`)
   is the difference of the last two poses.
 
-**Tested** 2026-10-08 with a made-up pose published on domain 42 (lidar
-1 m along its own x): `/lio_odom` showed x 0.937, z -0.349 at 10.0 Hz.
-Not yet tested against a real FAST-LIO2 run.
+**`/odom_fused`: how the two are joined** (`Fuse`).
+- The fused pose is the leg pose moved by a correction. The correction is
+  updated from each FAST-LIO2 pose and held between them, so the legs give
+  the 50 Hz and FAST-LIO2 removes their drift.
+- A FAST-LIO2 step is only believed if it agrees with the legs' step over
+  the same stretch (`STEP_TOL`: 0.15 m and 0.2 rad per pose). If it does
+  not, or more than `GAP_S` (0.5 s) passed since the last pose, the
+  correction is kept as it was and FAST-LIO2 is re-anchored to where the
+  legs put the robot. So a divergence, a stall, the Orin going away or a
+  new Live run never makes the fused pose jump; it just goes on as leg
+  odometry.
+- Not caught: FAST-LIO2 drifting slowly, a little per pose.
+- A pose is about 0.05 s old when it arrives (`LIO_DELAY_S`), so it is
+  matched with the leg pose from that long ago. The number is rough: in
+  the loop log below the two matched best 0.07-0.09 s apart, of which
+  about 0.05 s was the logger's own sampling.
+- The relay prints a line when it changes between "corrected by
+  FAST-LIO2" and "leg odometry alone".
+
+**Tested** 2026-10-08:
+- A made-up pose on domain 42 (lidar 1 m along its own x) gave
+  `/lio_odom` x 0.937, z -0.349 at 10.0 Hz.
+- Against a real Live run, robot still: 10 Hz, steady within a few mm.
+- A walked closed loop (handheld, parked on a floor mark, 10.4 m, 92 s):
+  end 0.05 m from start by `/lio_odom`, 0.21 m by `/leg_odom2`; both
+  said the heading was 5° off, no jumps.
+- `/odom_fused`, robot still, Live run on: 50.0 Hz, within 3 mm of
+  `/leg_odom2`. Not yet walked, and nothing has driven on it.
+- The stale-odometry stop: `demos/check_motion.py`, on the fake robot.
+- Cost on the perception computer: about 25% of a core for the relay and
+  8% for its listening child, averaged over the first 28 s (start-up
+  included).
 
 ---
 
@@ -1153,7 +1205,7 @@ diffs against the vendor originals.
 | `transfer-jetson2motion.patch` | the UDP↔ROS bridge | **caps what it republishes**: odometry, sonars, state and handheld at 50 Hz, joint states at 10 Hz, instead of every one of the ~160 packets a second (parameters `state_hz`, `handle_hz`, `joint_hz`; 0 = every packet; the IMU stays at 160 Hz because VOA pairs it with each point cloud). Each subscriber pays per message and together they had the Jetson at 3% idle (section 12); publishes the **front** sonar (stock published only the rear); adds **battery**, error, charging to the state array (a flat battery used to be invisible: the robot just silently refused to stand); scales leg odometry x/y by **1.15**; fixes a race where every velocity reached the robot **twice** (raw and obstacle-corrected), so the obstacle avoider could never veto anything |
 | `voa-lite3.patch` | vendor obstacle avoider | odometry averaging window 10 → 3 samples, the same ~60 ms now that odometry comes at 50 Hz; the idle handheld publishes zeros at ~160 Hz, which overwrote every ROS velocity; now ignored. A dead sender's last command times out after 500 ms. The config file named a node that doesn't exist, so **every parameter was silently ignored**: fixed |
 | `rtsp-stream-push.patch` | front camera push (`~/rtsp_stream/push_video.sh` on the **motion** computer) | **retries**. The boot script starts the stream server and the camera push side by side; when the push got there first (2026-10-07) it failed to connect and exited for good, so the front camera had no picture until the next boot (`mediamtx` logs "no one is publishing to path 'test'"). Now it is a loop that tries again every 2 s. Backup beside the file as `push_video.sh.pre-retry` |
-| `nav2-mapless-lite3.patch` | Nav2 config | range layer for the sonars, voxel decay 2→15 s, inflation 0.30→0.45 m, footprint padding 0.10→0.05, yaw tolerance "any" |
+| `nav2-mapless-lite3.patch` | Nav2 config, and `scripts/odom_to_tf.py` | range layer for the sonars, voxel decay 2→15 s, inflation 0.30→0.45 m, footprint padding 0.10→0.05, yaw tolerance "any"; `odom -> base_link` is made from `/odom_fused` (§10.7), not `/leg_odom2` |
 | `realsense-ros-4.58.3-lite3.patch` | camera driver | re-adds the vendor's two cloud changes to the newer driver: steady-clock timestamps (so TF lookups work) and a 5 cm PCL voxel filter |
 
 ### 11.3 Camera stack
@@ -1180,6 +1232,9 @@ steady-clock stamp and the voxel filter are our patch to
 directly via `sudo -n systemctl`, allowed for exactly those four commands by
 `env/sudoers-lite3-camera`. `env/voa_ros2-override.conf` binds voa to the
 camera: voa on brings the camera up; camera off takes voa down.
+
+`env/lio_relay.service` runs `robot/lio_relay.py`, the robot's odometry
+(§10.7). Its header has the install line.
 
 ---
 

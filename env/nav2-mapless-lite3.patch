@@ -127,3 +127,15 @@
        trans_stopped_velocity: 0.05
        RotateToGoal.slowing_factor: 5.0
        RotateToGoal.lookahead_time: -1.0
+--- a/scripts/odom_to_tf.py
++++ b/scripts/odom_to_tf.py
+@@ -14,7 +14,8 @@
+     def __init__(self):
+         super().__init__('odom_to_tf')
+         self.broadcaster = TransformBroadcaster(self)
+-        self.sub = self.create_subscription(Odometry, 'leg_odom2', self.callback, 10)
++        # Lite3: leg odometry with FAST-LIO2's correction, from robot/lio_relay.py
++        self.sub = self.create_subscription(Odometry, 'odom_fused', self.callback, 10)
+ 
+     def callback(self, msg: Odometry):
+         t = TransformStamped()

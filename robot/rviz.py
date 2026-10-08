@@ -4,7 +4,7 @@
     python3 -m robot.rviz --record FILE [sensors] [topic ...]     the same, kept in FILE
     python3 -m robot.rviz --play FILE [speed]        FILE again, with no robot
 
-Copies /joint_states, /tf, /tf_static, /leg_odom2 and any topics named from the robot to
+Copies /joint_states, /tf, /tf_static, /odom_fused and any topics named from the robot to
 the laptop over ssh, and starts robot_state_publisher (urdf/lite3.urdf) and
 rviz2 there. Why ssh and not DDS, and what to expect: README section 10.6.
 
@@ -25,8 +25,8 @@ import xml.etree.ElementTree as ET
 
 ROBOT = 'ysc@lite3-perception'
 REMOTE = 'source ~/robot/env/lite3_env.sh && cd ~/robot && exec python3 -m robot.rviz --send '
-TOPICS = ['/joint_states', '/tf', '/tf_static', '/leg_odom2']
-ODOM = '/leg_odom2'     # becomes odom -> base_link here, with the height from height()
+TOPICS = ['/joint_states', '/tf', '/tf_static', '/odom_fused']
+ODOM = '/odom_fused'    # becomes odom -> base_link here, with the height from height()
 # Leg geometry from urdf/lite3.urdf, for height(): hip to thigh sideways, thigh and shank
 # lengths, and how far the meshes reach past the knee, the foot and under the torso.
 HIP_Y, THIGH, SHANK = 0.09735, 0.2, 0.21012
@@ -332,7 +332,7 @@ def show(extra, record=None, play=None, speed=1.0):
                         robot_tf(data)
                         continue
                     pubs[i].publish(data)
-                    if names[i] == ODOM:
+                    if names[i] in (ODOM, '/leg_odom2'):     # recordings from before 2026-10-08
                         stamp = odom_tf(data)
                     elif names[i] in sonar and stamp is not None:
                         sonar_range(names[i], data)

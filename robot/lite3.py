@@ -83,6 +83,10 @@ TURN_SETTLE_S = 0.5
 
 # Roll or pitch past this aborts any motion call. Raise it before trying a slope.
 TILT_LIMIT_DEG = 30.0
+# Odometry comes through robot/lio_relay.py (README 10.7), which can die on its
+# own while the bridge still takes velocities. Older than this: stop.
+ODOM_TOPIC = 'odom_fused'
+ODOM_STALE_S = 0.5
 # A handheld stick past this (axes are -1..1) means a person has taken over.
 HANDHELD_DEADBAND = 0.1
 
@@ -120,6 +124,7 @@ class _Node(Node):
         self.pub = self.create_publisher(Twist, 'cmd_vel', best)
         self.state = None
         self.odom = None
+        self.odom_time = 0.0        # time.time() of the newest odometry
         self.cloud = None
         self.grid = None
         self.us_front = self.us_rear = None
@@ -127,7 +132,7 @@ class _Node(Node):
         self.stick_time = 0.0       # last time a handheld stick was pushed
         self.create_subscription(Int32MultiArray, '/robot_state_debug',
                                  self._state_cb, 1)
-        self.create_subscription(Odometry, 'leg_odom2', self._odom_cb, 1)
+        self.create_subscription(Odometry, ODOM_TOPIC, self._odom_cb, 1)
         # On a node of its own so it can be read at its own, slower, rate.
         self.cloud_node = Node('lite3_api_cloud')
         self.cloud_node.create_subscription(PointCloud2, '/camera/depth/color/points',
@@ -151,6 +156,7 @@ class _Node(Node):
         yaw = math.atan2(2.0 * (q.w * q.z + q.x * q.y),
                          1.0 - 2.0 * (q.y * q.y + q.z * q.z))
         self.odom = (p.x, p.y, yaw)
+        self.odom_time = time.time()
 
     def _imu_cb(self, m):
         q = m.orientation
@@ -328,9 +334,14 @@ class Lite3(Nav, Depth):
         return self._node.odom
 
     def wait_pose(self, timeout=5.0):
-        if not self._wait(lambda: self._node.odom is not None, timeout):
-            raise Lite3Error('no /leg_odom2 - refusing to move blind')
+        if not self._wait(self._odom_fresh, timeout):
+            raise Lite3Error('no /%s (is lio_relay.service running?) - refusing '
+                             'to move blind' % ODOM_TOPIC)
         return self._node.odom
+
+    def _odom_fresh(self):
+        n = self._node
+        return n.odom is not None and time.time() - n.odom_time < ODOM_STALE_S
 
     def pose_settled(self, window=1.5, tol=0.02):
         """True if odometry has not moved for `window` seconds. Standing up jumps
@@ -543,6 +554,8 @@ class Lite3(Nav, Depth):
         """A reason to stop every motion call, whatever it is doing."""
         if self._node.stick_time > since:
             return 'handheld took over - stopped'
+        if not self._odom_fresh():
+            return 'odometry stopped arriving - stopped'
         t = self._node.tilt
         if t and max(abs(t[0]), abs(t[1])) > TILT_LIMIT_DEG:
             return 'body tilted %.0f deg roll / %.0f deg pitch - stopped' % t

@@ -1,0 +1,16 @@
+# Install on the perception computer:
+#   sudo cp ~/robot/env/lio_relay.service /etc/systemd/system/ && sudo systemctl enable --now lio_relay
+[Unit]
+Description=Lite3 odometry: leg odometry + FAST-LIO2 (robot/lio_relay.py)
+After=transfer_ros2.service
+
+[Service]
+User=ysc
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/bin/bash -c 'source /home/ysc/robot/env/lite3_env.sh && cd /home/ysc/robot && exec python3 -m robot.lio_relay'
+# Lite3 refuses to move without /odom_fused, so come straight back.
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target

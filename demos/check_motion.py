@@ -30,6 +30,8 @@ class World:
     that happens on the way."""
     state = {'basic': L.STANDING, 'battery': 80}
     cloud, tilt, stick_time, at = None, (0.0, 0.0), -1.0, None
+    odom_time = property(lambda self: self.odom_stopped or self.t)     # fresh until it stops
+    odom_stopped = None
 
     def __init__(self, **setup):
         self.t, self.odom, self.cmd, self.sent, self.pub = 0.0, (0.0, 0.0, 0.0), (0.0, 0.0, 0.0), [], self
@@ -126,6 +128,13 @@ def main():
     for bad in (lambda b: b.strafe(0.5, speed=0), lambda b: b.strafe(0.5, speed=9), lambda b: b.turn(1.0, rate=0)):
         r, _, sent = run(bad)
         assert isinstance(r, L.Lite3Error) and not sent, r       # refused, not a ZeroDivisionError
+
+    # the odometry relay dies mid-walk: he stops, he does not walk on blind
+    r, halted, _ = run(lambda b: b.walk(5.0, speed=0.5, stop_distance=None),
+                       at=(1.0, lambda w: setattr(w, 'odom_stopped', w.t)))
+    assert r['reason'].startswith('odometry stopped') and halted and r['moved'] < 1.5, r
+    r, _, sent = run(lambda b: b.walk(1.0, stop_distance=None), odom_stopped=-10.0)
+    assert isinstance(r, L.Lite3Error) and not sent, r           # and does not set off without it
 
     # a depth guard reads the cloud at 4 Hz however often the loop asks, and still stops him
     reads = []
