@@ -218,6 +218,7 @@ robot/                 the library: `from robot.lite3 import Lite3`
   rs_stream.py         RealSense colour → H.264 on mediamtx  (started by hmi.py)
   udp_relay.py         WebRTC video between the tailnet and mediamtx (started by hmi.py)
   rviz.py              the live robot in rviz2 on the laptop (run it on the laptop, §10.6)
+  lio_relay.py         FAST-LIO2's pose from the Orin → /lio_odom (§10.7)
 bin/                   things you run
   tour.py              walk / navigate a route, stop, look, talk
   teleop.py            drive from the keyboard over SSH
@@ -1041,8 +1042,8 @@ so and shows the small ones. Delete the folder to go back to them.
 - `sensors` shows what fits the 3D view: the depth cloud; the two sonars
   as cones (made on the laptop from
   the bare readings, the way `robot/sonar_range.py` does on the robot);
-  the global and local costmaps once Nav2 is up. There is no lidar on this
-  robot (`/rslidar_points` has no publisher) and the IMU has no display.
+  the global and local costmaps once Nav2 is up. The lidar is on the
+  Orin's ROS graph, not this one (§10.7), and the IMU has no display.
 - Each topic is capped at 20 Hz (`MAX_HZ`), messages over 20 kB (the
   cloud) at 5 Hz; latched topics (`/tf_static`, costmaps) are passed
   whole. A topic that appears later (Nav2 started after rviz) is picked up
@@ -1077,6 +1078,55 @@ so and shows the small ones. Delete the folder to go back to them.
   are right (standing: thigh 0.67, knee -1.35 on `/joint_states`).
 - If the link drops (the laptop changes network), the laptop end notices
   within about 6 s and reconnects every 2 s until the robot answers.
+
+### 10.7 `robot/lio_relay.py`: FAST-LIO2's pose from the Orin
+
+Since 2026-10-08 the robot carries an Ethernet switch (TP-Link TL-SG105E)
+with a Livox MID-360 lidar (192.168.1.102) and an Orin Nano (192.168.1.5,
+user `lite3`) on it, on the same 192.168.1.x network as the two computers.
+The Orin runs the lidar driver and, when a Live run is started from its
+web panel (port 8000), FAST-LIO2. Its own notes are in `~/bin/README.md`
+there.
+
+```bash
+source ~/robot/env/lite3_env.sh
+python3 -m robot.lio_relay          # on the perception computer; Ctrl-C stops it
+python3 -m robot.lio_relay check    # the pose maths only, anywhere
+```
+
+It publishes `/lio_odom` (`nav_msgs/Odometry`, `odom -> base_link`, 10 Hz)
+on the robot's graph. Nothing reads it yet: Nav2 and `Lite3` still use
+`/leg_odom2`. It is not started by anything; run it by hand.
+
+**Why a relay.** The Orin is ROS 2 Humble with Fast DDS on domain 42. The
+robot's nodes are Foxy with CycloneDDS on domain 0. Measured 2026-10-08
+from the perception computer on domain 42: with Fast DDS the Orin's topics
+arrive (`/livox/imu` 200 Hz, `/livox/lidar` 10 Hz); with CycloneDDS every
+`ros2` command segfaults on meeting the Orin's node (an empty domain does
+not). So the relay is two processes joined by a pipe: a child on Fast DDS,
+domain 42, prints each `/Odometry` pose as a line; the parent, in the
+robot's normal environment, publishes it. Neither side's settings change,
+and the Orin must stay off domain 0.
+
+**What it does to the pose.**
+- FAST-LIO2 reports the lidar's IMU (`body`) relative to where it was when
+  the run started (`camera_init`). The relay turns that into the body's
+  motion with the mount transform (`MOUNT_XYZ`, `MOUNT_PITCH`): pitch is
+  measured, 20.4° nose-down; x, y, z are the guesses from the Orin's
+  `lidar_nav.launch.py` and want measuring.
+- It takes the body as level when the run started. A run started while
+  lying or sitting tilts `/lio_odom`; FAST-LIO2 publishes its gravity
+  estimate on `/lio/gravity` if that needs fixing.
+- The origin is where the Live run started, so it is not `/leg_odom2`'s
+  origin, and it jumps to zero when a new run starts.
+- Stamps are the perception computer's steady clock on arrival, like
+  `/leg_odom2`, so they match the TF the rest of the graph uses.
+- FAST-LIO2 sends no speed, so `twist` (vx, vy, yaw rate, in `base_link`)
+  is the difference of the last two poses.
+
+**Tested** 2026-10-08 with a made-up pose published on domain 42 (lidar
+1 m along its own x): `/lio_odom` showed x 0.937, z -0.349 at 10.0 Hz.
+Not yet tested against a real FAST-LIO2 run.
 
 ---
 
