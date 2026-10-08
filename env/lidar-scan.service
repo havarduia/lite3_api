@@ -1,0 +1,24 @@
+# Runs on the ORIN (192.168.1.5), not on the robot's own computers. Install there:
+#   sudo cp lidar-scan.service /etc/systemd/system/ && sudo systemctl enable --now lidar-scan
+[Unit]
+# The lidar cloud flattened to a 2D /scan in base_link, for Nav2's costmaps
+# on the perception computer (robot/lio_relay.py carries it across).
+Description=Lidar as a flat /scan for Nav2 (lidar_nav.launch.py)
+After=livox-driver.service
+Wants=livox-driver.service
+
+[Service]
+Type=simple
+User=lite3
+Group=lite3
+WorkingDirectory=/home/lite3
+Environment=HOME=/home/lite3
+Environment=ROS_DOMAIN_ID=42
+ExecStart=/bin/bash -c 'source /opt/ros/humble/setup.bash; exec ros2 launch /home/lite3/bin/lidar_nav.launch.py'
+Restart=always
+RestartSec=5
+KillMode=mixed
+TimeoutStopSec=20
+
+[Install]
+WantedBy=multi-user.target

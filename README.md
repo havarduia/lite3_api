@@ -218,7 +218,7 @@ robot/                 the library: `from robot.lite3 import Lite3`
   rs_stream.py         RealSense colour → H.264 on mediamtx  (started by hmi.py)
   udp_relay.py         WebRTC video between the tailnet and mediamtx (started by hmi.py)
   rviz.py              the live robot in rviz2 on the laptop (run it on the laptop, §10.6)
-  lio_relay.py         FAST-LIO2's pose from the Orin → /lio_odom, /odom_fused (§10.7)
+  lio_relay.py         from the Orin: FAST-LIO2's pose → /lio_odom, /odom_fused; lidar → /scan (§10.7)
 bin/                   things you run
   tour.py              walk / navigate a route, stop, look, talk
   teleop.py            drive from the keyboard over SSH
@@ -230,6 +230,7 @@ demos/                 teaching and regression scripts
 env/                   environment, launchers, and patches to vendor code
   lite3_env.sh         source this first: ROS workspaces, CycloneDDS, PYTHONPATH
   lio_relay.service    systemd unit for robot/lio_relay.py (§10.7)
+  lidar-scan.service   systemd unit that runs on the ORIN: the lidar as a flat /scan (§10.7)
   start_nav2_mapless.sh   launches sonar node + Nav2 (called by nav_start())
   camera.launch.py     RealSense D435i launch: depth + colour + IMU at 30 fps
   start_realsense_v4.sh   starts it (the realsense_ros2 systemd unit calls this)
@@ -1124,6 +1125,18 @@ It publishes two topics on the robot's graph:
 - `/odom_fused`: `/leg_odom2` with FAST-LIO2's correction, at `/leg_odom2`'s
   50 Hz and with its stamps. With the Orin silent it is `/leg_odom2`
   exactly.
+
+- `/scan`: the lidar flattened to a 2D scan (720 beams, 10 Hz, in
+  `base_link`), stamped with this computer's steady clock. The Orin makes
+  it (`lidar-scan.service` there runs its `~/bin/lidar_nav.launch.py`;
+  our copy of the unit is `env/lidar-scan.service`): everything between
+  0.15 m below and 1.0 m above `base_link`, nearer than 0.4 m dropped as
+  the robot itself. Meant for Nav2's costmaps; **not in them yet**.
+  Lying down, the floor is inside that height band and shows as a ring
+  of returns from 0.6 m out, so the relay only passes scans on while the
+  robot is standing (basic state 6). Measured lying down, 2026-10-08:
+  with the mount transform the floor comes out level within 1° both
+  ways, so the 20.4° pitch holds; it lay 0.10 m below `base_link`.
 
 `/odom_fused` is the robot's odometry: `Lite3.pose`, the sonar node, the
 rviz relay and Nav2's `odom -> base_link` (`odom_to_tf.py`, patched) all

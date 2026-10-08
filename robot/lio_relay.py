@@ -4,9 +4,10 @@
     python3 -m robot.lio_relay check    self-check of the maths, no ROS
     python3 -m robot.lio_relay start    start FAST-LIO2 on the Orin (also: stop, state)
 
-Publishes /lio_odom (FAST-LIO2's pose as it comes) and /odom_fused
+Publishes /lio_odom (FAST-LIO2's pose as it comes), /odom_fused
 (/leg_odom2 with FAST-LIO2's correction; plain /leg_odom2 whenever the Orin
-is silent or its pose jumps).
+is silent or its pose jumps) and /scan (the lidar flattened to 2D by the
+Orin's lidar-scan.service, for Nav2's costmaps).
 
 The Orin is Humble with Fast DDS on domain 42; the robot's nodes are
 CycloneDDS on domain 0 and crash on meeting it. So a child process listens
@@ -36,6 +37,8 @@ ORIN_PANEL = 'http://192.168.1.5:8000'      # the Orin's web panel; FAST-LIO2 is
 LEG_TOPIC = 'leg_odom2'
 FUSED_TOPIC = '/odom_fused'
 LIO_DELAY_S = 0.05      # how old a FAST-LIO2 pose is on arrival; rough, from one walked loop
+SCAN_TOPIC = '/scan'    # same name both sides; in base_link, by the Orin's mount transform
+SCAN_DELAY_S = 0.1      # a scan gathers 0.1 s of points before it is sent; not measured
 GAP_S = 0.5             # longer than this between poses: a new run, or it stalled
 STEP_TOL = (0.15, 0.2)  # m, rad: a step differing more than this from the legs' is not believed
 # FAST-LIO2 is started from here, not from the Orin: it has to start with the
@@ -160,19 +163,36 @@ def should_start(basic, legs, lio_age):
     return still and (lio_age is None or lio_age > GAP_S)
 
 
+def scan_line(angle_min, angle_increment, range_min, range_max, ranges):
+    """A scan as one line of text; scan_fields() reads it back."""
+    return 'S %r %r %r %r ' % (angle_min, angle_increment, range_min, range_max) + \
+        ' '.join('%.2f' % r for r in ranges)
+
+
+def scan_fields(words):
+    """The words after the S -> (angle_min, angle_increment, range_min, range_max, ranges)."""
+    v = [float(w) for w in words]
+    return v[0], v[1], v[2], v[3], v[4:]
+
+
 def listen():
-    """Child, on the Orin's DDS: one line per pose on stdout."""
+    """Child, on the Orin's DDS: one line per pose (P) or scan (S) on stdout."""
     import rclpy
     from nav_msgs.msg import Odometry
     from rclpy.qos import qos_profile_sensor_data
+    from sensor_msgs.msg import LaserScan
 
     def line(m):
         p, q, s = m.pose.pose.position, m.pose.pose.orientation, m.header.stamp
-        print(s.sec + s.nanosec * 1e-9, p.x, p.y, p.z, q.x, q.y, q.z, q.w, flush=True)
+        print('P', s.sec + s.nanosec * 1e-9, p.x, p.y, p.z, q.x, q.y, q.z, q.w, flush=True)
+
+    def scan(m):
+        print(scan_line(m.angle_min, m.angle_increment, m.range_min, m.range_max, m.ranges), flush=True)
 
     rclpy.init()
     node = rclpy.create_node('lio_relay_listen')
     node.create_subscription(Odometry, LIO_TOPIC, line, qos_profile_sensor_data)
+    node.create_subscription(LaserScan, SCAN_TOPIC, scan, qos_profile_sensor_data)
     parent = os.getppid()
     while os.getppid() == parent:           # no pose, no write: notice a dead parent here
         rclpy.spin_once(node, timeout_sec=1.0)
@@ -182,16 +202,31 @@ def main():
     import rclpy
     from nav_msgs.msg import Odometry
     from rclpy.clock import Clock, ClockType
+    from rclpy.duration import Duration
+    from sensor_msgs.msg import LaserScan
     from std_msgs.msg import Int32MultiArray
 
     rclpy.init()
     node = rclpy.create_node('lio_relay')
     lio_pub = node.create_publisher(Odometry, OUT_TOPIC, 10)
     fused_pub = node.create_publisher(Odometry, FUSED_TOPIC, 10)
+    scan_pub = node.create_publisher(LaserScan, SCAN_TOPIC, 5)
     steady = Clock(clock_type=ClockType.STEADY_TIME)    # what /leg_odom2 is stamped with
     env = dict(os.environ, RMW_IMPLEMENTATION=LIO_RMW, ROS_DOMAIN_ID=LIO_DOMAIN)
     env.pop('CYCLONEDDS_URI', None)
     box = {}                # 'lio': the newest (arrival, stamp, position, quaternion)
+
+    def send_scan(words):
+        if state['basic'] != STANDING:      # lying down, the floor is inside the scan's height band
+            return
+        m = LaserScan()
+        # the Orin's clock is not this graph's: stamp it as it was a moment ago here
+        m.header.stamp = (steady.now() - Duration(seconds=SCAN_DELAY_S)).to_msg()
+        m.header.frame_id = 'base_link'
+        m.angle_min, m.angle_increment, m.range_min, m.range_max, m.ranges = scan_fields(words)
+        m.angle_max = m.angle_min + m.angle_increment * (len(m.ranges) - 1)
+        m.scan_time = 0.1
+        scan_pub.publish(m)
 
     def read():
         while True:
@@ -199,7 +234,11 @@ def main():
                 [sys.executable, '-m', 'robot.lio_relay', 'listen'],
                 env=env, stdout=subprocess.PIPE, universal_newlines=True)
             for text in box['child'].stdout:
-                t, *v = map(float, text.split())
+                kind, *words = text.split()
+                if kind == 'S':
+                    send_scan(words)
+                    continue
+                t, *v = map(float, words)
                 box['lio'] = (time.monotonic(), t) + to_base(v[:3], v[3:])
             print('lio_relay: the listening end stopped; retrying', file=sys.stderr)
             time.sleep(RETRY_S)
@@ -323,6 +362,9 @@ def demo():
     assert f.using and near(f.fix, held)
     f.lio(t + 10, (0.0, 0.0, 0.0), leg)
     assert near(f.fix, held) and not f.using
+    # a scan survives the pipe, its "nothing there" readings included
+    back = scan_fields(scan_line(-3.14159, 0.00873, 0.4, 30.0, [1.234, float('inf'), 0.5]).split()[1:])
+    assert back[:4] == (-3.14159, 0.00873, 0.4, 30.0) and back[4] == [1.23, float('inf'), 0.5]
     # starting FAST-LIO2: only standing, still, and with nothing coming from it
     still = collections.deque([(i * 0.02, (1.0, 2.0, 0.5)) for i in range(50)], maxlen=50)
     moving = collections.deque([(i * 0.02, (1.0 + i * 0.01, 2.0, 0.5)) for i in range(50)], maxlen=50)

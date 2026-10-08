@@ -531,7 +531,50 @@ their comments were updated. One behaviour does shift: when following a
 person with Nav2, the robot now ends about 0.1 m closer to them. Not
 re-tested.
 
-## 15. Still open
+## 15. Lidar into Nav2's costmap, step 1 (started)
+
+The plan agreed for "navigate a whole building", in three steps: (1) the
+lidar as an obstacle source in today's mapless Nav2, (2) a building map
+and localization in it, (3) named places as goals. Step 1 first; the
+user allowed a new service on the Orin for it.
+
+Done:
+
+- **On the Orin:** `pointcloud_to_laserscan` was already installed and
+  `~/bin/lidar_nav.launch.py` already existed. Run by hand it gave a
+  720-beam scan at 10 Hz in `base_link`. Installed as
+  `lidar-scan.service`, enabled at boot (copy in `env/lidar-scan.service`).
+- **The relay** now also carries `/scan` across and stamps it with the
+  perception computer's clock. Tested on a separate ROS domain so the
+  running odometry service was not disturbed: 9.6 Hz, 720 beams.
+
+A false alarm worth recording: the scan showed returns 0.64 m straight
+ahead while the sonar read 2 m clear. Looking at the raw cloud, they were
+a level surface 0.21 m below the lidar. That was the floor: the robot had
+been laid down in the meantime (state 8), and the scan's height band
+assumes it is standing. It also says the lidar sits about 0.21 m above
+the floor lying down, which fits the Orin's own figure of 0.46 m
+standing.
+
+The user confirmed it: the lidar is angled down, the robot was lying,
+it was seeing the floor. Measured in that state: with the mount
+transform the floor comes out as a level plane (0.7° and 0.6° off, fore
+and sideways), 0.10 m below `base_link`. So the 20.4° pitch is right to
+within a degree. Standing lifts the body about 0.24 m, which puts the
+floor about 0.19 m below the scan's lower edge.
+
+Because of this the relay now only passes scans on while the robot is
+standing, so a lying robot does not fill the costmap with floor.
+
+Not done yet: the relay change is not deployed (needs a push, pull and a
+service restart), the scan is not in the costmaps, and nothing has been
+looked at with the robot standing.
+
+Note for later: the Orin panel's Navigate tab starts the same launch
+file itself and kills any copy it finds first. Using that tab would
+fight with the new service.
+
+## 16. Still open
 
 - The wiggle fix (section 14) has two runs behind it: one in the open,
   one in the aisle.
