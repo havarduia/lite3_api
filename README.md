@@ -521,7 +521,7 @@ There is no pre-built map and no SLAM. Everything is in the **odom frame**
 |---|---|---|
 | Size | 30 × 30 m | 8 × 8 m (rolling) |
 | Resolution | 10 cm | 10 cm |
-| Layers | STVL (depth camera) → range layer (sonars) → inflation | same |
+| Layers | STVL (depth camera) → range layer (sonars) → scan layer (lidar) → inflation | same |
 
 - **STVL** (Spatio-Temporal Voxel Layer) stores depth-camera points in a 3D
   voxel grid that **decays** over time. We raised decay from 2 s to **15 s**:
@@ -530,6 +530,16 @@ There is no pre-built map and no SLAM. Everything is in the **odom frame**
   STVL author recommends
   ([STVL README](https://github.com/SteveMacenski/spatio_temporal_voxel_layer)).
 - **Range layer**: the sonars (§6.2).
+- **Scan layer** (2026-10-08): the lidar, as the flat `/scan` of §10.7,
+  in both costmaps (`nav2_costmap_2d::ObstacleLayer`, marking and
+  clearing). It is what lets Nav2 see beside and behind him; the depth
+  camera only looks ahead. Used out to 3 m, like the camera: the floor
+  is only about 0.19 m under the scan's lower edge and a pitching body
+  tips far beams into it. Behind him the lidar is tilted up, so it only
+  catches things taller than itself there. Standing between tables,
+  402 of 403 scan returns within 2.5 m sat on an obstacle cell. Trap:
+  the per-source `max_obstacle_height` defaults to 0.0, which throws
+  every point away without a word in the log; it is set to 2.0.
 - **Inflation**: 0.45 m (was 0.30; at 0.30 the planner failed next to box
   corners in 2 of 3 runs). `cost_scaling_factor` 8.0 since 2026-10-08. It
   was 3.0, at which the cost barely fades: 54 or more out of 99 across
@@ -1131,7 +1141,7 @@ It publishes two topics on the robot's graph:
   it (`lidar-scan.service` there runs its `~/bin/lidar_nav.launch.py`;
   our copy of the unit is `env/lidar-scan.service`): everything between
   0.15 m below and 1.0 m above `base_link`, nearer than 0.4 m dropped as
-  the robot itself. Meant for Nav2's costmaps; **not in them yet**.
+  the robot itself. It feeds the scan layer of Nav2's costmaps (§7.1).
   Lying down, the floor is inside that height band and shows as a ring
   of returns from 0.6 m out, so the relay only passes scans on while the
   robot is standing (basic state 6). Measured lying down, 2026-10-08:
@@ -1201,16 +1211,24 @@ and the Orin must stay off domain 0.
   the 50 Hz and FAST-LIO2 removes their drift.
 - A FAST-LIO2 step is only believed if it agrees with the legs' step over
   the same stretch (`STEP_TOL`: 0.15 m and 0.2 rad per pose). If it does
-  not, or more than `GAP_S` (0.5 s) passed since the last pose, the
+  not, or more than `GAP_S` (1.0 s) passed since the last pose, the
   correction is kept as it was and FAST-LIO2 is re-anchored to where the
   legs put the robot. So a divergence, a stall, the Orin going away or a
   new Live run never makes the fused pose jump; it just goes on as leg
   odometry.
 - Not caught: FAST-LIO2 drifting slowly, a little per pose.
-- A pose is about 0.05 s old when it arrives (`LIO_DELAY_S`), so it is
-  matched with the leg pose from that long ago. The number is rough: in
-  the loop log below the two matched best 0.07-0.09 s apart, of which
-  about 0.05 s was the logger's own sampling.
+- Poses do not arrive evenly. Measured 2026-10-08, robot still: 7.9 a
+  second reach this computer, not 10; one in twenty is more than 0.35 s
+  late, the worst 0.78 s; some never arrive. So each pose is matched by
+  its OWN stamp to where the legs were then (`leg_at`, 2 s of leg poses
+  kept). The Orin's clock is turned into this one's with the offset of
+  the quickest pose seen so far, less `LIO_DELAY_S` (0.05 s, rough: in
+  one loop log the two matched best 0.07-0.09 s apart, of which about
+  0.05 s was the logger's own sampling).
+- The first version matched each pose to the legs' pose at ARRIVAL. On a
+  1 m Nav2 goal that put a false 0.24 m into the fused pose within 0.4 s
+  (fused 0.86 m, legs 0.62 m, lidar-to-wall 0.63 m), and with the gap
+  limit at 0.5 s it flipped between the two modes every few seconds.
 - The relay prints a line when it changes between "corrected by
   FAST-LIO2" and "leg odometry alone".
 
@@ -1253,7 +1271,7 @@ diffs against the vendor originals.
 | `transfer-jetson2motion.patch` | the UDP↔ROS bridge | **caps what it republishes**: odometry, sonars, state and handheld at 50 Hz, joint states at 10 Hz, instead of every one of the ~160 packets a second (parameters `state_hz`, `handle_hz`, `joint_hz`; 0 = every packet; the IMU stays at 160 Hz because VOA pairs it with each point cloud). Each subscriber pays per message and together they had the Jetson at 3% idle (section 12); publishes the **front** sonar (stock published only the rear); adds **battery**, error, charging to the state array (a flat battery used to be invisible: the robot just silently refused to stand); scales leg odometry x/y by **1.15**; fixes a race where every velocity reached the robot **twice** (raw and obstacle-corrected), so the obstacle avoider could never veto anything |
 | `voa-lite3.patch` | vendor obstacle avoider | odometry averaging window 10 → 3 samples, the same ~60 ms now that odometry comes at 50 Hz; the idle handheld publishes zeros at ~160 Hz, which overwrote every ROS velocity; now ignored. A dead sender's last command times out after 500 ms. The config file named a node that doesn't exist, so **every parameter was silently ignored**: fixed |
 | `rtsp-stream-push.patch` | front camera push (`~/rtsp_stream/push_video.sh` on the **motion** computer) | **retries**. The boot script starts the stream server and the camera push side by side; when the push got there first (2026-10-07) it failed to connect and exited for good, so the front camera had no picture until the next boot (`mediamtx` logs "no one is publishing to path 'test'"). Now it is a loop that tries again every 2 s. Backup beside the file as `push_video.sh.pre-retry` |
-| `nav2-mapless-lite3.patch` | Nav2 config, and `scripts/odom_to_tf.py` | range layer for the sonars, voxel decay 2→15 s, inflation 0.30→0.45 m with cost scaling 10→8, `PreferForward.strafe_x` 0.3→0.05 (§7.1), goal tolerance in xy left at the vendor's 0.15, footprint padding 0.10→0.05, yaw tolerance "any"; `odom -> base_link` is made from `/odom_fused` (§10.7), not `/leg_odom2` |
+| `nav2-mapless-lite3.patch` | Nav2 config, and `scripts/odom_to_tf.py` | range layer for the sonars, scan layer for the lidar, voxel decay 2→15 s, inflation 0.30→0.45 m with cost scaling 10→8, `PreferForward.strafe_x` 0.3→0.05 (§7.1), goal tolerance in xy left at the vendor's 0.15, footprint padding 0.10→0.05, yaw tolerance "any"; `odom -> base_link` is made from `/odom_fused` (§10.7), not `/leg_odom2` |
 | `realsense-ros-4.58.3-lite3.patch` | camera driver | re-adds the vendor's two cloud changes to the newer driver: steady-clock timestamps (so TF lookups work) and a 5 cm PCL voxel filter |
 
 ### 11.3 Camera stack

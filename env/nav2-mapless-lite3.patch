@@ -13,7 +13,7 @@
        origin_x: 0.0
        origin_y: 0.0
 -      plugins: ["stvl_obstacle_layer", "inflation_layer"]
-+      plugins: ["stvl_obstacle_layer", "range_layer", "inflation_layer"]
++      plugins: ["stvl_obstacle_layer", "range_layer", "scan_layer", "inflation_layer"]
        publish_frequency: 1.0
        resolution: 0.10
        robot_base_frame: base_link
@@ -26,7 +26,7 @@
          mapping_mode:          false  # default off, saves map not for navigation
          map_save_duration:     60.0     #default 60s, how often to autosave
  
-@@ -99,10 +99,23 @@
+@@ -99,10 +99,39 @@
            model_type: 0                 #0=DEPTH_CAMERA (frustum model), 1=3D_LIDAR -- must be 0 for a depth camera
            obstacle_range: 3.0           #meters, D435 reliable indoor range
  
@@ -43,6 +43,22 @@
 +        clear_threshold: 0.2
 +        mark_threshold: 0.8
 +        inflate_cone: 1.0
++      scan_layer:   # the lidar as a flat scan: the Orin's lidar-scan.service -> robot/lio_relay.py (2026-10-08)
++        plugin: "nav2_costmap_2d::ObstacleLayer"
++        enabled: True
++        observation_sources: scan
++        scan:
++          topic: /scan
++          data_type: "LaserScan"
++          marking: True
++          clearing: True
++          inf_is_valid: True            # a beam with no return clears along its whole length
++          # Short on purpose: the floor is only ~0.19 m under the scan's lower
++          # edge, and a pitching body tips far beams into it. Same as the camera.
++          obstacle_range: 3.0
++          raytrace_range: 3.5
++          # In the odom frame. Without it the limit is 0.0 and every point is thrown away.
++          max_obstacle_height: 2.0
        inflation_layer:
          plugin: "nav2_costmap_2d::InflationLayer"
 -        inflation_radius: 0.3
@@ -52,7 +68,7 @@
          inflate_unknown: False
          inflate_around_unknown: False
  
-@@ -111,14 +124,14 @@
+@@ -111,14 +140,14 @@
      ros__parameters:
        use_sim_time: False
        always_send_full_costmap: True
@@ -65,11 +81,11 @@
        origin_x: 0.0
        origin_y: 0.0
 -      plugins: ["stvl_obstacle_layer", "inflation_layer"]
-+      plugins: ["stvl_obstacle_layer", "range_layer", "inflation_layer"]
++      plugins: ["stvl_obstacle_layer", "range_layer", "scan_layer", "inflation_layer"]
        publish_frequency: 2.0
        resolution: 0.10
        robot_base_frame: base_link
-@@ -139,7 +152,7 @@
+@@ -139,7 +168,7 @@
          update_footprint_enabled: true
          track_unknown_space:   false   #default space is unknown
          decay_model:           0      #0=linear, 1=exponential, -1=persistent
@@ -78,7 +94,7 @@
          mapping_mode:          false  # default off, saves map not for navigation
          map_save_duration:     60.0     #default 60s, how often to autosave
  
-@@ -167,10 +180,23 @@
+@@ -167,10 +196,39 @@
            model_type: 0                 #0=DEPTH_CAMERA (frustum model)
            obstacle_range: 3.0           #meters
  
@@ -95,6 +111,22 @@
 +        clear_threshold: 0.2
 +        mark_threshold: 0.8
 +        inflate_cone: 1.0
++      scan_layer:   # the lidar as a flat scan: the Orin's lidar-scan.service -> robot/lio_relay.py (2026-10-08)
++        plugin: "nav2_costmap_2d::ObstacleLayer"
++        enabled: True
++        observation_sources: scan
++        scan:
++          topic: /scan
++          data_type: "LaserScan"
++          marking: True
++          clearing: True
++          inf_is_valid: True            # a beam with no return clears along its whole length
++          # Short on purpose: the floor is only ~0.19 m under the scan's lower
++          # edge, and a pitching body tips far beams into it. Same as the camera.
++          obstacle_range: 3.0
++          raytrace_range: 3.5
++          # In the odom frame. Without it the limit is 0.0 and every point is thrown away.
++          max_obstacle_height: 2.0
        inflation_layer:
          plugin: "nav2_costmap_2d::InflationLayer"
 -        inflation_radius: 0.3
@@ -104,7 +136,7 @@
          inflate_unknown: False
          inflate_around_unknown: False
  
-@@ -203,8 +229,11 @@
+@@ -203,8 +261,11 @@
        movement_time_allowance: 10.0
      goal_checker:
        plugin: "nav2_controller::SimpleGoalChecker"
@@ -118,7 +150,7 @@
        stateful: True
  
      FollowPath:
-@@ -236,7 +265,7 @@
+@@ -236,7 +297,7 @@
        critics: ["PreferForward", "GoalDist", "PathDist", "RotateToGoal", "BaseObstacle"]
  
        PreferForward.scale: 40.0
@@ -127,7 +159,7 @@
        PreferForward.strafe_theta: 0.3
        PreferForward.theta_scale: 1.0
  
-@@ -255,7 +284,7 @@
+@@ -255,7 +316,7 @@
        PathDist.aggregation_type: "sum"
  
        RotateToGoal.scale: 32.0

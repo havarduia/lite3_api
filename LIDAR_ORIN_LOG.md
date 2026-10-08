@@ -566,9 +566,113 @@ floor about 0.19 m below the scan's lower edge.
 Because of this the relay now only passes scans on while the robot is
 standing, so a lying robot does not fill the costmap with floor.
 
-Not done yet: the relay change is not deployed (needs a push, pull and a
-service restart), the scan is not in the costmaps, and nothing has been
-looked at with the robot standing.
+### With the robot standing (commit `ece671e` pulled, relay restarted)
+
+- The relay restarted and was back on FAST-LIO2 in 9 s.
+- `/scan` on the robot's side at 10 Hz. Straight ahead it read 2.27 to
+  2.31 m; the depth camera said 2.29 m and the front sonar 2.09 m. So no
+  floor in it while standing. To the sides and diagonally behind it saw
+  things 0.71 to 0.87 m away that neither camera nor costmap knew about.
+- Behind, only a handful of returns: the lidar is tilted nose-down, so
+  backwards it looks upward and only catches tall things.
+
+### In the costmaps
+
+Added a layer on `/scan` to both costmaps (marking and clearing, used out
+to 3 m), on the robot (backups `*.pre-scan`) and in the repo patch. The
+patch was regenerated on the robot this time: our patch undone on a copy
+to get the vendor original back, then a fresh diff against the edited
+file. It reverses cleanly.
+
+First start: Nav2 came up, both costmaps subscribed to the scan, no
+errors, and the layer marked nothing. Cause: this layer's per-source
+height limit (`max_obstacle_height`) defaults to 0.0, so every point was
+discarded silently. I had it in my first draft of the block and dropped
+it. Set to 2.0.
+
+Second start: the costmap shows the room all around. The tables to the
+left from 0.75 m, something to the right behind, the wall 2 m ahead, an
+obstacle 1 m behind. Check: of 403 scan returns within 2.5 m, 402 sat on
+an obstacle cell.
+
+The user confirmed the picture: a table on the left, the wall ahead, a
+Husky robot under a table on the right behind, a chair behind on the left.
+
+### First goal with the lidar layer, and a bug in the fused odometry
+
+A 1.0 m goal with the recorder on: straight, no turn-command flips,
+heading within 1°. Nav2 reported the goal reached.
+
+But the recording shows the fused odometry was wrong on this drive:
+
+| Source | Says the robot moved |
+|---|---|
+| Fused odometry | 0.86 m |
+| Leg odometry | 0.62 m |
+| Lidar: how much closer the wall got | 0.63 m |
+
+The fused pose jumped forward 0.24 m within 0.4 s in the middle of the
+drive, while the legs moved 0.08 m. So the robot stopped about a quarter
+of a metre short of where it believed it was. The relay's log also showed
+it flipping between "leg odometry alone" and "corrected by FAST-LIO2"
+every few seconds since its last restart.
+
+Measured, robot standing still, 25 s:
+
+- FAST-LIO2's poses reach the perception computer at 7.9 a second, not 10.
+- One in twenty arrives more than 0.35 s late; the worst was 0.78 s.
+- By their own stamps the poses are up to 0.5 s apart, so some never
+  arrive. FAST-LIO2's own log shows it getting 8.3 to 10 scans a second.
+- The scan itself arrives steadily at 10 a second.
+
+The mistake is in my fusion, and it was there from the start; the loops
+earlier in the day just did not hit it hard. It paired each pose with
+where the legs were when the pose ARRIVED, assuming a fixed 0.05 s delay.
+A pose arriving half a second late was therefore compared with legs that
+had walked on, and the 0.5 s gap limit treated every missing pose or two
+as a new run.
+
+Changed in `robot/lio_relay.py` (not deployed yet):
+
+- Each pose is matched by its own time stamp to where the legs were then.
+  The offset between the two computers' clocks is taken from the
+  quickest pose seen so far.
+- Leg poses are remembered for 2 s instead of 1 s.
+- A gap has to be 1.0 s before it counts as a new run.
+
+Self-check added.
+
+### Side-by-side test on the robot
+
+The new code was run beside the service, publishing under test names, and
+the robot backed 0.6 m and walked 0.6 m forward (0.3 m/s) while old
+fused, new fused, legs and the lidar's distance to the wall were recorded.
+
+| | Old fused | New fused | Legs | Wall (lidar) |
+|---|---|---|---|---|
+| Backward leg | 0.65 m | 0.65 m | 0.67 m | 0.67 m |
+| Forward leg | 0.67 m | 0.67 m | 0.71 m | 0.69 m |
+| Net, start to end | +0.02 m | +0.02 m | +0.05 m | +0.02 m |
+| Largest change in 0.2 s | 0.11 m | 0.11 m | 0.11 m | |
+
+What it shows and does not show:
+
+- The new code is right on this walk: it ends where the wall says, and
+  never moves faster than the legs.
+- The old code was also right on this walk. Its jump did not come back,
+  so this test does not prove the fix; it only shows no harm.
+- Where the two did differ: standing for 90 s, the old relay dropped to
+  leg odometry 15 times, the new one once.
+
+Two mistakes of mine in running it:
+
+- The test script failed twice before the robot moved, because Python
+  found the test copy of the `robot` package before the real one.
+- My clean-up command after the first failure matched the real service's
+  process as well and killed it. systemd restarted it within seconds
+  (`NRestarts=1`), nothing was moving, but the odometry was away for
+  about ten seconds and the fused pose lost the correction it had built
+  up, so the odom frame shifted under Nav2's costmap.
 
 Note for later: the Orin panel's Navigate tab starts the same launch
 file itself and kills any copy it finds first. Using that tab would

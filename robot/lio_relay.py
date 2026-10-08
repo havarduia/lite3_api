@@ -36,15 +36,17 @@ RETRY_S = 2.0
 ORIN_PANEL = 'http://192.168.1.5:8000'      # the Orin's web panel; FAST-LIO2 is its Live run
 LEG_TOPIC = 'leg_odom2'
 FUSED_TOPIC = '/odom_fused'
-LIO_DELAY_S = 0.05      # how old a FAST-LIO2 pose is on arrival; rough, from one walked loop
+LIO_DELAY_S = 0.05      # how old a FAST-LIO2 pose is when it arrives at its quickest; rough, from one walked loop
+LEGS_KEPT = 100         # leg poses remembered, 2 s of them: a pose may arrive most of a second late
+CLOCK_DRIFT = 2e-4      # s per pose the two computers' clocks may drift apart
 SCAN_TOPIC = '/scan'    # same name both sides; in base_link, by the Orin's mount transform
 SCAN_DELAY_S = 0.1      # a scan gathers 0.1 s of points before it is sent; not measured
-GAP_S = 0.5             # longer than this between poses: a new run, or it stalled
+GAP_S = 1.0             # longer than this between poses: a new run, or it stalled. A few go missing on the way
 STEP_TOL = (0.15, 0.2)  # m, rad: a step differing more than this from the legs' is not believed
 # FAST-LIO2 is started from here, not from the Orin: it has to start with the
 # robot standing still, and only this side knows whether he is.
 STANDING = 6            # basic state, first number of /robot_state_debug
-STILL = (0.02, 0.02)    # m, rad over the last second
+STILL = (0.02, 0.02)    # m, rad over the two seconds remembered
 CHECK_S = 5.0
 START_RETRY_S = 30.0    # it needs a few seconds to come up; do not ask again before this
 
@@ -153,9 +155,17 @@ def live(what, **options):
         return json.load(e)
 
 
+def leg_at(legs, when):
+    """The leg pose remembered nearest to `when` (this computer's clock), or
+    None if `when` is older than anything remembered."""
+    if not legs or when < legs[0][0] - 0.05:
+        return None
+    return min(legs, key=lambda g: abs(g[0] - when))[1]
+
+
 def should_start(basic, legs, lio_age):
-    """Start FAST-LIO2 now? Standing, still for the second in `legs`, and no
-    pose from it lately (lio_age: seconds, None = never)."""
+    """Start FAST-LIO2 now? Standing, still for the two seconds in `legs`, and
+    no pose from it lately (lio_age: seconds, None = never)."""
     if basic != STANDING or len(legs) < legs.maxlen:
         return False
     a, b = legs[0][1], legs[-1][1]
@@ -244,8 +254,10 @@ def main():
             time.sleep(RETRY_S)
 
     fuse = Fuse()
-    legs = collections.deque(maxlen=50)     # (arrival, leg pose): about a second of them
-    state = {'seen': None, 'prev': None, 'using': False, 'basic': None, 'asked': -START_RETRY_S}
+    legs = collections.deque(maxlen=LEGS_KEPT)      # (arrival, leg pose)
+    state = {'seen': None, 'prev': None, 'using': False, 'basic': None, 'asked': -START_RETRY_S,
+             'ahead': None,     # this clock minus the Orin's, from the quickest pose so far
+             'heard': None}     # when the last usable pose arrived
 
     def take_lio(s):
         arrived, t, p, q = s
@@ -262,8 +274,14 @@ def main():
         m.twist.twist.linear.x, m.twist.twist.linear.y = vx, vy
         m.twist.twist.angular.z = wz
         lio_pub.publish(m)
-        then = arrived - LIO_DELAY_S
-        fuse.lio(arrived, now[1:], min(legs, key=lambda g: abs(g[0] - then))[1])
+        # Poses come late and unevenly (up to 0.8 s, measured), so each is matched
+        # by its own stamp to where the legs were THEN, not to where they are now.
+        ahead = arrived - t if state['ahead'] is None else min(state['ahead'] + CLOCK_DRIFT, arrived - t)
+        state['ahead'] = ahead
+        then = leg_at(legs, t + ahead - LIO_DELAY_S)
+        if then is not None:
+            state['heard'] = arrived
+            fuse.lio(t, now[1:], then)
 
     def leg(m):
         pos, ori = m.pose.pose.position, m.pose.pose.orientation
@@ -275,7 +293,7 @@ def main():
         if s is not None and s is not state['seen']:
             state['seen'] = s
             take_lio(s)
-        using = fuse.using and arrived - fuse.prev[0] < GAP_S
+        using = fuse.using and arrived - state['heard'] < GAP_S
         if using != state['using']:
             state['using'] = using
             print('lio_relay: /odom_fused is', 'corrected by FAST-LIO2' if using
@@ -295,7 +313,7 @@ def main():
 
     def check():
         now = time.monotonic()
-        age = now - fuse.prev[0] if fuse.prev else None
+        age = now - state['heard'] if state['heard'] else None
         if now - state['asked'] > START_RETRY_S and should_start(state['basic'], legs, age):
             state['asked'] = now
             threading.Thread(target=start, daemon=True).start()     # not in the 50 Hz path
@@ -362,17 +380,20 @@ def demo():
     assert f.using and near(f.fix, held)
     f.lio(t + 10, (0.0, 0.0, 0.0), leg)
     assert near(f.fix, held) and not f.using
+    # a pose is matched to where the legs were at its own time, however late it comes
+    walk = collections.deque([(10.0 + i * 0.02, (i * 0.02, 0.0, 0.0)) for i in range(100)], maxlen=100)   # 1 m/s
+    assert near(leg_at(walk, 10.5), (0.5, 0.0, 0.0)) and leg_at(walk, 9.0) is None
     # a scan survives the pipe, its "nothing there" readings included
     back = scan_fields(scan_line(-3.14159, 0.00873, 0.4, 30.0, [1.234, float('inf'), 0.5]).split()[1:])
     assert back[:4] == (-3.14159, 0.00873, 0.4, 30.0) and back[4] == [1.23, float('inf'), 0.5]
     # starting FAST-LIO2: only standing, still, and with nothing coming from it
-    still = collections.deque([(i * 0.02, (1.0, 2.0, 0.5)) for i in range(50)], maxlen=50)
-    moving = collections.deque([(i * 0.02, (1.0 + i * 0.01, 2.0, 0.5)) for i in range(50)], maxlen=50)
+    still = collections.deque([(i * 0.02, (1.0, 2.0, 0.5)) for i in range(LEGS_KEPT)], maxlen=LEGS_KEPT)
+    moving = collections.deque([(i * 0.02, (1.0 + i * 0.01, 2.0, 0.5)) for i in range(LEGS_KEPT)], maxlen=LEGS_KEPT)
     assert should_start(STANDING, still, None) and should_start(STANDING, still, 3.0)
     assert not should_start(STANDING, still, 0.1)       # it is running
     assert not should_start(STANDING, moving, None)     # walking
     assert not should_start(1, still, None)             # lying down
-    assert not should_start(STANDING, collections.deque(list(still)[:10], maxlen=50), None)
+    assert not should_start(STANDING, collections.deque(list(still)[:10], maxlen=LEGS_KEPT), None)
     print('lio_relay ok')
 
 
