@@ -62,8 +62,8 @@ def free_ahead(profile):
 
 def goal_ahead(profile, margin=0.25, minimum=0.5):
     """A goto() distance `margin` short of the first cell goto() would refuse,
-    or None when that is under `minimum`: xy_goal_tolerance is 0.25, so a
-    nearer goal "arrives" at once."""
+    or None when that is under `minimum`: set when xy_goal_tolerance was 0.25
+    (0.15 now); a goal inside the tolerance "arrives" at once."""
     goal = free_ahead(profile) - margin
     return goal if goal >= minimum else None
 

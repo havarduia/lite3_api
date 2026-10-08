@@ -55,7 +55,7 @@ BLOCK_MARGIN = 0.5          # m: something this much nearer than they are is in 
 BLOCKED_S = 0.3             # the way has to be blocked this long before Nav2 takes over
 CLEAR_S = 1.0               # and free this long before he walks straight again
 FOLLOW_LOG = '/tmp/follow_nav.log'   # every change of state in each follow_nav(), newest last
-NAV_NEAR = 0.3              # m: a goal nearer than this is "there" to Nav2 (xy_goal_tolerance 0.25)
+NAV_NEAR = 0.3              # m: a goal nearer than this is "there" to Nav2 (set when xy_goal_tolerance was 0.25; 0.15 now)
 
 
 class PersonDetector(threading.Thread):

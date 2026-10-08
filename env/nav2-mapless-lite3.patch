@@ -113,17 +113,26 @@
 +      # Stop at the spot, whatever the heading. A final in-place rotation made
 +      # the legged base step and drift around the goal instead of stopping;
 +      # lite3.goto() does a requested final heading itself with turn().
-+      xy_goal_tolerance: 0.25
++      xy_goal_tolerance: 0.15   # was 0.25 from 2026-09 until the approach wiggle was fixed (2026-10-08)
 +      yaw_goal_tolerance: 3.14
        stateful: True
  
      FollowPath:
+@@ -236,7 +265,7 @@
+       critics: ["PreferForward", "GoalDist", "PathDist", "RotateToGoal", "BaseObstacle"]
+ 
+       PreferForward.scale: 40.0
+-      PreferForward.strafe_x: 0.3
++      PreferForward.strafe_x: 0.05   # was 0.3: under 0.3 m/s going straight was penalised, so he wiggled into every goal (2026-10-08)
+       PreferForward.strafe_theta: 0.3
+       PreferForward.theta_scale: 1.0
+ 
 @@ -255,7 +284,7 @@
        PathDist.aggregation_type: "sum"
  
        RotateToGoal.scale: 32.0
 -      xy_goal_tolerance: 0.15
-+      xy_goal_tolerance: 0.25
++      xy_goal_tolerance: 0.15   # was 0.25 from 2026-09 until the approach wiggle was fixed (2026-10-08)
        trans_stopped_velocity: 0.05
        RotateToGoal.slowing_factor: 5.0
        RotateToGoal.lookahead_time: -1.0

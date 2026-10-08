@@ -53,7 +53,7 @@ PREP_CONTEXT = ('(You are still walking up to them and will say this the moment 
 DONE = ('You just finished your walk; you covered %.1f metres in total. '
         'Say one short sentence about it.')
 APPROACH_MARGIN = 0.2  # stop this far short of the last free cell
-MIN_GOAL = 0.5         # xy_goal_tolerance is 0.25: a nearer goal "arrives" at once and he only turns
+MIN_GOAL = 0.5         # set when xy_goal_tolerance was 0.25 (0.15 now): a nearer goal "arrives" at once and he only turns
 STEPS = 'walk <m> | turn <deg> | goto <m> [<deg>] | approach <m> | person | follow <s>'
 
 

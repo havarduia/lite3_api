@@ -537,8 +537,22 @@ There is no pre-built map and no SLAM. Everything is in the **odom frame**
   the right on a clear 1.5 m goal and looked nervous doing it. At 8.0 the
   cost falls to about 20 at the edge of the zone (calculated; a profile
   read 0 to 29 down a clear aisle). It did NOT stop the turning: the same
-  goal at 8.0 again ended 40° to the right. Cause not found yet.
-- Planner **NavFn**; controller **DWB**. Goal tolerance 0.25 m in xy and
+  goal at 8.0 again ended 40° to the right. That was `strafe_x`, below.
+- **`PreferForward.strafe_x`**: 0.05 since 2026-10-08, was 0.3. DWB's
+  PreferForward rule treats "forward slower than `strafe_x` and turning
+  slower than `strafe_theta` (0.3)" as strafing and penalises it. At 0.3
+  that hit every approach: as soon as he slowed below 0.30 m/s for the
+  goal, going straight was penalised and turning at just over 0.3 rad/s
+  was the cheapest thing left, either way. Recorded on `/cmd_vel`: the
+  turn command flipped sign 6 times in the last 3.5 s of a 1.5 m goal
+  (he looked nervous and ended 5° to 40° off). At 0.05: no flips, largest
+  turn command 0.06 rad/s, final heading +2°; in the aisle between two
+  tables, where it had ended 40° off, 0.10 rad/s and -1°. Adding PathAlign and
+  GoalAlign to the critics was tried first and changed nothing.
+- Planner **NavFn**; controller **DWB**. Goal tolerance 0.15 m in xy (the
+  vendor's value again since 2026-10-08; it was 0.25 while the approach
+  wiggle made the last stretch messy. At 0.15: stops 0.15 m from the goal,
+  one second later, no stepping around it; one run) and
   **3.14 rad in yaw**, i.e. "any heading". Letting Nav2 rotate a legged robot
   at the goal made it step and drift around the goal instead of stopping, so
   `goto()` does any final heading itself with `turn()`.
@@ -693,8 +707,10 @@ a 12-byte header `<code, json_length, 1>` then JSON, on port 43901.
     where they were) and he turns to them;
   - a goal under way also survives a missed reading. The first version
     cancelled it on one, and stood (2026-10-06);
-  - within 0.9 m (stop distance + Nav2's 0.25 m goal tolerance) he stands
-    until they are 1.1 m away;
+  - within 0.9 m (stop distance + Nav2's goal tolerance as it was then,
+    0.25 m; it is 0.15 m since 2026-10-08, so Nav2 now brings him about
+    0.1 m closer before he stands; not re-tested) he stands until they
+    are 1.1 m away;
   - standing with no goal, he turns to them only once they are more than 30°
     round, at up to 1.2 rad/s commanded (0.84 delivered), and stops at 15°: enough to keep
     them in the depth view, not a correction at every arrival. He has no goal
@@ -1224,7 +1240,7 @@ diffs against the vendor originals.
 | `transfer-jetson2motion.patch` | the UDP↔ROS bridge | **caps what it republishes**: odometry, sonars, state and handheld at 50 Hz, joint states at 10 Hz, instead of every one of the ~160 packets a second (parameters `state_hz`, `handle_hz`, `joint_hz`; 0 = every packet; the IMU stays at 160 Hz because VOA pairs it with each point cloud). Each subscriber pays per message and together they had the Jetson at 3% idle (section 12); publishes the **front** sonar (stock published only the rear); adds **battery**, error, charging to the state array (a flat battery used to be invisible: the robot just silently refused to stand); scales leg odometry x/y by **1.15**; fixes a race where every velocity reached the robot **twice** (raw and obstacle-corrected), so the obstacle avoider could never veto anything |
 | `voa-lite3.patch` | vendor obstacle avoider | odometry averaging window 10 → 3 samples, the same ~60 ms now that odometry comes at 50 Hz; the idle handheld publishes zeros at ~160 Hz, which overwrote every ROS velocity; now ignored. A dead sender's last command times out after 500 ms. The config file named a node that doesn't exist, so **every parameter was silently ignored**: fixed |
 | `rtsp-stream-push.patch` | front camera push (`~/rtsp_stream/push_video.sh` on the **motion** computer) | **retries**. The boot script starts the stream server and the camera push side by side; when the push got there first (2026-10-07) it failed to connect and exited for good, so the front camera had no picture until the next boot (`mediamtx` logs "no one is publishing to path 'test'"). Now it is a loop that tries again every 2 s. Backup beside the file as `push_video.sh.pre-retry` |
-| `nav2-mapless-lite3.patch` | Nav2 config, and `scripts/odom_to_tf.py` | range layer for the sonars, voxel decay 2→15 s, inflation 0.30→0.45 m with cost scaling 10→8, footprint padding 0.10→0.05, yaw tolerance "any"; `odom -> base_link` is made from `/odom_fused` (§10.7), not `/leg_odom2` |
+| `nav2-mapless-lite3.patch` | Nav2 config, and `scripts/odom_to_tf.py` | range layer for the sonars, voxel decay 2→15 s, inflation 0.30→0.45 m with cost scaling 10→8, `PreferForward.strafe_x` 0.3→0.05 (§7.1), goal tolerance in xy left at the vendor's 0.15, footprint padding 0.10→0.05, yaw tolerance "any"; `odom -> base_link` is made from `/odom_fused` (§10.7), not `/leg_odom2` |
 | `realsense-ros-4.58.3-lite3.patch` | camera driver | re-adds the vendor's two cloud changes to the newer driver: steady-clock timestamps (so TF lookups work) and a 5 cm PCL voxel filter |
 
 ### 11.3 Camera stack

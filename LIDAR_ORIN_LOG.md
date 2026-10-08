@@ -377,12 +377,164 @@ need starting by hand. It turned out not to need any change there:
 - It never stops a run and does not restart a diverged one.
 
 Self-check added for the rule (standing and still: yes; walking, lying,
-already running: no). Not yet run on the robot.
+already running: no).
 
-## 14. Still open
+Run on the robot (commit `40d3897`, robot standing still, FAST-LIO2 off):
+the service was restarted at 23:27:37, asked the Orin to start at
+23:27:50 (answer `ok`), and reported "/odom_fused is corrected by
+FAST-LIO2" at 23:27:52. `/odom_fused` at 50.0 Hz.
 
-- Why Nav2 ends its goals about 40° to the right. Not known whether it
-  did this before today's changes.
+## 14. Why Nav2 turns near the goal
+
+One more 1.5 m goal, with a recorder on `/cmd_vel` (what Nav2's controller
+commands), the fused pose and the leg odometry, 20 times a second. This
+one was in an open spot: zero cost along the whole line.
+
+Result: 1.24 m forward, 0.03 m to the right, heading -5°. Nearly straight
+this time. The recording shows what happens:
+
+| Phase | Controller commands | Heading |
+|---|---|---|
+| First 2.5 s of driving | 0.30 to 0.36 m/s forward, turn rate about 0 | within 1.3° |
+| From 0.65 m before the goal | slows to 0.09 to 0.19 m/s, turn rate jumps between -0.31 and +0.31 rad/s | swings: -6°, -10°, -1°, +3°, -3° |
+
+- The turn command changed sign 6 times in the last 3.5 seconds.
+- Adding up the commanded turn gives -5.4°; the measured change was -4.9°
+  (fused) and -5.1° (legs). So the robot does what it is told. It is
+  Nav2's controller asking for the turns, not the odometry and not the
+  robot yawing by itself.
+- In the two earlier runs the same wiggle happened to hold one direction:
+  0.31 rad/s for a bit over two seconds is the 40°.
+
+So the "nervous" look and the angled finish are one thing: the controller
+(DWB) has no steady preference for a heading once it is close to the goal.
+In the config its scoring list is
+`PreferForward, GoalDist, PathDist, RotateToGoal, BaseObstacle`. The two
+entries that reward pointing along the path (`PathAlign`, `GoalAlign`)
+have their weights set in the file but are not in the list, and the entry
+made to stop left-right flipping (`Oscillation`) is absent. It also
+simulates 3 s ahead (`sim_time`), which at 0.65 m from the goal means
+crawling. This list is the vendor's; our patch never touched it.
+
+### First try: adding PathAlign and GoalAlign. No effect.
+
+With the user's go-ahead: the two alignment entries added to the list
+(vendor config on the robot, backups `*.pre-align`; same in the repo
+patch), Nav2 restarted, and the controller confirmed to have loaded the
+new list. The robot backed up 1.23 m by itself (`walk(-1.2)`, rear sonar
+3.93 m) and got the same 1.5 m goal with the recorder on.
+
+| | Before | With PathAlign + GoalAlign |
+|---|---|---|
+| Turn-command sign flips | 6 | 7 |
+| Samples with a hard turn command | 66 of 113 | 59 of 110 |
+| Heading swing during the drive | -12° to +5° | -15° to +1° |
+| Final heading | -5° | -12° |
+
+Same behaviour: straight until about 0.65 m from the goal, then the
+forward speed drops and the turn rate jumps between -0.31 and +0.31.
+
+### What the numbers point to instead: PreferForward
+
+The hard turning starts at the exact moment the commanded forward speed
+drops below 0.30 m/s (0.30 to 0.25), and the turn rate is always the
+first sample above 0.30 rad/s (0.3077). The config has
+`PreferForward.strafe_x: 0.3` and `PreferForward.strafe_theta: 0.3`. As
+I understand that scoring rule, any candidate that moves forward slower
+than `strafe_x` while turning slower than `strafe_theta` gets the full
+penalty, as if it were strafing. So as soon as the controller has to
+slow down for the goal, going straight is penalised and turning at just
+over 0.3 rad/s is the cheapest thing left, in either direction. That
+reading is from memory of how the rule works, not from its source on the
+robot; the two thresholds matching the recording is the evidence.
+
+### Second try: `PreferForward.strafe_x` 0.3 to 0.05. Fixed.
+
+With the user's go-ahead: PathAlign and GoalAlign taken out again (they
+changed nothing), `PreferForward.strafe_x` lowered to 0.05 (vendor config
+on the robot, both copies; same in the repo patch, which reverses cleanly
+against the robot's files). Nav2 restarted and the controller reported
+0.05.
+
+The user asked for the robot to be turned before backing up, so it was
+turned back to its starting heading first (+12°), then backed. The rear
+sonar read 1.29 m, so by the script's rule (keep 0.6 m) it backed only
+0.72 m, not 1.2 m. Same 1.5 m goal, recorder on.
+
+| | Original | + PathAlign, GoalAlign | `strafe_x` 0.05 |
+|---|---|---|---|
+| Turn-command sign flips | 6 | 7 | 0 |
+| Samples with a hard turn command | 66 of 113 | 59 of 110 | 0 of 99 |
+| Largest turn command (rad/s) | 0.31 | 0.35 | 0.06 |
+| Heading swing during the drive | -12° to +5° | -15° to +1° | 0° to +3° |
+| Final heading | -5° | -12° | +2° |
+| Drive time | 5.9 s | 5.7 s | 5.2 s |
+
+It now slows down in a straight line (0.30, 0.19, 0.14, 0.09 m/s) and
+stops 0.25 m from the goal, which is the tolerance. One run in an open
+spot; the aisle between the tables, where it ended 40° off, has not been
+repeated.
+
+A slip of mine on the way: the first attempt at this run failed before
+the robot moved, with "2 nav2 process groups are running". My ssh command
+line contained the name of one of Nav2's programs (for a parameter
+check), and `nav_start()` counts any process whose command line contains
+such a name as a Nav2 stack. One real stack was running; I reran without
+the word.
+
+### The aisle between the tables
+
+The user carried the robot to the start of the aisle. Nav2 restarted for
+a clean costmap (the carry left marks last time). The costmap before the
+goal: obstacles from 0.5 m to the left and to the right of the line from
+0.75 m on, a free lane about half a metre wide down the middle, cost 0
+to 13 on the line itself.
+
+Same 1.5 m goal: reached, 1.24 m forward, 0.07 m to the right, heading
+-1°. Before today's two config changes the same aisle gave 39° and 40°.
+In the recording: no turn-command sign flips, largest turn command
+0.10 rad/s, heading within 2° of the start all the way, at most 0.10 m
+off the line sideways.
+
+Also seen in the relay's log around the carries and restarts: it dropped
+to "leg odometry alone" five times and was back on FAST-LIO2 within a
+second each time.
+
+### Goal tolerance 0.25 m back to 0.15 m
+
+Every run stopped 0.25 to 0.27 m short of the goal, because Nav2 counted
+the goal as reached within 0.25 m (our patch had raised it from the
+vendor's 0.15). The user asked whether a smaller margin would hurt longer
+routes. It does not affect the route, only the last stretch: a few more
+seconds at crawling speed, and a risk of a legged robot stepping around a
+goal it cannot settle into. With the wiggle gone, 0.15 was worth trying.
+
+Changed with the user's go-ahead in both places it is set (goal checker
+and controller), on the robot (backups `*.pre-tol15`) and in the repo
+patch. Nav2 restarted; same 1.5 m goal from where the robot stood.
+
+| | Tolerance 0.25 | Tolerance 0.15 |
+|---|---|---|
+| Moved forward | 1.24 m | 1.36 m |
+| Stopped this far from the goal | 0.27 m | 0.15 m |
+| Drive time | 5.7 s | 6.7 s |
+| Final heading | -1° | +1° |
+| Backward commands | none | none |
+
+No stepping around the goal: it crept the last 15 cm at 0.09 m/s and
+stopped. One run.
+
+Three places in the code were tuned around the old 0.25 (`tour.py`
+`MIN_GOAL`, `nav.goal_ahead`, `person.NAV_NEAR`). Their values still
+hold as they are (they are lower limits, and stay on the safe side); only
+their comments were updated. One behaviour does shift: when following a
+person with Nav2, the robot now ends about 0.1 m closer to them. Not
+re-tested.
+
+## 15. Still open
+
+- The wiggle fix (section 14) has two runs behind it: one in the open,
+  one in the aisle.
 - Marks left in the costmap by carrying the robot block planning until
   Nav2 is restarted.
 - Nav2 has driven one 1.5 m goal on `/odom_fused`. Not more than that.
