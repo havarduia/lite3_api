@@ -66,7 +66,7 @@ class SonarRange(Node):
 
     def _odom(self, msg):
         # odom -> base_link is stamped with this (steady clock, via
-        # odom_to_tf.py), so a Range carrying it always has a TF to match.
+        # lio_relay.py), so a Range carrying it always has a TF to match.
         self._stamp = msg.header.stamp
 
     def _publish(self):

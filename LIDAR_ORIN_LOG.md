@@ -718,7 +718,116 @@ What the user decided:
 Saved as `.planning/specs/building-navigation.md`, five phases: map and
 localization, places from code, the panel, voice, tags.
 
-## 17. Still open
+## 17. Building navigation: plan and first measurements (2026-10-09)
+
+Plan saved as `.planning/plans/building-navigation.md` (25 tasks). What
+the robot said before anything was built:
+
+- `nav2_amcl` and `nav2_map_server` are installed. The vendor's map
+  config (`dr_nav2`) has no AMCL in it, and the robot's
+  `nav2_bringup/localization_launch.py` starts only the map server: the
+  vendor localizes with `hdl_localization`. AMCL is ours to launch.
+- The Orin's `~/robot_pc/nav2_params.yaml` has an AMCL block written for
+  this robot; it is the starting point.
+
+### Lidar position on the body (plan task 2)
+
+From four photos, the torso mesh (`urdf/meshes/torso.STL`: nose at
+x 0.279 m, top of the shell at z 0.06 m where the mount sits) and one
+measurement by hand (7.5 cm from the top of the shell to the middle of
+the grey ring under the dome):
+
+| | was (guess) | now | from |
+|---|---|---|---|
+| x forward | 0.20 | 0.20 | ruler in the photo: dome centre 8-9 cm behind the nose, so 0.19 +-0.02 |
+| y left | 0 | 0 | photo from above: dome in the middle of the mount |
+| z up | 0.10 | 0.14 | 0.06 + 0.075 = 0.135 to the ring |
+
+Set on the Orin as `lidar_z:=0.14` in `lidar-scan.service` (backup
+`lidar-scan.service.pre-z14` beside it; our copy in `env/`). After the
+restart: `base_link -> livox_frame` reads (0.200, 0.000, 0.140) and
+`/scan` is back at 10.0 Hz.
+
+### Load baseline, mapless Nav2 (plan task 1)
+
+One process, one `Lite3`; no panel running; battery 69%. 60 s standing
+with Nav2 up, then one 3.0 m goal (arrived in 13 s), 20 s window.
+
+| | standing, no goal | during the goal |
+|---|---|---|
+| idle, of 6 cores | 41.9% | 39.3% |
+| load average | 5.9 | 5.8 to 7.0 |
+| camera driver | 57% of a core | 54% |
+| `lio_relay` + its listening child | 38% + 27% | 39% + 29% |
+| controller server | 20% | 35% |
+| planner server | 18% | 18% |
+| `odom_to_tf.py` | 21% | 21% |
+| `jetson2motion` | 21% | 22% |
+| `sonar_range` | 18% | 21% |
+| `sensor_checker` | 17% | 17% |
+
+Camera messages dropped ("dropping message" in `/tmp/nav2.log`): 10 in
+the whole run, all between 10 and 20 s after Nav2 started. None in the
+60 s standing, none during the goal. Control loop misses: 1. So the load
+gate's bar is: no dropped camera messages once Nav2 has been up 20 s.
+
+The relay is now the second largest consumer, at 65% of a core for its
+two processes (it was about a third before it carried the scan).
+
+### What `/tf` costs to listen to (plan task 4)
+
+With Nav2 up `/tf` carries one transform, `odom -> base_link`, at 50 Hz.
+A Python node that only counts those messages: 17.3% of a core. A Python
+tf2 listener: 18.5%. (With Nav2 down the topic is silent and the same
+listener costs 2.8%.) So the node that reports "localized" will not
+listen to `/tf`; it reads odometry at a low fixed rate instead.
+
+### The relay made cheaper (same day)
+
+The baseline showed the relay as the second largest consumer. Two changes:
+
+1. The crossing from the Orin is UDP, not a child process on the Orin's
+   DDS printing text. `robot/lio_relay.py send` runs on the Orin and sends
+   each pose (73 bytes) and each scan (2913 bytes, the ranges as the
+   float32s they are) to port 8042 on the perception computer.
+2. The relay publishes `odom -> base_link` itself; the launch no longer
+   starts the vendor's `odom_to_tf.py`.
+
+Same measurement as the baseline, robot standing, Nav2 up, no panel:
+
+| | before | after |
+|---|---|---|
+| idle, of 6 cores, standing | 41.9% | 53.1% |
+| idle during a goal | 39.3% | 52.9% |
+| relay | 38% + 27% (child) | 33% |
+| `odom_to_tf.py` | 21% | gone |
+| controller / planner server | 20% / 18% | 15% / 14% |
+| camera messages dropped | 10, all at start-up | 0 |
+
+A 0.5 m goal arrived (4 s). `/tf` still 50.1 Hz, one transform.
+
+### FAST-LIO2 was 35 minutes behind
+
+Found while testing: the Live run that had been going since the Orin
+booted was sending poses stamped 2075 s in the past, 88 a second, with
+`fastlio_mapping` holding 5.1 GB and the Orin down to 117 MB free. The
+relay, restarted during such a run, took the lag for a clock difference
+(it compared its clock with the pose stamps), used the poses for about
+3 s and then fell back to leg odometry: that is the "corrected" then
+"leg odometry alone" pair in its journal.
+
+- Stopped that run (`lio_relay stop`; saved on the Orin as
+  `live_20261009_173432`). Memory back to 5.2 GB free.
+- Each pose now carries the Orin's send time; the clocks are compared by
+  that, so an old pose is seen as old and not used. The relay logs
+  "FAST-LIO2 is N s behind".
+- A fresh run is 0.04 s behind. Standing 60 s, turning +90 and -90, then
+  20 s more: corrected the whole 110 s, not one fall back to the legs;
+  the correction moved by about 4 cm over the two turns.
+- Not known: why that run fell behind, or when. Yesterday's "poses at
+  about 8 a second, up to 0.78 s late" may have been the start of it.
+
+## 18. Still open
 
 - The wiggle fix (section 14) has two runs behind it: one in the open,
   one in the aisle.
@@ -726,8 +835,8 @@ localization, places from code, the panel, voice, tags.
   and what the lidar layer costs the perception computer.
 - Steps 2 and 3 of whole-building navigation (map + localization,
   named goals): not started; a short spec comes first.
-- Why FAST-LIO2's poses reach the perception computer at about 8 a
-  second and sometimes most of a second late.
+- Why a long FAST-LIO2 run falls behind real time and fills the Orin's
+  memory (section 17). The relay now ignores it; nothing restarts it.
 - Marks left in the costmap by carrying the robot block planning until
   Nav2 is restarted.
 - Nav2 has driven one 1.5 m goal on `/odom_fused`. Not more than that.
@@ -735,7 +844,10 @@ localization, places from code, the panel, voice, tags.
   and the relay): camera frames get dropped for lack of a transform when
   it spikes. Not yet looked into.
 - FAST-LIO2 is not started automatically with Nav2.
-- The relay costs about a third of a core on the perception computer.
-- The lidar's x/y/z position on the body is still the Orin's guess
-  (0.20, 0, 0.10 m); only the pitch is measured.
+- The relay costs a third of a core on the perception computer, with
+  the transform and the scan included (it was 86% for the three
+  processes that did this before).
+- The lidar's position on the body is now (0.20, 0, 0.14 m), good to
+  about 2 cm (section 17).
+- What AMCL costs the perception computer: not measured (plan task 9).
 - The relay assumes the robot stands level when the Live run starts.

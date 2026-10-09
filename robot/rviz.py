@@ -273,7 +273,7 @@ def show(extra, record=None, play=None, speed=1.0):
     high = stamp = None
 
     def odom_tf(data):
-        # The robot's odom_to_tf.py does this too, when Nav2 runs, but with the
+        # The robot's lio_relay.py does this too, but with the
         # odometry's own height, which stays at standing height when the robot lies
         # down. So this one is always used, and the robot's is dropped (robot_tf).
         odom = deserialize_message(data, Odometry)

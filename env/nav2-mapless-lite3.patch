@@ -168,15 +168,14 @@
        trans_stopped_velocity: 0.05
        RotateToGoal.slowing_factor: 5.0
        RotateToGoal.lookahead_time: -1.0
---- a/scripts/odom_to_tf.py
-+++ b/scripts/odom_to_tf.py
-@@ -14,7 +14,8 @@
-     def __init__(self):
-         super().__init__('odom_to_tf')
-         self.broadcaster = TransformBroadcaster(self)
--        self.sub = self.create_subscription(Odometry, 'leg_odom2', self.callback, 10)
-+        # Lite3: leg odometry with FAST-LIO2's correction, from robot/lio_relay.py
-+        self.sub = self.create_subscription(Odometry, 'odom_fused', self.callback, 10)
+--- a/launch/dr_nav2_mapless.launch.py
++++ b/launch/dr_nav2_mapless.launch.py
+@@ -89,7 +89,7 @@
+     ld.add_action(DeclareLaunchArgument('launch_realsense', default_value='true'))
  
-     def callback(self, msg: Odometry):
-         t = TransformStamped()
+     ld.add_action(launch_base_to_camera_tf())
+-    ld.add_action(launch_odom_to_tf())
++    # Lite3: robot/lio_relay.py publishes odom -> base_link itself (2026-10-09)
+     ld.add_action(launch_realsense())
+ 
+     declare_dr_nav2_config_file, navigation_launch = launch_dr_nav2_mapless()

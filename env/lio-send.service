@@ -1,0 +1,23 @@
+# Runs on the ORIN (192.168.1.5), not on the robot's own computers. Install there:
+#   copy robot/lio_relay.py to /home/lite3/bin/lio_relay.py, then
+#   sudo cp lio-send.service /etc/systemd/system/ && sudo systemctl enable --now lio-send
+[Unit]
+# FAST-LIO2's pose and the flat /scan, as UDP datagrams to the relay on the
+# perception computer (robot/lio_relay.py, README 10.7).
+Description=Lidar pose and scan to the Lite3 relay (lio_relay.py send)
+After=lidar-scan.service network-online.target
+Wants=lidar-scan.service
+
+[Service]
+Type=simple
+User=lite3
+Group=lite3
+WorkingDirectory=/home/lite3
+Environment=HOME=/home/lite3
+Environment=ROS_DOMAIN_ID=42
+ExecStart=/bin/bash -c 'source /opt/ros/humble/setup.bash; exec python3 /home/lite3/bin/lio_relay.py send'
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

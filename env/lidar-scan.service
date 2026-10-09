@@ -14,7 +14,9 @@ Group=lite3
 WorkingDirectory=/home/lite3
 Environment=HOME=/home/lite3
 Environment=ROS_DOMAIN_ID=42
-ExecStart=/bin/bash -c 'source /opt/ros/humble/setup.bash; exec ros2 launch /home/lite3/bin/lidar_nav.launch.py'
+# lidar_z: 0.14 m above body centre, from photos and the torso mesh (2026-10-09, +-0.02).
+# x stays at the launch file's 0.20 (photos: 0.19 +-0.02), y 0.
+ExecStart=/bin/bash -c 'source /opt/ros/humble/setup.bash; exec ros2 launch /home/lite3/bin/lidar_nav.launch.py lidar_z:=0.14'
 Restart=always
 RestartSec=5
 KillMode=mixed
