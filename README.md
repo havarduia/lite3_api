@@ -218,6 +218,8 @@ robot/                 the library: `from robot.lite3 import Lite3`
   rs_stream.py         RealSense colour → H.264 on mediamtx  (started by hmi.py)
   udp_relay.py         WebRTC video between the tailnet and mediamtx (started by hmi.py)
   rviz.py              the live robot in rviz2 on the laptop (run it on the laptop, §10.6)
+  locate.py            is the robot localized on the floor map? → /localized (map mode, being built)
+  places.py            named places per floor, in ~/lite3_maps/<floor>/places.json (map mode, being built)
   lio_relay.py         from the Orin: FAST-LIO2's pose → /lio_odom, /odom_fused; lidar → /scan (§10.7)
 bin/                   things you run
   tour.py              walk / navigate a route, stop, look, talk
@@ -232,6 +234,7 @@ env/                   environment, launchers, and patches to vendor code
   lio_relay.service    systemd unit for robot/lio_relay.py (§10.7)
   lidar-scan.service   systemd unit that runs on the ORIN: the lidar as a flat /scan (§10.7)
   lio-send.service     systemd unit that runs on the ORIN: pose and scan to lio_relay.py (§10.7)
+  nav2_map_params.py   Nav2's parameters for map mode, generated from the mapless ones
   get_map.sh           copy a floor map from the Orin to the perception computer (run on the laptop)
   start_nav2_mapless.sh   launches sonar node + Nav2 (called by nav_start())
   camera.launch.py     RealSense D435i launch: depth + colour + IMU at 30 fps

@@ -827,6 +827,26 @@ relay, restarted during such a run, took the lag for a clock difference
 - Not known: why that run fell behind, or when. Yesterday's "poses at
   about 8 a second, up to 0.78 s late" may have been the start of it.
 
+### Map mode, the laptop pieces (plan tasks 5, 7, 11)
+
+Three files, each with its own self-check (`... check`), all passing on
+the laptop and on the robot's Python 3.8:
+
+- `env/nav2_map_params.py`: map mode's Nav2 parameters, generated from
+  the mapless file. On the robot's installed file it changes nine paths
+  and nothing else.
+- `robot/places.py`: the places file per floor.
+- `robot/locate.py`: "localized or not" from AMCL's spread and from how
+  much of the scan lands on the map's walls. The node has not run yet:
+  there is no map and no AMCL to run it against. One scan fit takes
+  0.54 ms on the Jetson.
+
+What the paper room in the check says about the scan fit, before any
+real floor: a pose 0.2 m or 3 degrees off still passes the 0.7 limit; a
+different room that shares a corner with the map scores 0.62; sliding
+0.5 m along one pair of walls scores 0.58, because the other pair still
+fits. The limit is a guess until it is tuned on the floor.
+
 ## 18. Still open
 
 - The wiggle fix (section 14) has two runs behind it: one in the open,
