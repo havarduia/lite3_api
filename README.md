@@ -236,6 +236,8 @@ env/                   environment, launchers, and patches to vendor code
   lidar_nav.launch.py  what that unit runs; our copy of the Orin's ~/bin/lidar_nav.launch.py
   lio-send.service     systemd unit that runs on the ORIN: pose and scan to lio_relay.py (§10.7)
   nav2_map_params.py   Nav2's parameters for map mode, generated from the mapless ones
+  nav2_map.launch.py   map mode: the mapless launch + map server + AMCL
+  start_nav2_map.sh    start map mode on a floor (as start_nav2_mapless.sh does for mapless)
   get_map.sh           copy a floor map from the Orin to the perception computer (run on the laptop)
   start_nav2_mapless.sh   launches sonar node + Nav2 (called by nav_start())
   camera.launch.py     RealSense D435i launch: depth + colour + IMU at 30 fps

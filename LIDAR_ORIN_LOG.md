@@ -905,6 +905,60 @@ apart score the same), so it tells "about right" from "wrong", not more.
 Relay with both scans passing: 30% of a core. Both scans 10.0 Hz on the
 Orin; its two scan nodes cost 8% of a core each.
 
+### Map mode runs (plan task 6), started by hand
+
+`env/start_nav2_map.sh lab`: the generated parameters, the sonar node,
+`robot/locate.py`, then `env/nav2_map.launch.py` (the vendor's mapless
+launch + map server + AMCL + a lifecycle manager for those two). Robot
+standing near the start mark; the pose to give AMCL was found with
+`demos/check_map.py` first.
+
+What it took, in the order it went wrong:
+
+1. **Nav2 does not finish starting until AMCL has a pose.** The global
+   costmap is in `map` now and waits for `map -> base_link`, which only
+   exists once AMCL has been told where it is. Map server and AMCL are
+   active after 3 s; the planner and the rest 0.5 s after the pose is
+   given. So loading a floor and giving the pose are two steps, and
+   "Nav2 is up" cannot be waited for in between.
+2. **The costmap never got the map.** It logged "Subscribing to the map
+   topic (/map) with volatile durability", subscribed 1.4 s after the map
+   server had sent its one copy, and stayed an empty 30 m square with its
+   corner at the origin ("Robot is out of bounds of the costmap!", and
+   the planner server at 109% of a core). Cause: `nav2_bringup`'s
+   `navigation_launch.py` rewrites `map_subscribe_transient_local` in
+   the parameter file it is given, to `false` by default. Fixed by
+   passing it as a launch argument where the mapless launch is included.
+   Then: "transient local durability", "Resizing costmap to 122 X 133 at
+   0.100000 m/pix", planner server 15%.
+3. **Grey (never seen) cells were free.** `track_unknown_space: true`
+   changed nothing in the published costmap (0 unknown cells): the other
+   layers write free over it. `unknown_cost_value: 50` under the static
+   layer changed nothing either: this Nav2 reads it from the costmap
+   node. Set there, the map's real unknown (-1) is no longer "the
+   unknown value" and becomes a wall: 11,952 lethal cells against 2,448
+   before, of 16,226 (the picture has 791 black, 9,846 grey, 5,589
+   white; the rest of the difference is inflation, 0.45 m).
+
+Result, standing:
+
+| | |
+|---|---|
+| AMCL after the pose | (-0.21, -0.13), variance 0.16 / 0.21 m2, 0.06 rad2 (it had been given 0.25 / 0.25 / 0.07) |
+| after turning +45 and -45 degrees | variance 0.023 / 0.16 m2, 0.021 rad2 |
+| `/localized` | localized, fit 0.97 to 1.00, spread 0.40 to 0.49 m (limit 0.5) |
+| AMCL / map server / `locate.py` | 8% / 5% / 9% of a core |
+| idle, of 6 cores | 40.9% (mapless, same day: 53.1%) |
+| camera messages dropped, control loop misses | 0, 0 in 30 s |
+
+The camera driver read 80 to 92% of a core in the three map-mode runs
+against 57 to 70% in the mapless ones; not explained. No goal has been
+sent in map mode yet: `goal_send()` still speaks `odom`.
+
+The spread sits just under its limit right after a pose is given,
+because the pose was given with 0.5 m of doubt. It narrows with
+movement, slowly sideways (only turned on the spot so far).
+
 ## 18. Still open
 
 - The wiggle fix (section 14) has two runs behind it: one in the open,

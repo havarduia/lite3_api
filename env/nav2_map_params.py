@@ -47,10 +47,21 @@ AMCL = {
     'set_initial_pose': False,                  # it waits to be told where it is
 }
 
+# nav2_bringup's navigation launch rewrites map_subscribe_transient_local in
+# whatever file it is given, to false unless told otherwise: it is set where
+# that launch is included (env/nav2_map.launch.py), not here.
 STATIC_LAYER = {
     'plugin': 'nav2_costmap_2d::StaticLayer',
     'map_subscribe_transient_local': True,
 }
+# Grey on the map is "never seen", not floor, and routes must stay on what
+# was mapped as free. The static layer takes cells of this value as unknown
+# and (not tracking unknown) as free; -1, the map's real unknown, is then no
+# longer that value and falls through to "at least lethal_cost_threshold":
+# a wall. AMCL reads the map itself and still sees grey as unknown. Tracking
+# unknown instead does not hold: the other layers write free over it. In
+# this Nav2 the static layer reads the value from the costmap, not from itself.
+UNKNOWN_COST_VALUE = 50
 # The global costmap takes the map's size and cell (0.05 m), about four
 # times the cells of the mapless one for a 35 m floor, so it is redone and
 # sent less often. The local costmap, which steers, is untouched.
@@ -69,6 +80,7 @@ def map_params(mapless, map_yaml):
     g['publish_frequency'] = GLOBAL_PUBLISH_HZ
     g['plugins'] = ['static_layer'] + g['plugins']
     g['static_layer'] = dict(STATIC_LAYER)
+    g['unknown_cost_value'] = UNKNOWN_COST_VALUE
     p['map_server'] = {'ros__parameters': {'use_sim_time': False, 'yaml_filename': map_yaml}}
     p['amcl'] = {'ros__parameters': dict(AMCL)}
     return p
@@ -98,8 +110,11 @@ global_costmap:
       footprint: "[[0.3, 0.2], [0.3, -0.2]]"
       update_frequency: 5.0
       publish_frequency: 2.0
+      track_unknown_space: False
       plugins: ["scan_layer", "inflation_layer"]
       scan_layer: {plugin: "nav2_costmap_2d::ObstacleLayer", scan: {max_obstacle_height: 2.0}}
+planner_server:
+  ros__parameters: {GridBased: {allow_unknown: true, tolerance: 0.15}}
 recoveries_server:
   ros__parameters: {global_frame: odom}
 ''')
@@ -110,7 +125,7 @@ recoveries_server:
     assert changed(mapless, out) == sorted([
         '/amcl', '/map_server', '/bt_navigator/ros__parameters/global_frame',
         g + 'global_frame', g + 'rolling_window', g + 'plugins', g + 'static_layer',
-        g + 'update_frequency', g + 'publish_frequency']), changed(mapless, out)
+        g + 'update_frequency', g + 'publish_frequency', g + 'unknown_cost_value']), changed(mapless, out)
     gp = out['global_costmap']['global_costmap']['ros__parameters']
     assert gp['plugins'] == ['static_layer', 'scan_layer', 'inflation_layer']   # the map first, obstacles over it
     assert gp['global_frame'] == 'map' and gp['rolling_window'] is False
