@@ -959,6 +959,20 @@ The spread sits just under its limit right after a pose is given,
 because the pose was given with 0.5 m of doubt. It narrows with
 movement, slowly sideways (only turned on the spot so far).
 
+### The `Lite3` calls for map mode (plan tasks 8, 12, 13, 14)
+
+`floors`, `load_floor`, `set_pose`, `localized`, `map_pose`, `go_to`,
+`go_to_point`, `places`, `save_place`, `rename_place`, `delete_place`,
+and the command-line words for them. Written against checks added to
+`demos/check_motion.py` first (fake robot, pretend Nav2): goals go out in
+the map frame, the refusals, lost on the way, cancel, the final heading,
+places by name.
+
+On the robot, standing still: `load_floor('lab')` 17 s, `set_pose` 2 s
+to localized with Nav2 ready, a place saved where he stood, and "not
+going: it has not been told where it is" before the pose was given.
+No route walked yet.
+
 ## 18. Still open
 
 - The wiggle fix (section 14) has two runs behind it: one in the open,

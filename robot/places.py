@@ -21,20 +21,21 @@ ROOT = os.path.expanduser('~/lite3_maps')
 NAME_MAX = 60
 
 
-def floors(root=ROOT):
+def floors(root=None):
     """The floors that have a map, by name."""
+    root = root or ROOT
     if not os.path.isdir(root):
         return []
     return sorted(f for f in os.listdir(root)
                   if os.path.isfile(os.path.join(root, f, 'map.yaml')))
 
 
-def floor_dir(floor, root=ROOT):
+def floor_dir(floor, root=None):
     """Where a floor's files are. Only a floor that is there: the name comes
     from whoever has the panel open, and must not become a path."""
     if floor not in floors(root):
         raise Lite3Error('no floor %r; there is %s' % (floor, ', '.join(floors(root)) or 'none'))
-    return os.path.join(root, floor)
+    return os.path.join(root or ROOT, floor)
 
 
 def _file(floor, root):
@@ -45,7 +46,7 @@ def _key(name):
     return name.strip().casefold()
 
 
-def load(floor, root=ROOT):
+def load(floor, root=None):
     """The places on a floor: [{name, x, y, yaw_deg, tag_id, created_at}, ...].
     A file that cannot be read is moved aside, never written over."""
     path = _file(floor, root)
@@ -64,7 +65,7 @@ def load(floor, root=ROOT):
     return places
 
 
-def find(floor, name, root=ROOT):
+def find(floor, name, root=None):
     """The place of that name (case does not matter)."""
     for p in load(floor, root):
         if _key(p['name']) == _key(name):
@@ -72,7 +73,7 @@ def find(floor, name, root=ROOT):
     raise Lite3Error('no place %r on %r' % (name, floor))
 
 
-def save(floor, name, x, y, yaw_deg, tag_id=None, root=ROOT):
+def save(floor, name, x, y, yaw_deg, tag_id=None, root=None):
     """Add a place. Refuses an empty name and one already used on this floor."""
     name = _check(name, x, y, yaw_deg)
     places = load(floor, root)
@@ -83,7 +84,7 @@ def save(floor, name, x, y, yaw_deg, tag_id=None, root=ROOT):
     return place
 
 
-def rename(floor, old, new, root=ROOT):
+def rename(floor, old, new, root=None):
     places = load(floor, root)
     place = _one(places, old, floor)
     new = _check(new, 0.0, 0.0, 0.0)
@@ -94,7 +95,7 @@ def rename(floor, old, new, root=ROOT):
     return place
 
 
-def delete(floor, name, root=ROOT):
+def delete(floor, name, root=None):
     """Remove a place for good; the panel's export is the backup."""
     places = load(floor, root)
     places.remove(_one(places, name, floor))

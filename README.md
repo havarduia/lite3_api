@@ -218,8 +218,8 @@ robot/                 the library: `from robot.lite3 import Lite3`
   rs_stream.py         RealSense colour → H.264 on mediamtx  (started by hmi.py)
   udp_relay.py         WebRTC video between the tailnet and mediamtx (started by hmi.py)
   rviz.py              the live robot in rviz2 on the laptop (run it on the laptop, §10.6)
-  locate.py            is the robot localized on the floor map? → /localized (map mode, being built)
-  places.py            named places per floor, in ~/lite3_maps/<floor>/places.json (map mode, being built)
+  locate.py            is the robot localized on the floor map? → /localized (§7.5)
+  places.py            named places per floor, in ~/lite3_maps/<floor>/places.json (§7.5)
   lio_relay.py         from the Orin: FAST-LIO2's pose → /lio_odom, /odom_fused; lidar → /scan (§10.7)
 bin/                   things you run
   tour.py              walk / navigate a route, stop, look, talk
@@ -641,6 +641,59 @@ ends it and kills Nav2. Either way `goto()` returns 5 and he ends halted.
 `bin/tour.py` adds a smarter goal chooser: if the requested spot is inside an
 obstacle, pick the *closest free distance* on that line (Nav2 then routes
 around), and an `approach` verb that stops short of the *first* obstacle.
+
+### 7.5 Map mode: a floor map, and going to a place on it
+
+Being built (`.planning/plans/building-navigation.md`); what is here works
+on the robot as of 2026-10-09, in one room, standing still. No route has
+been walked on a map yet.
+
+```python
+bot.floors()                    # ['lab']: floors that have a map
+bot.load_floor('lab')           # Nav2 on that map; replaces whatever Nav2 was up
+bot.set_pose(-0.2, 0.0, 0)      # "I am here", to within half a metre and 20 degrees
+bot.localized, bot.map_pose     # True, (x, y, yaw) on the map
+bot.save_place('lab door')      # where he stands; or save_place(name, x, y, yaw_deg)
+bot.go_to('lab door')           # returns the action status, like goto()
+bot.go_to_point(1.9, -0.3)      # a point on the map
+bot.places(); bot.rename_place(old, new); bot.delete_place(name)
+```
+
+The same from the command line: `python3 -m robot.lite3 floors`,
+`load lab`, `here -0.2 0 0`, `save "lab door"`, `places`, `go "lab door"`,
+`go 1.9 -0.3`, `forget "lab door"`.
+
+- **The map** is one floor from the Orin's mapping run, copied with
+  `env/get_map.sh` to `~/lite3_maps/<floor>/map.{pgm,yaml}` on the
+  perception computer. Record it with the Orin panel's Live run, not
+  "Record & map" (LIDAR_ORIN_LOG.md section 17). Its origin is where the
+  lidar was when the run started; `base_link` was 0.20 m behind that.
+- **What runs** (`env/start_nav2_map.sh <floor>`): the mapless stack with
+  its global costmap moved to the `map` frame and the map as its first
+  layer, a map server, AMCL, and `robot/locate.py`. The parameters are
+  made at each start from the mapless file (`env/nav2_map_params.py`), so
+  the tuning of §7.1 is the only copy. Grey on the map (never seen) is a
+  wall to the planner: routes stay on floor that was mapped as free.
+- **Two steps to start.** Nav2 does not finish starting until AMCL has
+  been told where he is, so `load_floor()` returns with him not
+  localized, and `set_pose()` returns when he is and Nav2 is ready.
+- **Which scan.** AMCL and `locate.py` use `/scan_walls`, the lidar cut
+  above the furniture (§10.7). The costmaps keep the low `/scan`.
+- **Localized or not** is one node's answer, `robot/locate.py`, on
+  `/localized` twice a second: AMCL's spread must be narrow and the wall
+  scan, drawn from the pose, must land on the map's walls. `go_to()`
+  refuses to start without it and stops, raising, if it is lost on the
+  way. Sliding along a corridor is what it cannot see.
+- **Frames.** In map mode Nav2 takes a goal's numbers as map coordinates
+  whatever frame its header names, so `goal_send()` and `cost_at()` move
+  an odom point onto the map themselves. `goto(forward)`, following and
+  the tour keep working unchanged in either mode.
+- **Places** are `~/lite3_maps/<floor>/places.json` (`robot/places.py`):
+  names unique per floor whatever the case, a damaged file moved aside
+  and never written over.
+- `demos/check_map.py <floor> <x> <y> <deg>` draws one live scan on the
+  map and finds the best-fitting pose nearby; it is how to find the pose
+  to give, and the first thing to run when he will not localize.
 
 ---
 

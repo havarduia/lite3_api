@@ -32,11 +32,14 @@ from rclpy.node import Node                            # noqa: E402
 from rclpy.qos import (DurabilityPolicy, QoSProfile,   # noqa: E402
                        ReliabilityPolicy)
 from sensor_msgs.msg import Imu, PointCloud2           # noqa: E402
-from std_msgs.msg import Float64, Int32MultiArray      # noqa: E402
+from std_msgs.msg import (Float64, Float64MultiArray,  # noqa: E402
+                          Int32MultiArray)
 
+from . import locate                                   # noqa: E402
 from . import protocol as P                            # noqa: E402
 from .depth import Depth, sampled                      # noqa: E402
-from .nav import LETHAL, Nav, clamp, dist, wrap        # noqa: E402
+from .nav import (LETHAL, Nav, clamp, dist,            # noqa: E402
+                  status_text, wrap)
 from .protocol import ACTIONS, Lite3Error              # noqa: E402,F401
 
 MAX_TILT_DEG = 14.0      # STICK_PITCH full scale, see protocol.py
@@ -127,6 +130,8 @@ class _Node(Node):
         self.odom_time = 0.0        # time.time() of the newest odometry
         self.cloud = None
         self.grid = None
+        # Map mode: what robot/locate.py last said, when, and the odometry of that moment.
+        self.loc, self.loc_time, self.loc_odom = None, 0.0, None
         self.us_front = self.us_rear = None
         self.tilt = None            # (roll, pitch) in degrees
         self.stick_time = 0.0       # last time a handheld stick was pushed
@@ -146,6 +151,7 @@ class _Node(Node):
         self.create_subscription(Float64, '/us_publisher/ultrasound_front',
                                  lambda m: setattr(self, 'us_front', m.data), 1)
         self.create_subscription(Imu, '/imu/data', self._imu_cb, 1)
+        self.create_subscription(Float64MultiArray, locate.TOPIC, self._loc_cb, 1)
         self.create_subscription(Twist, '/handle_state', self._handle_cb, best)
 
     def _state_cb(self, m):
@@ -164,6 +170,10 @@ class _Node(Node):
                           1.0 - 2.0 * (q.x * q.x + q.y * q.y))
         pitch = math.asin(max(-1.0, min(1.0, 2.0 * (q.w * q.y - q.z * q.x))))
         self.tilt = (math.degrees(roll), math.degrees(pitch))
+
+    def _loc_cb(self, m):
+        if len(m.data) == len(locate.Reading._fields):
+            self.loc, self.loc_time, self.loc_odom = locate.Reading(*m.data), time.time(), self.odom
 
     def _handle_cb(self, m):
         if max(abs(m.linear.x), abs(m.linear.y),
@@ -758,9 +768,19 @@ class Lite3(Nav, Depth):
                 + (' pose=(%.2f, %.2f, %.0f deg)' % (p[0], p[1], math.degrees(p[2]))
                    if p else ' pose=unknown')
                 + ' nav2=' + ('up' if self.nav_running else 'down')
+                + self._floor_status()
                 + ' sonar front=%s rear=%s' % tuple(
                     '-' if v is None else '%.2f' % v for v in (f, r))
                 + (' tilt=(%.0f, %.0f) deg' % t if t else ''))
+
+
+    def _floor_status(self):
+        floor = self.floor
+        if floor is None:
+            return ''
+        m = self.map_pose
+        return ' floor=%s %s' % (floor, self.lost_why() or 'localized') + (
+            ' at (%.2f, %.2f, %.0f deg)' % (m[0], m[1], math.degrees(m[2])) if m else '')
 
 
 def _cli():
@@ -769,11 +789,13 @@ def _cli():
     if not args:
         print(__doc__)
         print('commands: status stand sit auto walk <m> turn <deg> scan '
-              'nav-start nav-stop goto <m> cost estop [--disarm] action <%s>'
+              'nav-start nav-stop goto <m> cost estop [--disarm] action <%s>\n'
+              'on a floor map: floors, load <floor>, here <x> <y> <deg>, places, '
+              'save <name> [x y deg], forget <name>, go <name>, go <x> <y> [deg]'
               % '|'.join(ACTIONS))
         return
     cmd = args[0]
-    with Lite3(auto_mode=(cmd not in ('status', 'scan', 'cost'))) as bot:
+    with Lite3(auto_mode=(cmd not in ('status', 'scan', 'cost', 'floors', 'places', 'save', 'forget'))) as bot:
         if cmd == 'status':
             time.sleep(0.5)     # let the sonar and IMU topics arrive
             print(bot.status())
@@ -800,6 +822,25 @@ def _cli():
             print(bot.status())
         elif cmd == 'action':
             bot.action(args[1]); print(bot.status())
+        elif cmd == 'floors':
+            print('\n'.join(bot.floors()) or 'no floors: fetch a map with env/get_map.sh')
+        elif cmd == 'load':
+            bot.load_floor(args[1]); print('floor %s loaded; now: here <x> <y> <deg>' % args[1])
+        elif cmd == 'here':
+            bot.set_pose(*map(float, args[1:4])); time.sleep(0.5); print(bot.status())
+        elif cmd == 'places':
+            for p in bot.places():
+                print('%-24s (%.2f, %.2f, %.0f deg)' % (p['name'], p['x'], p['y'], p['yaw_deg']))
+        elif cmd == 'save':
+            time.sleep(0.8)     # let robot/locate.py be heard
+            print(bot.save_place(args[1], *map(float, args[2:5])))
+        elif cmd == 'forget':
+            bot.delete_place(args[1]); print('forgot', args[1])
+        elif cmd == 'go':
+            time.sleep(0.8)
+            numbers = len(args) > 2
+            status = bot.go_to_point(*map(float, args[1:4])) if numbers else bot.go_to(args[1])
+            print(status_text(status), bot.status())
         elif cmd == 'cost':
             for d, c in bot.cost_ahead():
                 mark = ' LETHAL' if c is not None and c >= LETHAL else (

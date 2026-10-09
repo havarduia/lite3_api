@@ -6,12 +6,13 @@
 A fake node, a fake clock and a pretend Nav2 stand in for the robot, and no
 packet or ROS message leaves this process, so it is safe to run anywhere -
 next to a live robot too. Run it after touching Lite3._loop, _run, steer,
-walk, turn, goto or nav_stop.
+walk, turn, goto, go_to or nav_stop.
 """
 import math
 import os
 import subprocess
 import sys
+import tempfile
 import time
 import types
 
@@ -19,7 +20,7 @@ import rclpy.action
 from builtin_interfaces.msg import Time
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from robot import lite3 as L, nav, protocol as P  # noqa: E402
+from robot import lite3 as L, locate, nav, places, protocol as P  # noqa: E402
 
 P.send = lambda code, value=0: None         # mode packets stay here
 
@@ -32,6 +33,11 @@ class World:
     cloud, tilt, stick_time, at = None, (0.0, 0.0), -1.0, None
     odom_time = property(lambda self: self.odom_stopped or self.t)     # fresh until it stops
     odom_stopped = None
+    # Map mode: the global costmap, and what robot/locate.py last said (with the
+    # odometry of that moment). None of it in mapless mode.
+    grid = loc = loc_stopped = None
+    loc_odom = (0.0, 0.0, 0.0)
+    loc_time = property(lambda self: self.t if self.loc_stopped is None else self.loc_stopped)
 
     def __init__(self, **setup):
         self.t, self.odom, self.cmd, self.sent, self.pub = 0.0, (0.0, 0.0, 0.0), (0.0, 0.0, 0.0), [], self
@@ -57,6 +63,7 @@ class World:
 
 class Bot(L.Lite3):
     nav_running = True                      # no pgrep: the pretend Nav2 below is always up
+    floor = 'lab'                           # nor for the floor that is loaded
 
 
 def run(move, **setup):
@@ -75,11 +82,15 @@ def run(move, **setup):
     return r, set(w.sent[-20:]) == {(0.0, 0.0, 0.0)}, w.sent
 
 
+GOALS, CANCELS = [], []      # every goal pose the pretend Nav2 was sent, and when one was cancelled
+
+
 def pretend_nav2(arrives):
     """rclpy's ActionClient, pretended. A goal ends when it is cancelled, or
     `arrives` seconds after it was sent, or (None) never. Returns the list of
     clients made."""
     made = []
+    del GOALS[:], CANCELS[:]
 
     def client(node, action, name):
         goal = {}
@@ -87,11 +98,11 @@ def pretend_nav2(arrives):
             done=lambda: goal['cancelled'] or (arrives is not None and node.t >= goal['sent'] + arrives),
             result=lambda: types.SimpleNamespace(status=nav.CANCELED if goal['cancelled'] else nav.SUCCEEDED))
         handle = types.SimpleNamespace(accepted=True, get_result_async=lambda: result,
-                                       cancel_goal_async=lambda: goal.update(cancelled=True))
+                                       cancel_goal_async=lambda: CANCELS.append(node.t) or goal.update(cancelled=True))
         made.append(name)
         return types.SimpleNamespace(
             wait_for_server=lambda timeout_sec: True,
-            send_goal_async=lambda msg: goal.update(sent=node.t, cancelled=False) or types.SimpleNamespace(
+            send_goal_async=lambda msg: GOALS.append(msg.pose) or goal.update(sent=node.t, cancelled=False) or types.SimpleNamespace(
                 done=lambda: True, result=lambda: handle))
 
     rclpy.action.ActionClient = client
@@ -102,6 +113,31 @@ def pretend_nav2(arrives):
 
 def boom():
     raise ZeroDivisionError
+
+
+def floor_costmap():
+    """Nav2's global costmap in map mode: 10 x 10 m in the map frame, free
+    but for a wall along x = 8 m."""
+    cells = [0] * 10000
+    for row in range(100):
+        cells[row * 100 + 80] = 100
+    return types.SimpleNamespace(
+        header=types.SimpleNamespace(frame_id='map'), data=cells,
+        info=types.SimpleNamespace(resolution=0.1, width=100, height=100, origin=types.SimpleNamespace(
+            position=types.SimpleNamespace(x=0.0, y=0.0))))
+
+
+def on_floor(state=locate.LOCALIZED):
+    """World settings for map mode: odometry reads (0, 0, 0) and locate.py has
+    him at (5, 5) on the map, facing +y."""
+    return {'grid': floor_costmap(), 'loc': locate.Reading(state, 5.0, 5.0, math.pi / 2, 0.1, 0.05, 0.95)}
+
+
+def sent_goal():
+    """(frame, x, y, yaw in degrees) of the goal the pretend Nav2 got last."""
+    g = GOALS[-1]
+    return (g.header.frame_id, round(g.pose.position.x, 3), round(g.pose.position.y, 3),
+            round(math.degrees(2 * math.atan2(g.pose.orientation.z, g.pose.orientation.w))))
 
 
 def main():
@@ -159,6 +195,7 @@ def main():
     made = pretend_nav2(arrives=2.0)
     r, _, _ = run(lambda b: [b.goto(1.0, check=False) for _ in range(3)])
     assert r == [nav.SUCCEEDED] * 3 and len(made) == 1, (r, made)
+    assert sent_goal() == ('odom', 1.0, 0.0, 0), sent_goal()     # mapless: goals are in odom, as ever
     pretend_nav2(arrives=None)                                   # a Nav2 that never gets there
     r, halted, _ = run(lambda b: b.goto(1.0, check=False), at=(1.0, lambda w: w.bot.goto_cancel()))
     assert r == nav.CANCELED and halted, r                       # cancelled from another thread
@@ -166,6 +203,78 @@ def main():
     assert r == nav.CANCELED and halted, r                       # estop() dropped it: no waiting on a dead Nav2
     r, halted, _ = run(lambda b: b.goto(1.0, check=False, timeout=5.0))
     assert isinstance(r, L.Lite3Error) and 'timed out' in str(r) and halted, r
+
+    # --- map mode: Nav2 plans in the map frame, and so every goal must be in it ---
+    pretend_nav2(arrives=2.0)
+    r, _, _ = run(lambda b: b.goto(1.0, check=False), **on_floor())
+    assert r == nav.SUCCEEDED and sent_goal() == ('map', 5.0, 6.0, 90), sent_goal()     # 1 m ahead of where he is on the map
+    r, _, _ = run(lambda b: (b.cost_at(0.0, -3.05), b.cost_at(0.0, 0.0), b.cost_at(0.0, 9.0)), **on_floor())
+    assert r == (100, 0, None), r           # odom points, looked up on the map: the wall at (8.05, 5), him, and (-4, 5) off it
+    r, _, _ = run(lambda b: (b.cost_at(8.05, 5.0, frame='map'), b.cost_at(2.0, 5.0, frame='map')), **on_floor())
+    assert r == (100, 0), r
+    r, _, _ = run(lambda b: (b.localized, b.map_pose), **on_floor())
+    assert r[0] is True and all(abs(a - b) < 1e-9 for a, b in zip(r[1], (5.0, 5.0, math.pi / 2))), r
+    # he has walked 1 m since locate.py last spoke: the map pose has gone with him
+    r, _, _ = run(lambda b: b.map_pose, odom=(1.0, 0.0, 0.0), **on_floor())
+    assert all(abs(a - b) < 1e-9 for a, b in zip(r, (5.0, 6.0, math.pi / 2))), r
+    r, _, _ = run(lambda b: (b.localized, b.map_pose))
+    assert r == (False, None), r            # mapless: neither
+
+    # go to a point on the map
+    r, _, _ = run(lambda b: b.go_to_point(2.0, 5.0), **on_floor())
+    assert r == nav.SUCCEEDED and sent_goal() == ('map', 2.0, 5.0, 180), sent_goal()    # facing the way he came
+    r, _, _ = run(lambda b: (b.go_to_point(2.0, 5.0, yaw_deg=0), b._node.odom[2]), **on_floor())
+    assert r[0] == nav.SUCCEEDED and abs(r[1] + math.pi / 2) < 0.1, r                   # and turned to the heading asked for
+    r, _, _ = run(lambda b: b.go_to_point(5.05, 5.0), **on_floor())
+    assert r == nav.SUCCEEDED and len(GOALS) == 3, (r, len(GOALS))                      # already there: no goal sent
+    pretend_nav2(arrives=None)
+    r, halted, _ = run(lambda b: b.go_to_point(2.0, 5.0), at=(1.0, lambda w: w.bot.goto_cancel()), **on_floor())
+    assert r == nav.CANCELED and halted, r
+
+    def refused(move, **setup):
+        before = len(GOALS)
+        r, _, sent = run(move, **setup)
+        assert isinstance(r, L.Lite3Error) and not sent and len(GOALS) == before, r     # no goal, no step
+        return str(r)
+
+    Bot.floor = None
+    assert 'no floor' in refused(lambda b: b.go_to_point(2.0, 5.0))
+    Bot.floor = 'lab'
+    assert 'fit the map' in refused(lambda b: b.go_to_point(2.0, 5.0), **on_floor(locate.NO_FIT))
+    assert 'not been told' in refused(lambda b: b.go_to_point(2.0, 5.0), **on_floor(locate.NO_POSE))
+    assert 'says nothing' in refused(lambda b: b.go_to_point(2.0, 5.0), loc_stopped=-10.0, **on_floor())
+    assert 'outside the map' in refused(lambda b: b.go_to_point(20.0, 5.0), **on_floor())
+    assert 'wall' in refused(lambda b: b.go_to_point(8.05, 5.0), **on_floor())
+    assert 'numbers' in refused(lambda b: b.go_to_point(float('nan'), 5.0), **on_floor())
+    assert 'not standing' in refused(lambda b: b.go_to_point(2.0, 5.0), state={'basic': 1, 'battery': 80}, **on_floor())
+
+    # lost on the way: the goal is dropped and he stops, he does not walk on a wrong position
+    r, halted, _ = run(lambda b: b.go_to_point(2.0, 5.0),
+                       at=(1.0, lambda w: setattr(w, 'loc', w.loc._replace(state=locate.NO_FIT))), **on_floor())
+    assert isinstance(r, L.Lite3Error) and 'lost' in str(r) and 'fit the map' in str(r) and halted and CANCELS, r
+    del CANCELS[:]
+    r, halted, _ = run(lambda b: b.go_to_point(2.0, 5.0), at=(1.0, lambda w: setattr(w, 'loc_stopped', w.t)), **on_floor())
+    assert isinstance(r, L.Lite3Error) and 'lost' in str(r) and halted and CANCELS, r   # locate.py itself died
+
+    # places: saved where he stands or at a point, gone to by name
+    pretend_nav2(arrives=2.0)
+    real_root = places.ROOT
+    with tempfile.TemporaryDirectory() as places.ROOT:
+        os.makedirs(os.path.join(places.ROOT, 'lab'))
+        open(os.path.join(places.ROOT, 'lab', 'map.yaml'), 'w').close()
+
+        def tour(b):
+            here = b.save_place('Start')
+            b.save_place('Window', 2.0, 5.0, 180)
+            return here, b.go_to('window'), [p['name'] for p in b.places()], b.delete_place('START'), b.places()
+        r, _, _ = run(tour, **on_floor())
+        assert (r[0]['x'], r[0]['y'], r[0]['yaw_deg']) == (5.0, 5.0, 90.0), r
+        assert r[1] == nav.SUCCEEDED and sent_goal() == ('map', 2.0, 5.0, 180) and r[2] == ['Start', 'Window'], r
+        assert [p['name'] for p in r[4]] == ['Window'], r
+        assert 'no place' in refused(lambda b: b.go_to('canteen'), **on_floor())
+        assert 'fit the map' in refused(lambda b: b.save_place('Nowhere'), **on_floor(locate.NO_FIT))
+        assert 'wall' in refused(lambda b: b.save_place('In the wall', 8.05, 5.0, 0), **on_floor())
+    places.ROOT = real_root
 
     # stopping a stack this process launched does not wait on its zombie (real time, real process)
     stack = subprocess.Popen(['setsid', 'sleep', '60'])
