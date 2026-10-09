@@ -847,6 +847,45 @@ different room that shares a corner with the map scores 0.62; sliding
 0.5 m along one pair of walls scores 0.58, because the other pair still
 fits. The limit is a guess until it is tuned on the floor.
 
+### First floor map, and the scan does not see what the map shows
+
+The panel's "Record & map" gave a map that flew off (`lab_20261009_181337`,
+9.5 km of path for a walk round one room). The bag is missing 22% of
+`/livox/imu` (22,691 of about 29,150 samples, gaps up to 1.1 s); the
+lidar frames are all there. The Live run of the same walk had no gaps.
+Why the recorder drops them was not found.
+
+The Live run was saved instead (`lio_relay.live('stop', name='lab-live',
+one_floor=True)`): 29.5 m, ended 2 cm from its start, re-levelled by
+1.1 degrees. Copied with `env/get_map.sh` to `~/lite3_maps/lab/`. One
+room, about 6 x 10 m, 0.1 m cells. The map's frame is the lidar's pose at
+the start, so `base_link` on the start mark is at about (-0.20, 0).
+
+`demos/check_map.py lab -0.20 0 0`, robot standing near the mark: 0.40 of
+the scan on mapped walls, 0.52 at the best pose within 0.5 m and 15
+degrees. `locate.py` asks for 0.70. The map tool keeps only what runs
+from floor to ceiling, so tables and chairs are not on it; the scan is
+cut from 0.15 m below to 1.0 m above `base_link` and is mostly furniture.
+
+One second of raw lidar points, cut into other height bands and scored
+the same way (single 0.1 s frame; band given above `base_link`, which
+stands 0.32 m over the floor):
+
+| band | beams with a return | fit at (-0.20, 0, 0) | best fit nearby |
+|---|---|---|---|
+| -0.15 .. 1.0 m (today's `/scan`) | 569 | 0.45 | 0.55 |
+| 0.7 .. 1.5 m | 487 | 0.66 | 0.79 |
+| 0.9 .. 1.7 m | 382 | 0.87 | 0.99 at (-0.20, 0.00, 4 deg) |
+| 1.1 .. 1.9 m | 453 | 0.62 | 0.70 |
+| 1.3 .. 2.1 m | 470 | 0.64 | 0.71 |
+| 0.9 .. 2.3 m | 512 | 0.65 | 0.74 |
+
+So a scan cut 0.9 to 1.7 m above `base_link` (1.2 to 2.0 m over the
+floor) sees the walls and little else, and its best pose is the start
+mark. Above 1.7 m something else comes in (a fifth of all points are the
+ceiling, 2.4 m above `base_link`). One room, one robot position: the band
+may want moving elsewhere.
+
 ## 18. Still open
 
 - The wiggle fix (section 14) has two runs behind it: one in the open,
