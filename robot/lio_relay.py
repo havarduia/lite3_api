@@ -7,9 +7,9 @@
 
 Publishes /lio_odom (FAST-LIO2's pose as it comes), /odom_fused
 (/leg_odom2 with FAST-LIO2's correction; plain /leg_odom2 whenever the Orin
-is silent or its pose jumps) and /scan (the lidar flattened to 2D by the
-Orin's lidar-scan.service, for Nav2's costmaps), and the odom -> base_link
-transform for Nav2.
+is silent or its pose jumps), /scan and /scan_walls (the lidar flattened
+to 2D by the Orin's lidar-scan.service: low for Nav2's costmaps, high for
+finding itself on a floor map) and the odom -> base_link transform for Nav2.
 
 The Orin is Humble with Fast DDS on domain 42; the robot's nodes are
 CycloneDDS on domain 0 and crash on meeting it. So this file runs on the
@@ -33,7 +33,7 @@ OUT_TOPIC = '/lio_odom'     # the same motion as odom -> base_link, shaped like 
 ORIN = '192.168.1.5'
 ROBOT = ('192.168.1.103', 8042)     # the perception computer and the port this relay listens on
 POSE = struct.Struct('<c9d')        # P, when sent (the Orin's clock), stamp, position xyz, quaternion xyzw
-SCAN = struct.Struct('<c4d')        # S, angle_min, angle_increment, range_min, range_max; the ranges follow
+SCAN = struct.Struct('<c4d')        # S or W, angle_min, angle_increment, range_min, range_max; the ranges follow
 # base_link -> lidar, as the Orin's lidar-scan.service has it. The pitch is
 # measured (20.4 deg nose-down); x, y, z are good to about 2 cm (2026-10-09).
 MOUNT_XYZ = (0.20, 0.0, 0.14)
@@ -44,7 +44,10 @@ LEG_TOPIC = 'leg_odom2'
 FUSED_TOPIC = '/odom_fused'
 LEGS_KEPT = 100         # leg poses remembered, 2 s of them: a pose older than that is not used
 CLOCK_DRIFT = 2e-4      # s per pose the two computers' clocks may drift apart
-SCAN_TOPIC = '/scan'    # same name both sides; in base_link, by the Orin's mount transform
+# Same names both sides; in base_link, by the Orin's mount transform. S is cut
+# low (0.15 m under to 1.0 m over base_link): what he could walk into. W is cut
+# above the furniture (0.9 to 1.7 m over): the walls a floor map shows.
+SCANS = {b'S': '/scan', b'W': '/scan_walls'}
 SCAN_DELAY_S = 0.1      # a scan gathers 0.1 s of points before it is sent; not measured
 GAP_S = 1.0             # longer than this between poses: a new run, or it stalled. A few go missing on the way
 STEP_TOL = (0.15, 0.2)  # m, rad: a step differing more than this from the legs' is not believed
@@ -178,11 +181,11 @@ def should_start(basic, legs, lio_age):
     return still and (lio_age is None or lio_age > GAP_S)
 
 
-def scan_packet(angle_min, angle_increment, range_min, range_max, ranges):
+def scan_packet(kind, angle_min, angle_increment, range_min, range_max, ranges):
     """A scan as one datagram; scan_fields() reads it back. The ranges go as
     the float32s they already are: no work per beam at either end. Both
     computers are little-endian."""
-    return SCAN.pack(b'S', angle_min, angle_increment, range_min, range_max) + array.array('f', ranges).tobytes()
+    return SCAN.pack(kind, angle_min, angle_increment, range_min, range_max) + array.array('f', ranges).tobytes()
 
 
 def scan_fields(data):
@@ -194,7 +197,7 @@ def well_formed(data):
     """Is this datagram a pose or a scan, whole?"""
     if data[:1] == b'P':
         return len(data) == POSE.size
-    return data[:1] == b'S' and len(data) > SCAN.size and (len(data) - SCAN.size) % 4 == 0
+    return data[:1] in SCANS and len(data) > SCAN.size and (len(data) - SCAN.size) % 4 == 0
 
 
 def send():
@@ -210,13 +213,15 @@ def send():
         p, q, s = m.pose.pose.position, m.pose.pose.orientation, m.header.stamp
         out.sendto(POSE.pack(b'P', time.time(), s.sec + s.nanosec * 1e-9, p.x, p.y, p.z, q.x, q.y, q.z, q.w), ROBOT)
 
-    def scan(m):
-        out.sendto(scan_packet(m.angle_min, m.angle_increment, m.range_min, m.range_max, m.ranges), ROBOT)
+    def scan(kind):
+        return lambda m: out.sendto(
+            scan_packet(kind, m.angle_min, m.angle_increment, m.range_min, m.range_max, m.ranges), ROBOT)
 
     rclpy.init()
     node = rclpy.create_node('lio_send')
     node.create_subscription(Odometry, LIO_TOPIC, pose, qos_profile_sensor_data)
-    node.create_subscription(LaserScan, SCAN_TOPIC, scan, qos_profile_sensor_data)
+    for kind, topic in SCANS.items():
+        node.create_subscription(LaserScan, topic, scan(kind), qos_profile_sensor_data)
     rclpy.spin(node)
 
 
@@ -234,7 +239,7 @@ def main():
     node = rclpy.create_node('lio_relay')
     lio_pub = node.create_publisher(Odometry, OUT_TOPIC, 10)
     fused_pub = node.create_publisher(Odometry, FUSED_TOPIC, 10)
-    scan_pub = node.create_publisher(LaserScan, SCAN_TOPIC, 5)
+    scan_pubs = {kind: node.create_publisher(LaserScan, topic, 5) for kind, topic in SCANS.items()}
     # odom -> base_link for Nav2, from here: the vendor's node for it cost a fifth of a core
     tf_pub = TransformBroadcaster(node)
     tf = TransformStamped()
@@ -252,7 +257,7 @@ def main():
         m.angle_min, m.angle_increment, m.range_min, m.range_max, m.ranges = scan_fields(data)
         m.angle_max = m.angle_min + m.angle_increment * (len(m.ranges) - 1)
         m.scan_time = 0.1
-        scan_pub.publish(m)
+        scan_pubs[data[:1]].publish(m)
 
     def read():
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -267,7 +272,7 @@ def main():
             data, (host, _) = sock.recvfrom(65535)
             if host != ORIN or not well_formed(data):
                 continue
-            if data[:1] == b'S':
+            if data[:1] in SCANS:
                 send_scan(data)
             else:
                 v = POSE.unpack(data)[1:]
@@ -411,11 +416,11 @@ def demo():
     walk = collections.deque([(10.0 + i * 0.02, (i * 0.02, 0.0, 0.0)) for i in range(100)], maxlen=100)   # 1 m/s
     assert near(leg_at(walk, 10.5), (0.5, 0.0, 0.0)) and leg_at(walk, 9.0) is None
     # a scan survives the trip, its "nothing there" readings included
-    sent = scan_packet(-3.14159, 0.00873, 0.4, 30.0, [1.25, float('inf'), 0.5])
+    sent = scan_packet(b'S', -3.14159, 0.00873, 0.4, 30.0, [1.25, float('inf'), 0.5])
     back = scan_fields(sent)
     assert back[:4] == (-3.14159, 0.00873, 0.4, 30.0) and list(back[4]) == [1.25, float('inf'), 0.5]
     # only whole poses and scans are taken
-    assert well_formed(sent) and well_formed(POSE.pack(b'P', *[0.0] * 9))
+    assert well_formed(sent) and well_formed(b'W' + sent[1:]) and well_formed(POSE.pack(b'P', *[0.0] * 9))
     assert not well_formed(sent[:-1]) and not well_formed(b'P' + sent[1:]) and not well_formed(b'') \
         and not well_formed(SCAN.pack(b'S', 0, 0, 0, 0)) and not well_formed(b'X' * POSE.size)
     # starting FAST-LIO2: only standing, still, and with nothing coming from it

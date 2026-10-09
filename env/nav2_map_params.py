@@ -20,7 +20,7 @@ AMCL = {
     'base_frame_id': 'base_link',
     'odom_frame_id': 'odom',
     'global_frame_id': 'map',
-    'scan_topic': 'scan',
+    'scan_topic': 'scan_walls',                 # the lidar cut above the furniture (robot/lio_relay.py)
     'robot_model_type': 'omnidirectional',      # a legged robot can step sideways
     'laser_model_type': 'likelihood_field',
     'laser_min_range': 0.4,                     # nearer is the robot itself (the Orin's scan drops it)

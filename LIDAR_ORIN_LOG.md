@@ -886,6 +886,25 @@ mark. Above 1.7 m something else comes in (a fifth of all points are the
 ceiling, 2.4 m above `base_link`). One room, one robot position: the band
 may want moving elsewhere.
 
+### `/scan_walls` built (same day)
+
+The Orin's `lidar_nav.launch.py` got a second `pointcloud_to_laserscan`
+node, 0.9 to 1.7 m above `base_link`, on `/scan_walls` (backup there
+`lidar_nav.launch.py.pre-walls2`; our copy is now in `env/`). The sender
+and the relay carry it as datagram kind `W`; an older relay ignores it.
+
+Live, robot standing by the start mark, `demos/check_map.py lab -0.20 0 4`:
+
+| scan | beams with a return | fit at that pose | best nearby |
+|---|---|---|---|
+| `/scan_walls` | 379 | 1.00 | 1.00 |
+| `/scan` | 569 | 0.37 | 0.52 |
+
+The fit is at its ceiling over a patch of poses (0.15 m and a few degrees
+apart score the same), so it tells "about right" from "wrong", not more.
+Relay with both scans passing: 30% of a core. Both scans 10.0 Hz on the
+Orin; its two scan nodes cost 8% of a core each.
+
 ## 18. Still open
 
 - The wiggle fix (section 14) has two runs behind it: one in the open,

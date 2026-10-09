@@ -1,6 +1,6 @@
 """check_map - one live lidar scan drawn on a floor map, and how well it fits.
 
-    python3 demos/check_map.py <floor> <x> <y> <yaw_deg> [picture.ppm]
+    python3 demos/check_map.py <floor> <x> <y> <yaw_deg> [picture.ppm] [topic]
 
 Run on the robot, standing (the relay only passes scans on then), with the
 pose of base_link on the map as well as you know it. Prints the share of
@@ -10,7 +10,8 @@ best fit is poor the map and the scan do not show the same walls (height
 slice, scale, mirror), and AMCL has no chance either.
 
 The picture: the map, the scan at the pose given in red, at the best pose
-in green, the robot in blue.
+in green, the robot in blue. The scan is the one localization uses
+(/scan_walls); name /scan as the topic to see the low one instead.
 """
 import math
 import os
@@ -27,7 +28,7 @@ REACH_M, STEP_M = 0.5, 0.05
 REACH_DEG, STEP_DEG = 15, 1
 
 
-def one_scan(timeout=8.0):
+def one_scan(topic, timeout=8.0):
     import time
     import rclpy
     from sensor_msgs.msg import LaserScan
@@ -35,14 +36,14 @@ def one_scan(timeout=8.0):
     rclpy.init()
     node = rclpy.create_node('check_map')
     got = []
-    node.create_subscription(LaserScan, '/scan', got.append, 1)
+    node.create_subscription(LaserScan, topic, got.append, 1)
     end = time.monotonic() + timeout
     while not got and time.monotonic() < end:
         rclpy.spin_once(node, timeout_sec=0.2)
     node.destroy_node()
     rclpy.shutdown()
     if not got:
-        sys.exit('no /scan within %.0f s: is the robot standing, and lio_relay running?' % timeout)
+        sys.exit('no %s within %.0f s: is the robot standing, and lio_relay running?' % (topic, timeout))
     return got[0].angle_min, got[0].angle_increment, np.array(got[0].ranges, dtype=np.float32)
 
 
@@ -81,18 +82,18 @@ def draw(yaml_path, floor_map, scan, poses, out):
 
 
 if __name__ == '__main__':
-    if len(sys.argv) not in (5, 6):
+    if len(sys.argv) not in (5, 6, 7):
         sys.exit(__doc__)
     yaml_path = os.path.join(places.floor_dir(sys.argv[1]), 'map.yaml')
     floor_map = locate.Map(yaml_path)
     pose = (float(sys.argv[2]), float(sys.argv[3]), math.radians(float(sys.argv[4])))
-    scan = one_scan()
+    scan = one_scan(sys.argv[6] if len(sys.argv) == 7 else locate.SCAN_TOPIC)
     seen = int((np.isfinite(scan[2]) & (scan[2] < locate.FIT_RANGE_M)).sum())
     fit = floor_map.fit(pose, *scan)
     print('%d of %d beams returned within %.0f m' % (seen, len(scan[2]), locate.FIT_RANGE_M))
     print('fit at the pose given: %s  (localized needs %.2f)' % ('none' if fit is None else '%.2f' % fit, locate.FIT_MIN))
     score, (x, y, yaw) = best_near(floor_map, pose, scan)
     print('best fit nearby: %.2f at (%.2f, %.2f, %.0f deg)' % (score, x, y, math.degrees(yaw)))
-    out = sys.argv[5] if len(sys.argv) == 6 else '/tmp/check_map.ppm'
+    out = sys.argv[5] if len(sys.argv) >= 6 else '/tmp/check_map.ppm'
     draw(yaml_path, floor_map, scan, [(pose, (255, 0, 0)), ((x, y, yaw), (0, 160, 0))], out)
     print('picture:', out)

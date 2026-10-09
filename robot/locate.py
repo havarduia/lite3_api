@@ -28,6 +28,7 @@ from .lio_relay import inv, join, wrap
 from .protocol import Lite3Error
 
 TOPIC = '/localized'
+SCAN_TOPIC = '/scan_walls'      # the lidar cut above the furniture: the low /scan is mostly tables and chairs
 Reading = collections.namedtuple('Reading', 'state x y yaw spread_xy spread_yaw fit')
 NO_POSE, LOCALIZED, SPREAD, NO_FIT, NO_SCAN, SETTLING = range(6)
 WHY = {NO_POSE: 'it has not been told where it is',
@@ -44,7 +45,7 @@ EDGE_S = 0.15           # a stamp this far outside what is remembered still gets
 # Not tuned on a floor yet (plan task 10):
 NEAR_M = 0.15           # a return this close to a mapped wall counts as on it
 FIT_RANGE_M = 10.0      # further returns are left out: a small heading error moves them far
-FIT_EVERY = 4           # every 4th beam, 180 of the 720
+FIT_EVERY = 2           # every 2nd beam; only about half the 720 have a return at this height
 FIT_MIN = 0.7           # at least this share of the returns on walls. In an empty room on paper a pose
                         # 0.2 m or 3 deg off still passes, and another room sharing a corner scores 0.62
 MIN_RETURNS = 30
@@ -199,7 +200,7 @@ def main(floor):
     latched = QoSProfile(depth=1)
     latched.durability = DurabilityPolicy.TRANSIENT_LOCAL       # AMCL's last estimate, also if we start after it
     node.create_subscription(Odometry, ODOM_TOPIC, lambda m: new.__setitem__('odom', m), 1)
-    node.create_subscription(LaserScan, '/scan', lambda m: new.__setitem__('scan', (time.monotonic(), m)), 1)
+    node.create_subscription(LaserScan, SCAN_TOPIC, lambda m: new.__setitem__('scan', (time.monotonic(), m)), 1)
     node.create_subscription(PoseWithCovarianceStamped, '/amcl_pose', lambda m: new.__setitem__('amcl', m), latched)
 
     def stamp(m):

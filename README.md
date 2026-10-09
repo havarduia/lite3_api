@@ -232,7 +232,8 @@ demos/                 teaching and regression scripts
 env/                   environment, launchers, and patches to vendor code
   lite3_env.sh         source this first: ROS workspaces, CycloneDDS, PYTHONPATH
   lio_relay.service    systemd unit for robot/lio_relay.py (§10.7)
-  lidar-scan.service   systemd unit that runs on the ORIN: the lidar as a flat /scan (§10.7)
+  lidar-scan.service   systemd unit that runs on the ORIN: the lidar as two flat scans (§10.7)
+  lidar_nav.launch.py  what that unit runs; our copy of the Orin's ~/bin/lidar_nav.launch.py
   lio-send.service     systemd unit that runs on the ORIN: pose and scan to lio_relay.py (§10.7)
   nav2_map_params.py   Nav2's parameters for map mode, generated from the mapless ones
   get_map.sh           copy a floor map from the Orin to the perception computer (run on the laptop)
@@ -1152,6 +1153,13 @@ It publishes two topics on the robot's graph:
   robot is standing (basic state 6). Measured lying down, 2026-10-08:
   with the mount transform the floor comes out level within 1° both
   ways, so the 20.4° pitch holds; it lay 0.10 m below `base_link`.
+- `/scan_walls` (2026-10-09): the same, cut 0.9 to 1.7 m above `base_link`,
+  which is above tables and chairs. It is for finding the robot on a floor
+  map (AMCL and `robot/locate.py`), because the floor maps show only what
+  runs from floor to ceiling and the low scan is mostly furniture. In the
+  lab, standing on the map's start mark: all of the high scan's returns
+  land on mapped walls, 37% of the low scan's (`demos/check_map.py`).
+  About half its beams have a return, since the lidar is tilted nose-down.
 
 `/odom_fused` is the robot's odometry: `Lite3.pose`, the sonar node, the
 rviz relay and Nav2 all read it, because goals and obstacle positions pass between them in that
