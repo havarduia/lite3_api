@@ -973,27 +973,76 @@ to localized with Nav2 ready, a place saved where he stood, and "not
 going: it has not been told where it is" before the pose was given.
 No route walked yet.
 
+### First routes on the map
+
+`go_to_point(1.9, -0.3)` from the start mark, then `go_to('start')`,
+twice. Where he believed he was at each end was checked against the
+best-fitting pose from `demos/check_map.py`.
+
+| | run 1 | run 2 |
+|---|---|---|
+| out, 2.1 m | 11 s, stopped 0.18 m from the point | 10 s, 0.17 m |
+| his pose against the scan's best fit there | 0.07 m, 1 degree | 0.07 m, 1 degree |
+| back | 57 s, 0.12 m from the place | 26 s (his own turn, then 9 s of Nav2), 0.11 m |
+| his pose against the scan's best fit there | 0.15 m, 2 degrees | 0.11 m, 0 degrees |
+| idle while walking, of 6 cores | 29% / 38% | 34% / 38% |
+
+- **Run 1's way back took 57 s**: Nav2 stood for 20 s ("Failed to make
+  progress" twice), found "No valid trajectories out of 5780", span as a
+  recovery and then walked it. The controller's critics are PreferForward,
+  GoalDist, PathDist, RotateToGoal and BaseObstacle; none rewards turning
+  towards a path that starts behind him, and turning costs. Mapless goals
+  are always ahead, so it never showed. Now `go_to_point()` asks the
+  planner for the route first (`route_to()`, which also refuses a point
+  there is no way to) and, if the route starts more than 60 degrees off
+  his heading, turns to face it himself with `turn()`. Run 2 is with
+  that. A sharp corner in the middle of a route is still Nav2's alone.
+- **He did not turn to the saved heading at the end of run 2** (place
+  2 degrees, ended at 81). `turn()` returned without finishing, probably
+  its side check (front sonar 0.59 m, rear 0.46 m where he stood), and
+  `go_to_point()` did not look at what it returned. It now prints a NOTE
+  with the reason. Not reproduced.
+- **Camera messages dropped**: about 130 while Nav2 starts (before the
+  pose is given there is no `map` frame to put a cloud in), about 50 in
+  the few seconds after the first goal starts, none after that, in both
+  runs, the second leg included. A guess, not checked: AMCL's first real
+  update, with its particles still at the maximum, takes longer than the
+  0.5 s its transform is good for. The local costmap is in `odom` and
+  does not depend on it.
+
 ## 18. Still open
 
+As of the end of 2026-10-09. `SESSION_2026-10-09.md` has the summary of
+that day and where to pick up.
+
+Map mode:
+- About 50 camera messages are dropped in the seconds after the first
+  goal in map mode. Guess, not checked: AMCL's first update outlasts its
+  0.5 s transform tolerance.
+- One final turn to a place's saved heading did not happen; `turn()`'s
+  side check, probably. Not reproduced.
+- Nothing is tuned on the floor: `locate.py`'s limits, AMCL's noise, the
+  height band of `/scan_walls` in other rooms.
+- Only 2 m routes in one room. Not tried: through the door, a closed
+  door, carrying him mid-route, the wrong floor, a long corridor, glass.
+- The load with the panel open, and why the camera driver reads 80 to
+  92% of a core in map mode against 57 to 70% mapless.
+- A sharp corner in the middle of a route is left to Nav2, whose
+  controller does not turn towards a path by itself.
+- Phases 3 to 5 of the plan (panel map view, voice, tags): not started.
+
+The Orin:
+- Why a long FAST-LIO2 run falls behind real time and fills the Orin's
+  memory. The relay now ignores it; nothing restarts it.
+- Why the panel's "Record & map" recorder drops IMU samples. The Live
+  run is used for maps instead.
+
+Older:
 - The wiggle fix (section 14) has two runs behind it: one in the open,
   one in the aisle.
-- Lidar step 1: whether the floor leaks into the scan while trotting,
-  and what the lidar layer costs the perception computer.
-- Steps 2 and 3 of whole-building navigation (map + localization,
-  named goals): not started; a short spec comes first.
-- Why a long FAST-LIO2 run falls behind real time and fills the Orin's
-  memory (section 17). The relay now ignores it; nothing restarts it.
+- Whether the floor leaks into the low scan while trotting.
 - Marks left in the costmap by carrying the robot block planning until
   Nav2 is restarted.
-- Nav2 has driven one 1.5 m goal on `/odom_fused`. Not more than that.
-- The perception computer's load (about 9 on 6 cores with Nav2, the panel
-  and the relay): camera frames get dropped for lack of a transform when
-  it spikes. Not yet looked into.
-- FAST-LIO2 is not started automatically with Nav2.
-- The relay costs a third of a core on the perception computer, with
-  the transform and the scan included (it was 86% for the three
-  processes that did this before).
-- The lidar's position on the body is now (0.20, 0, 0.14 m), good to
-  about 2 cm (section 17).
-- What AMCL costs the perception computer: not measured (plan task 9).
 - The relay assumes the robot stands level when the Live run starts.
+- `person.follow_nav` stops about 0.1 m closer since the goal tolerance
+  went back to 0.15 m; not re-tested.

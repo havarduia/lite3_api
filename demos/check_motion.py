@@ -83,6 +83,7 @@ def run(move, **setup):
 
 
 GOALS, CANCELS = [], []      # every goal pose the pretend Nav2 was sent, and when one was cancelled
+NO_ROUTE = []                # put anything in it: the pretend planner finds no way
 
 
 def pretend_nav2(arrives):
@@ -92,7 +93,21 @@ def pretend_nav2(arrives):
     made = []
     del GOALS[:], CANCELS[:]
 
+    def planner(node):
+        """The planner alone: a straight line from where he is to the point asked for."""
+        def plan(msg):
+            (x0, y0, _), to = node.bot.map_pose, msg.pose.pose.position
+            line = [] if NO_ROUTE else [types.SimpleNamespace(pose=types.SimpleNamespace(position=types.SimpleNamespace(
+                x=x0 + (to.x - x0) * i / 20.0, y=y0 + (to.y - y0) * i / 20.0))) for i in range(21)]
+            answer = types.SimpleNamespace(done=lambda: True, result=lambda: types.SimpleNamespace(
+                status=nav.SUCCEEDED, result=types.SimpleNamespace(path=types.SimpleNamespace(poses=line))))
+            handle = types.SimpleNamespace(accepted=True, get_result_async=lambda: answer)
+            return types.SimpleNamespace(done=lambda: True, result=lambda: handle)
+        return types.SimpleNamespace(wait_for_server=lambda timeout_sec: True, send_goal_async=plan)
+
     def client(node, action, name):
+        if name == 'compute_path_to_pose':
+            return planner(node)
         goal = {}
         result = types.SimpleNamespace(
             done=lambda: goal['cancelled'] or (arrives is not None and node.t >= goal['sent'] + arrives),
@@ -107,7 +122,8 @@ def pretend_nav2(arrives):
 
     rclpy.action.ActionClient = client
     sys.modules['nav2_msgs'] = sys.modules['nav2_msgs.action'] = types.SimpleNamespace(
-        NavigateToPose=types.SimpleNamespace(Goal=types.SimpleNamespace))
+        NavigateToPose=types.SimpleNamespace(Goal=types.SimpleNamespace),
+        ComputePathToPose=types.SimpleNamespace(Goal=types.SimpleNamespace))
     return made
 
 
@@ -221,14 +237,18 @@ def main():
     assert r == (False, None), r            # mapless: neither
 
     # go to a point on the map
-    r, _, _ = run(lambda b: b.go_to_point(2.0, 5.0), **on_floor())
-    assert r == nav.SUCCEEDED and sent_goal() == ('map', 2.0, 5.0, 180), sent_goal()    # facing the way he came
+    r, _, _ = run(lambda b: (b.go_to_point(2.0, 5.0), b._node.odom[2]), **on_floor())
+    assert r[0] == nav.SUCCEEDED and sent_goal() == ('map', 2.0, 5.0, 180), sent_goal()  # facing the way he came
+    # the way starts off to his left: he turns to face along it himself first (Nav2 here just stands, 2026-10-09)
+    assert abs(r[1] - math.pi / 2) < 0.15, r
+    r, _, sent = run(lambda b: b.go_to_point(5.5, 7.0), **on_floor())
+    assert r == nav.SUCCEEDED and not any(c[2] for c in sent), sent                     # roughly ahead: no turn of his own
     r, _, _ = run(lambda b: (b.go_to_point(2.0, 5.0, yaw_deg=0), b._node.odom[2]), **on_floor())
     assert r[0] == nav.SUCCEEDED and abs(r[1] + math.pi / 2) < 0.1, r                   # and turned to the heading asked for
     r, _, _ = run(lambda b: b.go_to_point(5.05, 5.0), **on_floor())
-    assert r == nav.SUCCEEDED and len(GOALS) == 3, (r, len(GOALS))                      # already there: no goal sent
+    assert r == nav.SUCCEEDED and len(GOALS) == 4, (r, len(GOALS))                      # already there: no goal sent
     pretend_nav2(arrives=None)
-    r, halted, _ = run(lambda b: b.go_to_point(2.0, 5.0), at=(1.0, lambda w: w.bot.goto_cancel()), **on_floor())
+    r, halted, _ = run(lambda b: b.go_to_point(2.0, 5.0), at=(9.0, lambda w: w.bot.goto_cancel()), **on_floor())
     assert r == nav.CANCELED and halted, r
 
     def refused(move, **setup):
@@ -247,14 +267,20 @@ def main():
     assert 'wall' in refused(lambda b: b.go_to_point(8.05, 5.0), **on_floor())
     assert 'numbers' in refused(lambda b: b.go_to_point(float('nan'), 5.0), **on_floor())
     assert 'not standing' in refused(lambda b: b.go_to_point(2.0, 5.0), state={'basic': 1, 'battery': 80}, **on_floor())
+    NO_ROUTE.append(True)
+    assert 'no route' in refused(lambda b: b.go_to_point(2.0, 5.0), **on_floor())       # cut off: refused before a step
+    del NO_ROUTE[:]
 
     # lost on the way: the goal is dropped and he stops, he does not walk on a wrong position
     r, halted, _ = run(lambda b: b.go_to_point(2.0, 5.0),
-                       at=(1.0, lambda w: setattr(w, 'loc', w.loc._replace(state=locate.NO_FIT))), **on_floor())
+                       at=(9.0, lambda w: setattr(w, 'loc', w.loc._replace(state=locate.NO_FIT))), **on_floor())
     assert isinstance(r, L.Lite3Error) and 'lost' in str(r) and 'fit the map' in str(r) and halted and CANCELS, r
     del CANCELS[:]
-    r, halted, _ = run(lambda b: b.go_to_point(2.0, 5.0), at=(1.0, lambda w: setattr(w, 'loc_stopped', w.t)), **on_floor())
+    r, halted, _ = run(lambda b: b.go_to_point(2.0, 5.0), at=(9.0, lambda w: setattr(w, 'loc_stopped', w.t)), **on_floor())
     assert isinstance(r, L.Lite3Error) and 'lost' in str(r) and halted and CANCELS, r   # locate.py itself died
+    before = len(GOALS)                     # ... or while he was still turning to face the route: no goal goes out
+    r, halted, _ = run(lambda b: b.go_to_point(2.0, 5.0), at=(1.0, lambda w: setattr(w, 'loc_stopped', w.t)), **on_floor())
+    assert isinstance(r, L.Lite3Error) and 'lost' in str(r) and halted and len(GOALS) == before, r
 
     # places: saved where he stands or at a point, gone to by name
     pretend_nav2(arrives=2.0)

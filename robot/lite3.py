@@ -280,12 +280,14 @@ class Lite3(Nav, Depth):
         # action client while the node lives (else InvalidHandle), then the rest.
         self._stop_spin.set()
         self._thread.join(timeout=5.0)
-        if self._nav_client is not None:
-            try:
-                self._nav_client.destroy()
-            except Exception:
-                pass
-            self._nav_client = None
+        for name in ('_nav_client', '_plan_client'):
+            client = getattr(self, name)
+            if client is not None:
+                try:
+                    client.destroy()
+                except Exception:
+                    pass
+                setattr(self, name, None)
         try:
             self._exec.shutdown(timeout_sec=2.0)
             self._exec.remove_node(self._node)

@@ -645,8 +645,8 @@ around), and an `approach` verb that stops short of the *first* obstacle.
 ### 7.5 Map mode: a floor map, and going to a place on it
 
 Being built (`.planning/plans/building-navigation.md`); what is here works
-on the robot as of 2026-10-09, in one room, standing still. No route has
-been walked on a map yet.
+on the robot as of 2026-10-09, in one room: two routes of 2 m out and
+back, stopping 0.11 to 0.18 m from the target.
 
 ```python
 bot.floors()                    # ['lab']: floors that have a map
@@ -684,6 +684,12 @@ The same from the command line: `python3 -m robot.lite3 floors`,
   scan, drawn from the pose, must land on the map's walls. `go_to()`
   refuses to start without it and stops, raising, if it is lost on the
   way. Sliding along a corridor is what it cannot see.
+- **Facing the route.** `go_to_point()` asks the planner for the route
+  first (`route_to()`; no route, no start) and, if it sets off more than
+  60° from where he faces, turns him with `turn()` before Nav2 gets the
+  goal. Left to itself this Nav2 stands for 20 s and then spins as a
+  "recovery": its controller has nothing that rewards turning towards a
+  path, and mapless goals were always ahead.
 - **Frames.** In map mode Nav2 takes a goal's numbers as map coordinates
   whatever frame its header names, so `goal_send()` and `cost_at()` move
   an odom point onto the map themselves. `goto(forward)`, following and

@@ -33,6 +33,11 @@ LOC_STALE_S = 1.5       # locate.py speaks twice a second; quiet this long, he d
 POSE_STD = (0.3, 0.26)  # m, rad: how sure a pose given by hand (a tap on the map) is taken to be
 ROUTE_TIMEOUT = 300.0   # s for one go_to(): 30 m takes about two minutes
 THERE_M = 0.2           # nearer than this the planner makes no path, and he is there anyway
+# Nav2's controller here has nothing that rewards turning towards the path: with
+# the goal behind him it stood for 20 s, then span as a "recovery" (2026-10-09,
+# 57 s for 2 m). So he faces along the route himself before Nav2 gets the goal.
+FACE_OVER = math.radians(60)    # if its start is further off his heading than this
+FACE_AT_M = 0.5                 # judged by the route's point this far along
 SUCCEEDED, CANCELED, ABORTED = 4, 5, 6      # NavigateToPose result status, as goto() returns it
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))   # the scripts in env/ move with the code
 
@@ -299,7 +304,7 @@ class Nav:
         # header says, so in map mode an odom point is moved onto the map here.
         nx, ny, nyaw = self._in_nav_frame(gx, gy, gyaw, frame)
         if frame != 'odom':
-            gx, gy, gyaw = join(inv(self._fix()), (gx, gy, gyaw))
+            gx, gy, gyaw = self._in_frame(gx, gy, gyaw, frame, 'odom')
         goal = PoseStamped()
         goal.header.frame_id = self._nav_frame()
         goal.header.stamp = self._node.get_clock().now().to_msg()
@@ -410,7 +415,10 @@ class Nav:
 
     def _in_nav_frame(self, x, y, yaw, frame):
         """A pose given in 'odom' or 'map', in the frame Nav2 plans in."""
-        target = self._nav_frame()
+        return self._in_frame(x, y, yaw, frame, self._nav_frame())
+
+    def _in_frame(self, x, y, yaw, frame, target):
+        """A pose given in 'odom' or 'map', in the other of the two."""
         if frame == target:
             return x, y, yaw
         fix = self._fix()
@@ -450,14 +458,46 @@ class Nav:
         raise Lite3Error('gave the pose (%.2f, %.2f, %.0f deg), but: %s' % (
             x, y, yaw_deg, self.lost_why() or 'Nav2 did not finish starting; see /tmp/nav2.log'))
 
+    _plan_client = None
+
+    def route_to(self, x, y, timeout=10.0):
+        """The way Nav2's planner finds from where he is to a map point, as
+        [(x, y), ...] on the map. Raises if there is none."""
+        from geometry_msgs.msg import PoseStamped
+        from nav2_msgs.action import ComputePathToPose
+        from rclpy.action import ActionClient
+
+        if self._plan_client is None:
+            self._plan_client = ActionClient(self._node, ComputePathToPose, 'compute_path_to_pose')
+        if not self._plan_client.wait_for_server(timeout_sec=timeout):
+            raise Lite3Error('the planner is not answering - is nav2 running?')
+        msg = ComputePathToPose.Goal()
+        msg.pose = PoseStamped()
+        msg.pose.header.frame_id = 'map'
+        msg.pose.header.stamp = self._node.get_clock().now().to_msg()
+        msg.pose.pose.position.x, msg.pose.pose.position.y = float(x), float(y)
+        msg.pose.pose.orientation.w = 1.0
+        msg.planner_id = 'GridBased'
+        sent = self._plan_client.send_goal_async(msg)
+        if not self._wait(sent.done, timeout) or sent.result() is None or not sent.result().accepted:
+            raise Lite3Error('the planner did not take the question')
+        answer = sent.result().get_result_async()
+        if not self._wait(answer.done, timeout):
+            raise Lite3Error('the planner did not answer in %.0f s' % timeout)
+        poses = answer.result().result.path.poses if answer.result().status == SUCCEEDED else []
+        if not poses:
+            raise Lite3Error('no route to (%.2f, %.2f): something is in the way, or it is cut off from here' % (x, y))
+        return [(p.pose.position.x, p.pose.position.y) for p in poses]
+
     def go_to_point(self, x, y, yaw_deg=None, timeout=ROUTE_TIMEOUT):
         """Navigate to a point on the floor map. Returns the action status, as
         goto() does; goto_cancel() and estop() end it the same way.
 
         yaw_deg: the heading to end on, in the map's frame; None leaves him
         facing the way he arrived. Refuses unless he knows where he is, and a
-        point off the map, in a wall or off the mapped floor. Stops, and
-        raises, if he stops knowing where he is on the way.
+        point off the map, in a wall or off the mapped floor, and one the
+        planner finds no way to. Stops, and raises, if he stops knowing where
+        he is on the way.
         """
         for v in (x, y) if yaw_deg is None else (x, y, yaw_deg):
             if isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v):
@@ -476,12 +516,22 @@ class Nav:
         here = self.map_pose
         status = SUCCEEDED
         if dist(here, (x, y)) >= THERE_M:
+            route = self.route_to(x, y)
+            ahead = next((p for p in route if dist(here, p) >= FACE_AT_M), route[-1])
+            off = wrap(math.atan2(ahead[1] - here[1], ahead[0] - here[0]) - here[2])
+            if abs(off) > FACE_OVER:
+                self.turn(off)
+                why = self.lost_why()       # a turn takes seconds; he may not know where he is any more
+                if why:
+                    raise Lite3Error('lost on the way, stopped: ' + why)
             gyaw = math.atan2(y - here[1], x - here[0]) if yaw_deg is None else math.radians(yaw_deg)
             status = self._goal_wait(self.goal_send(x, y, gyaw, frame='map'), timeout, lost=self.lost_why)
         if status == SUCCEEDED and yaw_deg is not None:
             err = wrap(math.radians(yaw_deg) - self.map_pose[2])
             if abs(err) > math.radians(5):
-                self.turn(err)
+                r = self.turn(err)
+                if r['reason'] != 'target reached':     # he is there; the heading is the lesser half
+                    print('NOTE: arrived, but not turned to %.0f deg: %s' % (yaw_deg, r['reason']))
         return status
 
     def go_to(self, name, timeout=ROUTE_TIMEOUT):
